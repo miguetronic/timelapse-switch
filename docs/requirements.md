@@ -51,6 +51,7 @@ Wording follows the usual convention: **must** is mandatory, **should** is recom
 | ID | Requirement | Priority | Verified by | Status |
 |---|---|---|---|---|
 | REQ-014 | On the reference PC (Xeon E5-2689, Radeon RX 580, OBS 32.2, Linux), a 4K30 recording must not lose frames because of the plugin. Load tests need the maintainer's explicit approval before they run. | Must | Measure | Draft |
+| REQ-018 | The documentation must say plainly what recording with the plugin costs compared with OBS's own recording: CPU, RAM, graphics card and the data that crosses to and from the card, per resolution, with numbers measured on the reference PC. The README must carry the short version. It must be updated whenever the way frames travel changes. | Must | Inspection, Measure | Draft |
 
 ## Open questions
 

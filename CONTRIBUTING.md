@@ -23,6 +23,7 @@ And three habits that keep the code small:
 | I want to... | Read |
 |---|---|
 | Understand what the plugin does and how | `README.md`, then `docs/architecture.md` |
+| Know what the plugin costs your computer | `README.md`, then `docs/performance.md` |
 | Build it and run the checks | `docs/building.md` |
 | Write code | `docs/coding-rules.md` (includes "The Power of Ten", adapted) |
 | Know why something is the way it is | `docs/decisions.md` |

@@ -43,7 +43,7 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
 
 ## ADR-003. Frames pass through system memory (CPU path)
 
-*Date: 2026-10-15. Status: accepted, to be confirmed by measurement (REQ-014).*
+*Date: 2026-10-15. Status: accepted. Cost measured on 2026-10-16 (`docs/performance.md`); REQ-014 still to be confirmed with a real scene before release.*
 
 **Context.** To choose which frames reach the encoder, the plugin needs the frames outside the GPU. Today, with GPU encoders such as `hevc_ffmpeg_vaapi_tex`, a frame can go from the scene to the encoder without ever leaving the graphics card.
 
@@ -58,8 +58,10 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
   - joining two streams depends on each encoder's settings.
 
 **Consequences.**
-- In 4K30 about 370 MB/s go from the GPU to memory and back. This is the same readback OBS already does for every x264 recording; the maintainer recorded 4K30 with x264 on the reference PC on 2026-10-13 without problems.
-- It must be measured with the plugin before release (REQ-014). If it is not acceptable, plan B is implemented behind the same dock.
+- In 4K30, 373 MB/s go from the card to memory and 373 MB/s back, and each kept frame is copied three times in memory. The download is the same OBS already does for every x264 recording.
+- Measured on the reference PC on 2026-10-16, 4K30 for 5 minutes, against OBS's own recording with a GPU encoder: 0.42 CPU cores more; 286 MB more RAM while recording, of which OBS keeps 75 MB (its own memory feed) until it closes; about 130 MB less memory on the card; 5 W more on the card; no lost frames (`docs/performance.md`, `docs/test-reports/2026-10-16-recording-cost.md`).
+- The cost is stated plainly to users, in the README and in `docs/performance.md` (REQ-018).
+- REQ-014 holds with the test scene. If a real scene shows lost frames because of this road, plan B is implemented behind the same dock.
 - On this path each frame keeps its own time, as in OBS's own x264 recordings. OBS's GPU path labels each frame with the time of the one before, so the plugin's picture sits about one frame later than in OBS's own GPU-encoder recordings (measured 2026-10-16; `docs/architecture.md`, "Timing").
 
 ---

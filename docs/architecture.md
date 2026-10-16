@@ -31,6 +31,8 @@ OBS renders your scene 30 times per second (or whatever frame rate you set) and 
 
 Only the two valves are new logic. The encoding and the file writing are OBS's own, which keeps the plugin small and compatible with every encoder and format OBS supports.
 
+**The price of the valves.** To choose frames, the video valve needs them in system memory, so frames leave the graphics card, wait in three places in RAM (OBS's memory feed, our feed, the encoder's buffer) and go back up to the card's encoder (ADR-003). In 4K30 that is 373 MB per second each way across the bus and about 286 MB of RAM while recording. Every step, and what it costs measured against OBS's own recording: `docs/performance.md`.
+
 ## Modules
 
 | Module | File(s) | Language | Job |
@@ -68,7 +70,7 @@ Three details keep sound and picture together. Each one was found by measuring (
 2. **Start.** The timeline starts once the encoders and the file writer are running (starting them takes tens of milliseconds), and the first frame opens the first slot of the video wherever it falls. Before these two fixes the video gate repeated the first frame to fill the gap, and the video trailed the sound by about one frame.
 3. **Stop.** Encoders keep some frames (x264 about 40, so 1.3 s at 30 fps) and hand them over only as new frames arrive. After stop, the plugin keeps sending frames until the file writer has every frame sent before the stop (or nothing moves for 1 s, or 5 s pass), and then stops it at its next packet.
 
-**Memory path and GPU path.** In OBS's own recording with a GPU encoder (the `_tex` encoders), frames never leave the graphics card, and libobs labels each frame on that path with the time of the frame before it (`output_gpu_encoders` in `libobs/obs-video.c`, OBS 32.2.2). On the memory path, used by x264 and by this plugin (ADR-003), each frame keeps its own time. So the plugin's picture sits where it does in OBS's own x264 recordings, and about one frame (33 ms at 30 fps) later than in OBS's own GPU-encoder recordings. The plugin keeps the true time rather than copy that shift.
+**Memory path and GPU path** (road B and road A in `docs/performance.md`). In OBS's own recording with a GPU encoder (the `_tex` encoders), frames never leave the graphics card, and libobs labels each frame on that path with the time of the frame before it (`output_gpu_encoders` in `libobs/obs-video.c`, OBS 32.2.2). On the memory path, used by x264 and by this plugin (ADR-003), each frame keeps its own time. So the plugin's picture sits where it does in OBS's own x264 recordings, and about one frame (33 ms at 30 fps) later than in OBS's own GPU-encoder recordings. The plugin keeps the true time rather than copy that shift.
 
 ## Callback table (rule P10-9)
 
