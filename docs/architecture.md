@@ -2,7 +2,7 @@
 
 How Timelapse Switch works inside OBS, in plain words first and in detail after.
 
-> **Status:** this is the agreed design (see `docs/decisions.md`). The recorder, its real-time path and the hotkeys exist; the dock (the panel) and chapters are **planned**.
+> **Status:** this is the agreed design (see `docs/decisions.md`). The recorder, its real-time path, the hotkeys, chapters and the dock exist; the settings dialog, the welcome card and the preflight check are **planned**.
 
 ## The idea in one paragraph
 
@@ -36,16 +36,20 @@ Only the two valves are new logic. The encoding and the file writing are OBS's o
 | Module | File(s) | Language | Job |
 |---|---|---|---|
 | Plugin entry | `src/plugin-main.c` | C | Load and unload; hotkeys, settings, OBS closing. **Exists.** |
+| Session | `src/core/session.c` | C | Pure logic, no OBS: what each button and hotkey means in each state, the chosen speed and starting mode, the double-press guard (UX-046). **Exists**, unit tested. |
+| Dock view | `src/core/dock-view.c` | C | Pure logic, no OBS or Qt: what each zone of the dock shows, the summary and error cards. **Exists**, unit tested. |
+| Controller | `src/controller.c` | C | The one place where hotkeys and dock buttons act, so both give the same result (UX-053). **Exists.** |
 | Logging | `src/plugin-support.*` | C | `tsw_log`: OBS log lines with the plugin prefix. **Exists.** |
 | Compiler differences | `src/tsw-compiler.h` | C | The only conditional compilation. **Exists.** |
 | Timeline | `src/core/timeline.c` | C | Pure math, no OBS: maps any OBS time to its position in the final video. **Exists**, unit tested. |
 | Gates | `src/core/gate.c` | C | Pure math, no OBS: from that position, how many copies of each frame and which audio blocks go to the encoder. **Exists**, unit tested, including a 10-minute sync simulation. |
 | Audio ring | `src/core/audio-ring.c` | C | Pure, no OBS: the lock-free queue that carries audio blocks from OBS's audio thread to ours. **Exists**, unit tested. |
 | Valves (real-time path) | `src/recorder-rt.c` | C | Real-time: sends each frame 0, 1 or more times into our video feed, and passes, silences or skips each audio block, as the gates say. **Exists.** |
-| Recorder | `src/recorder.c` | C | Creates the encoders, feeds and file writer from the user's OBS settings; starts, switches speed, stops (emptying the encoder first). **Exists**; chapters planned. |
+| Recorder | `src/recorder.c` | C | Creates the encoders, feeds and file writer from the user's OBS settings; starts, switches speed, adds chapters (Hybrid MP4), stops (emptying the encoder first); reports its status to the dock. **Exists.** |
 | Fault log | `src/fault.c` | C | `TSW_CHECK` failures, safe to note from real-time threads, written to the log by the UI thread. **Exists.** |
 | Platform | `src/platform/{linux,windows,macos}.c` | C | Small OS differences, picked by CMake (no `#ifdef`). |
-| Dock | `src/ui/dock.cpp` | C++ / Qt | The panel described in `docs/design/ux-spec.md`; reads counters and faults with a timer. |
+| Dock | `src/ui/dock.cpp` | C++ / Qt | The panel described in `docs/design/ux-spec.md`: draws a dock view, reports clicks; no OBS, so `tests/ui` draws it alone. **Exists.** |
+| Dock in OBS | `src/ui/dock-obs.cpp` | C++ / Qt | Adds the dock to OBS's Docks menu, in a scroll area; a timer shows the controller's view 10 times per second. **Exists.** |
 
 ## Threads
 
@@ -73,8 +77,8 @@ Function pointers are allowed only where OBS or Qt require a callback. Every one
 | Callback | Registered in | Called by | Thread | Status |
 |---|---|---|---|---|
 | `obs_module_load` / `obs_module_unload` | `plugin-main.c` (`OBS_DECLARE_MODULE`) | OBS at startup and exit | UI | exists |
-| Hotkeys (`on_record`, `on_stop`, `on_timelapse`, `on_real_time`, `on_speed_key`) | `plugin-main.c` via `obs_hotkey_pair_register_frontend` and `obs_hotkey_register_frontend` | OBS hotkey thread; they only queue an action | hotkey | exists |
-| Queued action (`run_action`) | `plugin-main.c` via `obs_queue_task` | OBS UI | UI | exists |
+| Hotkeys (`on_record`, `on_stop`, `on_timelapse`, `on_real_time`, `on_single_key` for speeds, Faster, Slower and chapter marker) | `plugin-main.c` via `obs_hotkey_pair_register_frontend` and `obs_hotkey_register_frontend` | OBS hotkey thread; they only queue an action | hotkey | exists |
+| Queued action (`run_action`) | `plugin-main.c` via `obs_queue_task`; it calls the controller | OBS UI | UI | exists |
 | Frontend events (`on_frontend_event`: OBS closing) | `plugin-main.c` via `obs_frontend_add_event_callback` | OBS UI | UI | exists; profile change and OBS recording planned |
 | Raw video (`tsw_recorder_receive_frame`) | `recorder.c` via `obs_add_raw_video_callback` | OBS video thread, once per frame while recording | video | exists |
 | Raw audio (`tsw_recorder_receive_audio`) | `recorder.c` via `obs_add_raw_audio_callback` | OBS audio thread, once per audio block while recording | audio | exists |
@@ -82,7 +86,8 @@ Function pointers are allowed only where OBS or Qt require a callback. Every one
 | Output signal `stop` (`output_stopped`) | `recorder.c` via the output's signal handler | OBS output thread, once the file is complete | output | exists |
 | Stop check (`flush_tick`) | `recorder.c` via `obs_add_tick_callback`, only while stopping | OBS graphics thread, once per frame | graphics | exists |
 | End of recording (`finish`) | `recorder.c` via `obs_queue_task` | OBS UI | UI | exists |
-| Qt signals (buttons, timer) | `src/ui/dock.cpp` via `connect` | Qt event loop | UI | planned |
+| Qt signals of the dock's buttons and chips | `src/ui/dock.cpp` via `connect`; they emit `inputRequested` or `dismissRequested` | Qt event loop | UI | exists |
+| Dock signals and refresh timer (100 ms) | `src/ui/dock-obs.cpp` via `connect`; they call the controller | Qt event loop | UI | exists |
 
 The sync probe of the integration test (`tests/integration/sync-probe.c`) is a separate module that is never shipped, so it is not listed.
 

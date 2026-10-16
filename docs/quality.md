@@ -82,7 +82,8 @@ A script (`tools/trace.py`, planned) will collect these tags into a matrix (`doc
 
 | Level | What | How | When |
 |---|---|---|---|
-| Unit | Pure logic (timeline math, audio share, limits) | C tests with CTest, no OBS needed | Every check run, every push |
+| Unit | Pure logic (timeline math, audio share, limits, what each input means, what the dock shows) | C tests with CTest, no OBS needed | Every check run, every push |
+| UI | The dock in every state, English and Spanish, 300 and 220 px wide | `tests/ui/test-dock.cpp` with CTest on Qt's offscreen platform, no OBS: every text exists, zones keep their order, nothing is cut or too wide; a picture of each case for review | Every check run, every push |
 | Integration | The plugin inside a real OBS | `tests/integration/run.sh`: a separate OBS records a test media while a script presses the hotkeys; the file is checked frame by frame (`tests/integration/README.md`) | After each change to the recorder, and before each release |
 | Sync | Audio and video alignment across switches | Part of the integration test: every beep of the file is compared with where OBS itself had it (sync probe) | Same as integration |
 | Platform | Windows, macOS, Linux | CI builds; manual runs by testers | Before each release |

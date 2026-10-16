@@ -425,7 +425,7 @@ Hotkeys use OBS's own frontend hotkey API, so they appear in Settings > Hotkeys,
 |---|---|---|---|
 | Timelapse Switch: Switch to timelapse / Back to real time | pair (same key toggles) | Num 0 | F13 |
 | Timelapse Switch: Speed x2 / x4 / x8 / custom | single | Num 1 / Num 2 / Num 3 / Num 4 | F14 to F17 |
-| Timelapse Switch: Faster / Slower | pair | Num + / Num - | |
+| Timelapse Switch: Faster / Slower | single, two keys (a pair would make one key toggle between them, which is not useful here) | Num + / Num - | |
 | Timelapse Switch: Add chapter marker | single | Num . | |
 | Timelapse Switch: Record / Stop and save | pair, Stop needs a 1 s hold | Num Enter | F18 |
 
