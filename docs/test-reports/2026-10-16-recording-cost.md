@@ -96,3 +96,13 @@ Output 'timelapse-switch output': Total drawn frames: 9002
 - **Bus:** only the plugin's road made the card send PCIe packets in large numbers (11.4 million per second): the frames going down to RAM.
 - **OBS's graphics thread:** its work per frame went from a median of 0.44 ms to 3.01 ms (99th percentile: 0.96 ms to 5.55 ms), out of the 33.3 ms each frame has at 30 fps. Most of it is step (2), the copy into OBS's memory feed: 2.38 ms median.
 - **Lost frames:** none on either road.
+
+## Later the same day: how full the plugin's feed gets
+
+The plugin's summary line now says how many frames, at most, waited in its feed for the encoder (`docs/performance.md`, section 9). Integration test, HEVC on VAAPI, same reference PC, with a virtual machine and software builds running at the same time:
+
+| Run | Result |
+|---|---|
+| `tests/integration/run.sh --scenario real` (1080p30, 25 s) | all checks pass; feed: at most 1 of 16 frames waiting |
+| `tests/integration/run.sh` (1080p30, about 100 s, 28 sections) | all checks pass; feed: at most 1 of 16 frames waiting |
+| `tests/integration/run.sh --resolution 2160 --scenario long` (4K30, 300 s, 80 sections) | all checks pass, 0 lost frames, worst sync 16.0 ms; feed: at most 1 of 16 frames waiting |

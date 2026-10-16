@@ -57,6 +57,7 @@ Ending in timelapse matters: when you stop, the encoder still holds frames (x264
 | sync | in every real-time section, each beep sits within 30 ms of where OBS itself had it, relative to its frame | REQ-005 allows 27.4 ms (half an audio block plus half a frame); the rest is measuring margin |
 | silence | timelapse sections are silent | REQ-006 |
 | lost frames | no frame was lost | |
+| feed | the plugin's summary line says how many frames, at most, waited in its feed for the encoder, between 1 and the feed's size | the number itself is information for `docs/performance.md`, section 9; only its absence fails |
 | memory leaks | OBS reports "Number of memory leaks: 0" when it closes | rule B2 |
 
 ## Why sync is measured against OBS, not against the clock

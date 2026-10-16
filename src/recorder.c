@@ -388,6 +388,7 @@ static enum tsw_result reset_timeline(struct tsw_recorder *recorder, const struc
 		return TSW_E_INVALID;
 	recorder->frames_in = recorder->frames_sent = recorder->frames_lost = 0;
 	recorder->blocks_sent = recorder->ring_full = recorder->ring_empty = 0;
+	recorder->feed_peak = 0;
 	recorder->first_frame_ns = recorder->first_block_ns = recorder->frame_delay_ns = recorder->block_delay_ns = 0;
 	return TSW_OK;
 }
@@ -454,9 +455,9 @@ void tsw_recorder_stop(struct tsw_recorder *recorder)
 	const double lost = wanted > 0 ? 100.0 * (double)recorder->frames_lost / (double)wanted : 0.0;
 	tsw_log(LOG_INFO,
 		"recording stopped at %.6f s: frames in %ld, sent %ld, lost %.2f%% | audio blocks sent %ld, "
-		"ring full %ld, ring empty %ld",
+		"ring full %ld, ring empty %ld | feed: at most %ld of %d frames waiting",
 		real_s, recorder->frames_in, recorder->frames_sent, lost, recorder->blocks_sent, recorder->ring_full,
-		recorder->ring_empty);
+		recorder->ring_empty, os_atomic_load_long(&recorder->feed_peak), (int)VIDEO_CACHE_FRAMES);
 	tsw_log(LOG_INFO,
 		"start: first frame %+.1f ms, first audio block %+.1f ms | data arrives late by: frames %.1f ms, audio %.1f ms",
 		((double)recorder->first_frame_ns - (double)recorder->start_ns) / 1e6,

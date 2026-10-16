@@ -21,6 +21,8 @@ probe (sync-probe.c: when OBS delivered each beep and each frame):
     chapters      one chapter per section, where the section starts, named after its speed
                   (REQ-007; Hybrid MP4 only)
     lost frames   frames lost because the computer could not keep up
+    feed          the plugin reports how many frames, at most, waited in its feed for the
+                  encoder (docs/performance.md, section 9)
 
 Prints one PASS or FAIL line per check; the exit status is the number of failures.
 Needs ffmpeg and ffprobe. Standard library only.
@@ -102,6 +104,15 @@ def plugin_events(log_path: str) -> tuple[list[tuple[float, int]], float, float]
     if stop_s is None:
         raise RuntimeError("the log has no 'recording stopped' line from the plugin")
     return sections, stop_s, lost
+
+
+def feed_waiting(log_path: str) -> tuple[int, int] | None:
+    """From the plugin's summary line: (most frames that waited in its feed for the encoder, feed size)."""
+    with open(log_path, encoding="utf-8", errors="replace") as log:
+        for line in log:
+            if m := re.search(r"\[timelapse-switch\] recording stopped .*feed: at most (\d+) of (\d+) frames waiting", line):
+                return int(m.group(1)), int(m.group(2))
+    return None
 
 
 def probe_offsets(log_path: str) -> list[tuple[int, float]]:
@@ -235,6 +246,10 @@ def main() -> int:
     check_silence(report, sections, samples)
     check_chapters(report, sections, args.recording)
     report.check("lost frames", lost <= args.allow_lost_frames, f"{lost * 100:.2f}% lost")
+    feed = feed_waiting(args.log)
+    report.check("feed", feed is not None and 1 <= feed[0] <= feed[1],
+                 f"at most {feed[0]} of {feed[1]} frames waited for the encoder" if feed
+                 else "the plugin's summary line does not say how full its feed got")
     return report.failures
 
 

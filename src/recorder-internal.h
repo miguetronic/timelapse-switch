@@ -36,6 +36,7 @@ struct tsw_recorder {
 
 	/* Counters for the summary line; each one has a single writer. */
 	volatile long frames_in, frames_sent, frames_lost, blocks_sent, ring_full, ring_empty;
+	volatile long feed_peak; /* most frames that waited in our video feed for the encoder */
 	/* Diagnostics, written once by their real-time thread: first unit sent, and how late data arrives. */
 	uint64_t first_frame_ns, first_block_ns, frame_delay_ns, block_delay_ns;
 

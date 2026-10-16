@@ -22,6 +22,18 @@
 #include "core/check.h"
 #include "recorder-internal.h"
 
+/* How many frames wait in our video feed for the encoder right now, kept if it is the most so far. The
+ * feed holds 16 frames (VIDEO_CACHE_FRAMES in recorder.c); this tells whether that is too many or too
+ * few (docs/performance.md, section 9). Frames sent minus frames OBS's feed thread has handed to the encoder; a lost frame is
+ * still handed over (OBS repeats the previous picture), so it counts on both sides. */
+static void note_feed_waiting(struct tsw_recorder *recorder)
+{
+	const long handed = (long)video_output_get_total_frames(recorder->video);
+	const long waiting = recorder->frames_sent + recorder->frames_lost - handed;
+	if (waiting > recorder->feed_peak)
+		os_atomic_set_long(&recorder->feed_peak, waiting);
+}
+
 /* OBS video thread, once per frame: send it 0, 1 or more times to our video feed. */
 void tsw_recorder_receive_frame(void *param, struct video_data *frame)
 {
@@ -50,6 +62,7 @@ void tsw_recorder_receive_frame(void *param, struct video_data *frame)
 	struct video_frame out;
 	if (!video_output_lock_frame(recorder->video, &out, (int)copies, frame->timestamp)) {
 		os_atomic_set_long(&recorder->frames_lost, recorder->frames_lost + (long)copies);
+		note_feed_waiting(recorder);
 		return;
 	}
 	struct video_frame in = {0};
@@ -64,6 +77,7 @@ void tsw_recorder_receive_frame(void *param, struct video_data *frame)
 		recorder->frame_delay_ns = os_gettime_ns() - frame->timestamp;
 	}
 	os_atomic_set_long(&recorder->frames_sent, recorder->frames_sent + (long)copies);
+	note_feed_waiting(recorder);
 }
 
 /* OBS audio thread, once per block of the recorded track: queue it for our audio thread. */

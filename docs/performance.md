@@ -139,12 +139,20 @@ The scene in this measurement is light (a small video scaled to 4K). That is on 
 ## 8. Measure it on your computer
 
 - **OBS's Stats dock** (Docks > Stats) shows OBS's CPU and memory, and frames missed while rendering or encoding. Compare it while idle and while the plugin records.
-- **The plugin's log line** when a recording stops (Help > Log Files > View Current Log) gives the frames it received, sent and lost.
+- **The plugin's log line** when a recording stops (Help > Log Files > View Current Log) gives the frames it received, sent and lost, and how many frames, at most, waited in its feed for the encoder (section 9).
 - **For contributors:** `tests/integration/measure.sh` repeats the measurement of section 5 on a Linux computer with an AMD graphics card; see `tests/integration/README.md`, "Measuring the cost".
 
 ## 9. Could it cost less?
 
 Perhaps, and only with measurements to show it is worth it:
 
-- **A smaller plugin feed.** 16 frames is the most OBS allows; OBS's own memory feed uses 6. A smaller feed would save RAM (12.4 MB per frame in 4K), but leave the encoder less room to catch up. We will decide once we know how full the feed gets in real recordings.
+- **A smaller plugin feed.** The plugin's feed is a waiting room with 16 seats between the valve and the encoder. If the encoder stalls for a moment, frames wait there; if all 16 seats are taken, the next frame is lost (nothing crashes, but that picture is missing, and the log says so). 16 is the most OBS allows: about half a second at 30 fps, a quarter of a second at 60 fps. OBS's own memory feed has 6.
+
+  Fewer seats would save RAM (12.4 MB per seat in 4K) but leave less room for stalls. So the feed stays at 16, and it is **not a setting**: stability comes first, and the right number depends on encoder stalls that a user cannot see, so a wrong choice would show up later as lost frames, far from its cause. Instead, the plugin writes in its log how many frames, at most, waited:
+
+  ```
+  [timelapse-switch] recording stopped at ... | feed: at most 1 of 16 frames waiting
+  ```
+
+  "1 of 16" means each frame found the encoder free. That is what the reference PC showed in 1080p30 and in 4K30 (5 minutes, 80 speed switches), even with a virtual machine and software builds running at the same time. So on this PC fewer seats would do; but a slower encoder or a busier computer needs more room, and 199 MB of RAM is cheap next to a lost picture, so the feed stays at 16. If recordings on many computers show that it never fills beyond a few seats, the default can shrink for everyone, still with no setting.
 - **Road A for real time only.** Not possible within one file today: a file cannot switch roads halfway (ADR-003).
