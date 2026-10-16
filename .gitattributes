@@ -1,0 +1,11 @@
+# Line endings: LF in the repository and in every checkout, so files are byte-identical
+# on Windows, macOS and Linux and diffs never show whole-file changes.
+* text=auto eol=lf
+
+# Binary assets: never touch their bytes.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.webp binary

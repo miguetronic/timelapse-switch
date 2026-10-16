@@ -33,13 +33,13 @@
     },
     "platformConfig": {
         "macos": {
-            "bundleId": "com.example.plugintemplate-for-obs"
+            "bundleId": "com.miguetronic.timelapse-switch"
         }
     },
-    "name": "plugintemplate-for-obs",
-    "displayName": "Plugin Template for OBS",
-    "version": "1.0.0",
-    "author": "Your Name Here",
-    "website": "https://example.com",
-    "email": "me@example.com"
+    "name": "timelapse-switch",
+    "displayName": "Timelapse Switch",
+    "version": "0.1.0",
+    "author": "Miguel Parra (Miguetronic)",
+    "website": "https://github.com/miguetronic/timelapse-switch",
+    "email": "83662399+miguetronic@users.noreply.github.com"
 }

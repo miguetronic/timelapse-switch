@@ -15,6 +15,12 @@
 !CMakePresets.json
 !LICENSE
 !README.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+!.gitattributes
+!/docs
+!/tests
+!/tools
 
 # Exclude lock files
 *.lock.json
