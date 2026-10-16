@@ -11,7 +11,7 @@ We use the eight product qualities of **ISO/IEC 25010** as a checklist, with wha
 | Quality (ISO/IEC 25010) | What it means for Timelapse Switch | How we get it | Evidence |
 |---|---|---|---|
 | Functional suitability | The file comes out with the right sections sped up, nothing more, nothing less | Requirements with IDs, tests per requirement | `docs/requirements.md`, `tests/` |
-| Performance efficiency | 4K30 without lost frames on modest hardware | Real-time rules, measurement before release | REQ-014 measurement report |
+| Performance efficiency | 4K30 without lost frames on modest hardware, and its cost stated plainly | Real-time rules, measurement before release | REQ-014 and REQ-018, `docs/performance.md` |
 | Compatibility | Works next to OBS's own recording and other plugins | Public OBS API only, own recorder | ADR-002, ADR-006 |
 | Interaction capability (usability) | Obvious state, hands-free use, clear errors | UX specification with IDs | `docs/design/ux-spec.md` |
 | Reliability | Never crashes OBS, never loses a recording | "The Power of Ten" rules, checks that recover | `docs/coding-rules.md`, `tools/check.sh` |
@@ -88,6 +88,7 @@ A script (`tools/trace.py`, planned) will collect these tags into a matrix (`doc
 | Sync | Audio and video alignment across switches | Part of the integration test: every beep of the file is compared with where OBS itself had it (sync probe) | Same as integration |
 | Platform | Windows, macOS, Linux | CI builds; manual runs by testers | Before each release |
 | Load | 4K30, long sessions | `tests/integration/run.sh --resolution 2160 --scenario long` on the reference PC, **only with the maintainer's explicit approval** | Before 1.0 and after performance changes |
+| Cost | What recording costs (CPU, RAM, graphics card, bus) with OBS's own Record button and with the plugin, same scene and settings | `tests/integration/measure.sh` on the reference PC, **only with the maintainer's explicit approval**; results in `docs/performance.md` | Before 1.0 and whenever the way frames travel changes (REQ-018) |
 
 Each release gets a short test report (what was run, on what, results), kept in `docs/test-reports/`.
 

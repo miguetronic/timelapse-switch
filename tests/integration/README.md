@@ -18,7 +18,7 @@ A real OBS records with the plugin while a script presses its hotkeys, and then 
 
 **The sandbox:** OBS runs with `XDG_CONFIG_HOME` pointing to a new temporary folder, so your own OBS settings, scenes and plugins are never read or changed. Its obs-websocket listens on port 4466 instead of the usual 4455.
 
-**The sync probe** (`sync-probe.c`): a tiny OBS module installed only in the sandbox, never shipped. It logs when OBS delivers each beep and each frame whose number is a multiple of 30, exactly as the plugin receives them.
+**The sync probe** (`sync-probe.c`): a tiny OBS module installed only in the sandbox, never shipped. It logs when OBS delivers each beep and each frame whose number is a multiple of 30, exactly as the plugin receives them. To do that it asks OBS for every frame in memory, so while it is installed OBS always takes the memory road (`docs/performance.md`). That is why `measure.sh` leaves it out.
 
 ## Running it
 
@@ -65,6 +65,51 @@ OBS itself does not play the test media in perfect sync: its sound reaches OBS 3
 
 **Compared with OBS's own recording:** a recording made by OBS with x264 has the same timing as the plugin's. A recording made by OBS with a GPU encoder (the `_tex` encoders) shows each frame about one frame earlier, because libobs labels each frame on that path with the time of the frame before it (`output_gpu_encoders` in `libobs/obs-video.c`). See `docs/architecture.md`, "Timing".
 
+## Measuring the cost
+
+`measure.sh` answers a different question: not "is the file right?" but "what does recording cost the computer?". It records the same scene twice, each time in a fresh sandbox OBS:
+
+```
+  OBS alone      +------------+-------------------------+------------------+
+                 | 1 min idle | 5 min OBS's own Record  | 30 s, file saved |
+                 +------------+-------------------------+------------------+
+
+  the plugin     +------------+-------------------------+------------------+
+                 | 1 min idle | 5 min plugin, real time | 30 s, file saved |
+                 +------------+-------------------------+------------------+
+
+  each recording is compared with its own idle minute, so whatever else the
+  computer is doing cancels out; the last 30 s show what is given back
+```
+
+```
+tests/integration/measure.sh                         4K30, HEVC on VAAPI, about 7 min per mode
+tests/integration/measure.sh --resolution 1080       the same in 1080p
+tests/integration/measure.sh --seconds 20 --idle 15  a quick try of the tool itself
+```
+
+Once per second, `measure.py` writes down:
+
+| What | Where it comes from |
+|---|---|
+| CPU time of OBS, as cores kept busy | `/proc/<pid>/stat` |
+| CPU use of the whole computer | `/proc/stat` |
+| RAM held by OBS (resident memory) | `/proc/<pid>/status` |
+| The graphics card's work for OBS, engine by engine (3D, compute, copy, video encoder), and the card memory OBS holds | `/proc/<pid>/fdinfo`, kept by the amdgpu driver for each program |
+| The card's clock, power and PCIe packets | amdgpu files in `/sys/class/drm/card*/device` |
+| OBS's own counters: render time, frames missed | obs-websocket `GetStats` |
+
+When OBS closes it also writes how long each step of its graphics thread took (its profiler), and the report copies the steps that differ between the two roads: `download_frame` and `output_video_data` (memory road), `output_gpu_encoders` (graphics card road).
+
+The report, `build_x86_64/measure/<date and time>/report.md`, puts both modes side by side. Its numbers are summarized in `docs/performance.md`.
+
+Two counters are kept in the samples but read with care:
+
+- **PCIe packets** are counted, not bytes: a packet can be smaller than the largest size the card reports, so packets times that size would overstate the traffic. The count is still a clear sign of which road the frames take.
+- **The card's overall busy share** (`gpu_busy_percent`) jumped between 0 and 80 % for the same work on the reference card, so the report uses the per-program engine times instead.
+
+> Like the 4K long scenario, this is a **load test**: on the reference PC, run it only with the maintainer's approval (`docs/quality.md`, section 5).
+
 ## Reading a failure
 
 - `OBS did not start`: see `obs-output.txt` in the sandbox folder.
@@ -76,6 +121,8 @@ OBS itself does not play the test media in perfect sync: its sound reaches OBS 3
 | File | Job |
 |---|---|
 | `run.sh` | builds, makes the media once, starts the sandbox OBS, runs the scenario, closes OBS, runs the analysis |
+| `sandbox.sh` | shared by `run.sh` and `measure.sh`: writes the sandbox configuration, starts and closes the sandbox OBS |
+| `measure.sh`, `measure.py` | the cost measurement: samples once per second, then the side by side report |
 | `make-test-media.sh` | the test media |
 | `drive_obs.py` | presses the hotkeys on schedule through obs-websocket, waits for the file to be saved |
 | `analyze.py` | the checks above |
