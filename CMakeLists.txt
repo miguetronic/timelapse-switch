@@ -85,4 +85,9 @@ if(ENABLE_UNIT_TESTS)
   add_subdirectory(tests/unit)
 endif()
 
+option(ENABLE_INTEGRATION_TESTS "Build the test-only OBS module used by tests/integration/run.sh" ON)
+if(ENABLE_INTEGRATION_TESTS)
+  add_subdirectory(tests/integration)
+endif()
+
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
