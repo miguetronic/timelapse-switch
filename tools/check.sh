@@ -101,7 +101,7 @@ if grep -nE '^[[:space:]]*#[[:space:]]*(if|ifdef|ifndef|elif)\b' "${NOT_COMPILER
 else
 	record "P10-8: conditional compilation only in tsw-compiler.h" 0
 fi
-rule_absent "Style: no em dashes or en dashes in any file" $'—|–' "${TEXT[@]}"
+rule_absent "Style: no em dashes or en dashes in any file" $'\u2014|\u2013' "${TEXT[@]}"
 
 # ---------------------------------------------------------------------------------------------
 printf '\n%sSummary%s\n' "$BOLD" "$RESET"
