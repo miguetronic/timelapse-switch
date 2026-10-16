@@ -36,7 +36,10 @@ if(ENABLE_QT)
   )
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/fault.c src/plugin-main.c src/recorder.c src/recorder-rt.c)
+target_sources(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE src/controller.c src/fault.c src/plugin-main.c src/recorder.c src/recorder-rt.c src/ui/dock-obs.cpp
+)
 
 # Power of Ten, rule 10 (docs/coding-rules.md): our own code builds with pedantic warnings and zero tolerance.
 # OBS and Qt headers come from imported targets (system includes), so their warnings are not reported here.
@@ -83,7 +86,13 @@ target_include_directories(tsw-core SYSTEM PUBLIC $<TARGET_PROPERTY:OBS::libobs,
 set_target_properties(tsw-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE tsw-core)
 
-foreach(_tsw_target IN ITEMS ${CMAKE_PROJECT_NAME} plugin-support tsw-core)
+# The dock's widgets: Qt only, no OBS, so the UI test can draw them (tests/ui).
+add_library(tsw-dock STATIC src/ui/dock.cpp)
+target_link_libraries(tsw-dock PUBLIC tsw-core Qt6::Widgets)
+set_target_properties(tsw-dock PROPERTIES AUTOMOC ON POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE tsw-dock)
+
+foreach(_tsw_target IN ITEMS ${CMAKE_PROJECT_NAME} plugin-support tsw-core tsw-dock)
   tsw_strict_warnings(${_tsw_target})
 endforeach()
 
@@ -91,6 +100,7 @@ option(ENABLE_UNIT_TESTS "Build the unit tests (run them with ctest)" ON)
 if(ENABLE_UNIT_TESTS)
   enable_testing()
   add_subdirectory(tests/unit)
+  add_subdirectory(tests/ui)
 endif()
 
 option(ENABLE_INTEGRATION_TESTS "Build the test-only OBS module used by tests/integration/run.sh" ON)

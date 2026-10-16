@@ -7,19 +7,22 @@
 /*
  * plugin-main.c: what OBS calls when it loads and unloads the plugin.
  *
- * It creates the recorder, registers the hotkeys and the frontend event callback (every
- * callback is listed in docs/architecture.md, rule P10-9), and keeps the settings in
- * plugin_config/timelapse-switch/settings.json. Hotkeys run on OBS's hotkey thread; the
- * actions they trigger run on the UI thread.
+ * It creates the recorder, the controller and the dock, registers the hotkeys and the
+ * frontend event callback (every callback is listed in docs/architecture.md, rule P10-9),
+ * and keeps the settings in plugin_config/timelapse-switch/settings.json. Hotkeys run on
+ * OBS's hotkey thread; the actions they trigger run on the UI thread, through the same
+ * controller as the dock's buttons.
  */
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 #include <util/platform.h>
 
+#include "controller.h"
 #include "core/timeline.h"
 #include "plugin-support.h"
 #include "recorder.h"
+#include "ui/dock-obs.h"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
@@ -27,48 +30,92 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 enum {
 	DEFAULT_TIMELAPSE_SPEED = 4,
 	DEFAULT_STOP_HOLD_MS = 1000, /* stopping by hotkey needs a hold (UX-052) */
-	SPEED_KEYS = 4,
+	SINGLE_KEYS = 7,
 };
 
-enum action { RECORD, STOP, TIMELAPSE, REAL_TIME, SPEED_2, SPEED_4, SPEED_8, SPEED_16, ACTIONS };
+enum action {
+	RECORD,
+	STOP,
+	TIMELAPSE,
+	REAL_TIME,
+	SPEED_2,
+	SPEED_4,
+	SPEED_8,
+	SPEED_16,
+	FASTER,
+	SLOWER,
+	CHAPTER,
+	ACTIONS
+};
 
 /* Not const because OBS passes callback data as void *; never written. */
-static enum action ACTION[ACTIONS] = {RECORD, STOP, TIMELAPSE, REAL_TIME, SPEED_2, SPEED_4, SPEED_8, SPEED_16};
-static const uint32_t KEY_SPEED[SPEED_KEYS] = {2, 4, 8, 16};
-static const char *const KEY_SETTING[SPEED_KEYS] = {"speed_2", "speed_4", "speed_8", "speed_16"};
+static enum action ACTION[ACTIONS] = {RECORD,  STOP,     TIMELAPSE, REAL_TIME, SPEED_2, SPEED_4,
+				      SPEED_8, SPEED_16, FASTER,    SLOWER,    CHAPTER};
+static const uint32_t KEY_SPEED[4] = {2, 4, 8, 16}; /* SPEED_2 to SPEED_16 */
+
+/* Hotkeys that act on each press (the others come in pairs, see register_hotkeys). */
+static const struct {
+	const char *name;    /* OBS's id; never change it, OBS saves bindings under it */
+	const char *text;    /* locale key of the name shown in Settings > Hotkeys */
+	const char *setting; /* key of its binding in settings.json */
+	enum action action;
+} SINGLE_KEY[SINGLE_KEYS] = {
+	{"TimelapseSwitch.Speed2", "Hotkey.Speed2", "speed_2", SPEED_2},
+	{"TimelapseSwitch.Speed4", "Hotkey.Speed4", "speed_4", SPEED_4},
+	{"TimelapseSwitch.Speed8", "Hotkey.Speed8", "speed_8", SPEED_8},
+	{"TimelapseSwitch.Speed16", "Hotkey.Speed16", "speed_16", SPEED_16},
+	{"TimelapseSwitch.Faster", "Hotkey.Faster", "faster", FASTER},
+	{"TimelapseSwitch.Slower", "Hotkey.Slower", "slower", SLOWER},
+	{"TimelapseSwitch.Chapter", "Hotkey.Chapter", "chapter", CHAPTER},
+};
 
 /* The plugin's state: the only global object of the plugin (rule P10-6). */
 static struct {
 	struct tsw_recorder *recorder;
+	struct tsw_controller *controller;
 	obs_data_t *settings;
-	uint32_t timelapse_speed; /* speed used by "Switch to timelapse"; UI thread */
 	uint64_t stop_hold_ns;
 	uint64_t stop_pressed_ns; /* hotkey thread only */
 	obs_hotkey_pair_id record_pair;
 	obs_hotkey_pair_id timelapse_pair;
-	obs_hotkey_id speed_key[SPEED_KEYS];
+	obs_hotkey_id single_key[SINGLE_KEYS];
 } plugin;
 
-/* UI thread: what a hotkey asked for. Failures are already logged by the recorder. */
+/* UI thread: what a hotkey asked for, through the controller like the dock's buttons (UX-053). */
 static void run_action(void *param)
 {
 	const enum action action = *(const enum action *)param;
-	enum tsw_result result = TSW_OK;
-	if (action == RECORD) {
-		result = tsw_recorder_start(plugin.recorder, 1);
-	} else if (action == STOP) {
-		tsw_recorder_stop(plugin.recorder);
-	} else if (action == TIMELAPSE) {
-		result = tsw_recorder_set_speed(plugin.recorder, plugin.timelapse_speed);
-	} else if (action == REAL_TIME) {
-		result = tsw_recorder_set_speed(plugin.recorder, 1);
-	} else {
-		/* Speed keys choose the timelapse speed and, while recording, switch to it (UX spec 3.11). */
-		plugin.timelapse_speed = KEY_SPEED[action - SPEED_2];
-		result = tsw_recorder_set_speed(plugin.recorder, plugin.timelapse_speed);
+	switch (action) {
+	case RECORD:
+		tsw_controller_input(plugin.controller, TSW_INPUT_RECORD, 0);
+		break;
+	case STOP:
+		tsw_controller_input(plugin.controller, TSW_INPUT_STOP, 0);
+		break;
+	case TIMELAPSE:
+		tsw_controller_input(plugin.controller, TSW_INPUT_TIMELAPSE, 0);
+		break;
+	case REAL_TIME:
+		tsw_controller_input(plugin.controller, TSW_INPUT_REAL_TIME, 0);
+		break;
+	case SPEED_2:
+	case SPEED_4:
+	case SPEED_8:
+	case SPEED_16:
+		tsw_controller_input(plugin.controller, TSW_INPUT_SPEED_KEY, KEY_SPEED[action - SPEED_2]);
+		break;
+	case FASTER:
+		tsw_controller_input(plugin.controller, TSW_INPUT_FASTER, 0);
+		break;
+	case SLOWER:
+		tsw_controller_input(plugin.controller, TSW_INPUT_SLOWER, 0);
+		break;
+	case CHAPTER:
+		tsw_recorder_add_marker(plugin.recorder);
+		break;
+	case ACTIONS:
+		break;
 	}
-	if (result != TSW_OK)
-		tsw_log(LOG_DEBUG, "action %d not applied (result %d)", (int)action, (int)result);
 }
 
 static void queue(enum action action)
@@ -132,7 +179,7 @@ static bool on_real_time(void *data, obs_hotkey_pair_id id, obs_hotkey_t *hotkey
 	return true;
 }
 
-static void on_speed_key(void *data, obs_hotkey_id id, obs_hotkey_t *hotkey, bool pressed)
+static void on_single_key(void *data, obs_hotkey_id id, obs_hotkey_t *hotkey, bool pressed)
 {
 	(void)id;
 	(void)hotkey;
@@ -152,13 +199,10 @@ static void register_hotkeys(void)
 	plugin.timelapse_pair = obs_hotkey_pair_register_frontend(
 		"TimelapseSwitch.Timelapse", obs_module_text("Hotkey.Timelapse"), "TimelapseSwitch.RealTime",
 		obs_module_text("Hotkey.RealTime"), on_timelapse, on_real_time, NULL, NULL);
-	static const char *const NAMES[SPEED_KEYS] = {"TimelapseSwitch.Speed2", "TimelapseSwitch.Speed4",
-						      "TimelapseSwitch.Speed8", "TimelapseSwitch.Speed16"};
-	static const char *const TEXTS[SPEED_KEYS] = {"Hotkey.Speed2", "Hotkey.Speed4", "Hotkey.Speed8",
-						      "Hotkey.Speed16"};
-	for (size_t i = 0; i < SPEED_KEYS; i++)
-		plugin.speed_key[i] = obs_hotkey_register_frontend(NAMES[i], obs_module_text(TEXTS[i]), on_speed_key,
-								   &ACTION[SPEED_2 + i]);
+	for (size_t i = 0; i < SINGLE_KEYS; i++)
+		plugin.single_key[i] = obs_hotkey_register_frontend(SINGLE_KEY[i].name,
+								    obs_module_text(SINGLE_KEY[i].text), on_single_key,
+								    &ACTION[SINGLE_KEY[i].action]);
 }
 
 static void load_settings(void)
@@ -171,9 +215,7 @@ static void load_settings(void)
 	obs_data_set_default_int(plugin.settings, "stop_hold_ms", DEFAULT_STOP_HOLD_MS);
 	obs_data_set_default_int(plugin.settings, "timelapse_speed", DEFAULT_TIMELAPSE_SPEED);
 	const long long hold_ms = obs_data_get_int(plugin.settings, "stop_hold_ms");
-	const long long speed = obs_data_get_int(plugin.settings, "timelapse_speed");
 	plugin.stop_hold_ns = (hold_ms > 0 ? (uint64_t)hold_ms : 0) * 1000000;
-	plugin.timelapse_speed = (speed >= 2 && speed <= TSW_MAX_SPEED) ? (uint32_t)speed : DEFAULT_TIMELAPSE_SPEED;
 
 	/* Hotkey bindings saved by save_settings (OBS does not save a plugin's frontend hotkeys). */
 	obs_data_t *keys = obs_data_get_obj(plugin.settings, "hotkeys");
@@ -183,9 +225,9 @@ static void load_settings(void)
 	obs_data_array_t *real_time = obs_data_get_array(keys, "real_time");
 	obs_hotkey_pair_load(plugin.record_pair, record, stop);
 	obs_hotkey_pair_load(plugin.timelapse_pair, timelapse, real_time);
-	for (size_t i = 0; i < SPEED_KEYS; i++) {
-		obs_data_array_t *binding = obs_data_get_array(keys, KEY_SETTING[i]);
-		obs_hotkey_load(plugin.speed_key[i], binding);
+	for (size_t i = 0; i < SINGLE_KEYS; i++) {
+		obs_data_array_t *binding = obs_data_get_array(keys, SINGLE_KEY[i].setting);
+		obs_hotkey_load(plugin.single_key[i], binding);
 		obs_data_array_release(binding);
 	}
 	obs_data_array_release(record);
@@ -210,13 +252,14 @@ static void save_settings(void)
 	obs_data_set_array(keys, "real_time", second);
 	obs_data_array_release(first);
 	obs_data_array_release(second);
-	for (size_t i = 0; i < SPEED_KEYS; i++) {
-		obs_data_array_t *binding = obs_hotkey_save(plugin.speed_key[i]);
-		obs_data_set_array(keys, KEY_SETTING[i], binding);
+	for (size_t i = 0; i < SINGLE_KEYS; i++) {
+		obs_data_array_t *binding = obs_hotkey_save(plugin.single_key[i]);
+		obs_data_set_array(keys, SINGLE_KEY[i].setting, binding);
 		obs_data_array_release(binding);
 	}
 	obs_data_set_obj(plugin.settings, "hotkeys", keys);
 	obs_data_release(keys);
+	obs_data_set_int(plugin.settings, "timelapse_speed", tsw_controller_timelapse_speed(plugin.controller));
 
 	char *folder = obs_module_config_path("");
 	char *path = obs_module_config_path("settings.json");
@@ -226,13 +269,15 @@ static void save_settings(void)
 	bfree(folder);
 }
 
-/* UI thread: OBS is closing. Save the file being recorded and the hotkey bindings (UX-089). */
+/* UI thread: OBS is closing. Save the file being recorded and the settings (UX-089), and remove the
+ * dock while OBS's frontend still exists (it has already saved where the dock was). */
 static void on_frontend_event(enum obs_frontend_event event, void *data)
 {
 	(void)data;
 	if (event == OBS_FRONTEND_EVENT_EXIT) {
 		tsw_recorder_close(plugin.recorder);
 		save_settings();
+		tsw_dock_destroy();
 	}
 }
 
@@ -245,6 +290,14 @@ bool obs_module_load(void)
 	}
 	register_hotkeys();
 	load_settings();
+	const long long speed = obs_data_get_int(plugin.settings, "timelapse_speed");
+	plugin.controller = tsw_controller_create(
+		plugin.recorder, (speed >= 2 && speed <= TSW_MAX_SPEED) ? (uint32_t)speed : DEFAULT_TIMELAPSE_SPEED);
+	if (plugin.controller == NULL) {
+		tsw_log(LOG_ERROR, "TSW-E901 error | the controller could not be created");
+		return false;
+	}
+	tsw_dock_create(plugin.controller);
 	obs_frontend_add_event_callback(on_frontend_event, NULL);
 	tsw_log(LOG_INFO, "plugin loaded (version %s)", PLUGIN_VERSION);
 	return true;
@@ -255,8 +308,10 @@ void obs_module_unload(void)
 	obs_frontend_remove_event_callback(on_frontend_event, NULL);
 	obs_hotkey_pair_unregister(plugin.record_pair);
 	obs_hotkey_pair_unregister(plugin.timelapse_pair);
-	for (size_t i = 0; i < SPEED_KEYS; i++)
-		obs_hotkey_unregister(plugin.speed_key[i]);
+	for (size_t i = 0; i < SINGLE_KEYS; i++)
+		obs_hotkey_unregister(plugin.single_key[i]);
+	tsw_dock_destroy(); /* already gone if OBS closed normally */
+	tsw_controller_destroy(plugin.controller);
 	tsw_recorder_destroy(plugin.recorder);
 	obs_data_release(plugin.settings);
 	tsw_log(LOG_INFO, "plugin unloaded");

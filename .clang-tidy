@@ -14,6 +14,8 @@
 #   ...DeprecatedOrUnsafeBufferHandling   asks for C11 Annex K functions (vsnprintf_s), which do not exist on
 #                                         Linux or macOS. We use the bounded functions (vsnprintf) and check
 #                                         their results instead (rule P10-7).
+#   performance-enum-size                 C++ only: asks enums for a smaller base type, which the C headers the
+#                                         dock shares with the core cannot declare.
 Checks: >
   -*,
   clang-analyzer-*,
@@ -27,7 +29,8 @@ Checks: >
   portability-*,
   -bugprone-easily-swappable-parameters,
   -portability-avoid-pragma-once,
-  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -performance-enum-size
 WarningsAsErrors: "*"
 HeaderFilterRegex: ".*/src/.*"
 CheckOptions:
