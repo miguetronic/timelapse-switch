@@ -28,6 +28,7 @@ And three habits that keep the code small:
 | Know why something is the way it is | `docs/decisions.md` |
 | Know what it must do | `docs/requirements.md` and `docs/design/ux-spec.md` |
 | Understand quality, tests and traceability | `docs/quality.md` |
+| Number a version or publish a release | `docs/releasing.md` |
 
 ## How a change flows
 
@@ -82,9 +83,11 @@ Refs: REQ-002, UX-041
 
 ## Versions and changelog
 
-- Versions follow [Semantic Versioning](https://semver.org/): `0.x` while the plugin is not yet stable, then `MAJOR.MINOR.PATCH`.
+- Versions follow [Semantic Versioning](https://semver.org/), `MAJOR.MINOR.PATCH`: MAJOR when something users rely on changes, MINOR for new features, PATCH for fixes. `0.x` means initial development.
+- The only place that holds the version is `buildspec.json`.
 - Every user-visible change gets a line in `CHANGELOG.md` under "Unreleased", in the same pull request.
-- A release is a Git tag `vX.Y.Z`; CI builds the installers from it.
+- A release is a Git tag with the exact version and no "v" (`1.2.0`, `1.2.0-beta1`); CI builds the installers and prepares a draft release.
+- Step by step: `docs/releasing.md`.
 
 ## Writing documentation
 

@@ -14,7 +14,7 @@
 #   2. Build           compiler with pedantic warnings, any warning is an error   (rule P10-10)
 #   3. clang-tidy      static analyzer #1                                          (rule P10-10)
 #   4. GCC analyzer    static analyzer #2 (gcc -fanalyzer)                         (rule P10-10)
-#   5. Project rules   simple text checks for rules no tool covers                 (P10-1, P10-8, style)
+#   5. Project rules   simple text checks for rules no tool covers   (P10-1, P10-8, style, SemVer)
 
 set -u
 cd "$(git rev-parse --show-toplevel)" || exit 2
@@ -102,6 +102,15 @@ else
 	record "P10-8: conditional compilation only in tsw-compiler.h" 0
 fi
 rule_absent "Style: no em dashes or en dashes in any file" $'\u2014|\u2013' "${TEXT[@]}"
+
+# SemVer (docs/releasing.md): buildspec.json holds numbers only; a pre-release suffix lives in the Git tag.
+VERSION=$(python3 -c 'import json; print(json.load(open("buildspec.json"))["version"])')
+if [[ $VERSION =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+	record "Version: buildspec.json is X.Y.Z ($VERSION)" 0
+else
+	echo "buildspec.json version \"$VERSION\" must be X.Y.Z, numbers only (see docs/releasing.md)"
+	record "Version: buildspec.json is X.Y.Z ($VERSION)" 1
+fi
 
 # ---------------------------------------------------------------------------------------------
 printf '\n%sSummary%s\n' "$BOLD" "$RESET"

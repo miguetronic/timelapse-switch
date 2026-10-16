@@ -73,7 +73,7 @@ A script (`tools/trace.py`, planned) will collect these tags into a matrix (`doc
   5. Review         the maintainer reviews with the checklist in coding-rules.md, Part C
   6. CI             GitHub builds for Windows, macOS and Linux, and runs the checks
   7. Merge          into main, which always builds
-  8. Release        tag vX.Y.Z, CHANGELOG entry, test report, installers built by CI
+  8. Release        tag X.Y.Z (SemVer), CHANGELOG entry, test report, installers built by CI
 ```
 
 **Definition of done** for any change: steps 1 to 7 complete, docs updated in the same pull request, IDs referenced.
