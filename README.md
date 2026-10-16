@@ -69,6 +69,7 @@ Every step, the numbers for each resolution and how to measure on your own compu
 
 - `docs/architecture.md`: how it works inside OBS
 - `docs/performance.md`: what it costs your computer, and why
+- `docs/faq.md`: questions and answers, such as sound and picture timing
 - `docs/design/ux-spec.md`: the dock and installation
 - `docs/requirements.md`: what it must do
 - `docs/decisions.md`: why it is built this way

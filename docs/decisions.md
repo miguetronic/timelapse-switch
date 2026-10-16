@@ -55,7 +55,8 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
   - switching must wait for a keyframe, which takes up to 1 to 2 seconds;
   - the GPU encodes about 25% more all the time at x4;
   - the plugin would have to write the file itself, so no Hybrid MP4;
-  - joining two streams depends on each encoder's settings.
+  - joining two streams depends on each encoder's settings;
+  - frames would take OBS's GPU road, and with it OBS's one-frame shift (`docs/architecture.md`, "Timing"): plan B would have to compensate it, and the sync check of the integration test would show whether it does.
 
 **Consequences.**
 - In 4K30, 373 MB/s go from the card to memory and 373 MB/s back, and each kept frame is copied three times in memory. The download is the same OBS already does for every x264 recording.
