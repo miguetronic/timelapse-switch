@@ -14,10 +14,11 @@
 #
 #   1. Format          clang-format and gersemi, same versions as the OBS CI
 #   2. Build           pedantic warnings, any warning is an error   (P10-10)
-#   3. clang-tidy      static analyzer #1                           (P10-10)
-#   4. GCC analyzer    static analyzer #2, gcc -fanalyzer           (P10-10)
-#   5. Shell scripts   ShellCheck, shfmt and line length (Google style)
-#   6. Project rules   checks no tool covers: P10-1, P10-8, no dashes,
+#   3. Unit tests      CTest, the core logic tests                  (D1)
+#   4. clang-tidy      static analyzer #1                           (P10-10)
+#   5. GCC analyzer    static analyzer #2, gcc -fanalyzer           (P10-10)
+#   6. Shell scripts   ShellCheck, shfmt and line length (Google style)
+#   7. Project rules   checks no tool covers: P10-1, P10-8, no dashes,
 #                      commit messages, version format
 
 set -u
@@ -100,9 +101,16 @@ check_format() {
     record 'format (tools not installed)' 1
     return
   fi
-  PATH="${PWD}/${VENV_BIN}:${PATH}" ./build-aux/run-clang-format --check
+  # The template's script checks src/ by default; tests/ follow the same style.
+  local -a c_files
+  mapfile -t c_files < <(git ls-files 'src/*.[ch]' 'src/*.[ch]pp' \
+    'tests/*.[ch]' 'tests/*.[ch]pp')
+  # --fail-error: without it the template's script always exits with 0.
+  PATH="${PWD}/${VENV_BIN}:${PATH}" ./build-aux/run-clang-format \
+    --fail-error --check "${c_files[@]}"
   record 'format: C and C++ (clang-format)' "$?"
-  PATH="${PWD}/${VENV_BIN}:${PATH}" ./build-aux/run-gersemi --check
+  PATH="${PWD}/${VENV_BIN}:${PATH}" ./build-aux/run-gersemi \
+    --fail-error --check
   record 'format: CMake (gersemi)' "$?"
 }
 
@@ -116,13 +124,20 @@ check_build() {
   record 'build (zero warnings)' "$?"
 }
 
+# Step 3: the unit tests of the core logic (docs/coding-rules.md, D1).
+check_unit_tests() {
+  step '3. Unit tests'
+  ctest --test-dir "${BUILD_DIR}" --output-on-failure
+  record 'unit tests (ctest)' "$?"
+}
+
 #######################################
-# Step 3: clang-tidy on our C and C++ sources. The OBS build adds a few
+# Step 4: clang-tidy on our C and C++ sources. The OBS build adds a few
 # GCC-only flags that clang-tidy (Clang) does not know; they are removed
 # or silenced here.
 #######################################
 check_clang_tidy() {
-  step '3. Static analysis: clang-tidy'
+  step '4. Static analysis: clang-tidy'
   local -a sources
   mapfile -t sources < <(git ls-files 'src/*.c' 'src/*.cpp')
   sources+=("${BUILD_DIR}/plugin-support.c")
@@ -134,11 +149,11 @@ check_clang_tidy() {
 }
 
 #######################################
-# Step 4: GCC's static analyzer, in its own build directory so the normal
+# Step 5: GCC's static analyzer, in its own build directory so the normal
 # build stays fast. Its findings are errors (-Werror).
 #######################################
 check_analyzer() {
-  step '4. Static analysis: GCC analyzer'
+  step '5. Static analysis: GCC analyzer'
   if [[ ! -f "${ANALYZER_DIR}/build.ninja" ]]; then
     cmake --preset "${PRESET}" -B "${ANALYZER_DIR}" \
       -DCMAKE_C_FLAGS=-fanalyzer >/dev/null
@@ -148,13 +163,13 @@ check_analyzer() {
 }
 
 #######################################
-# Step 5: our shell scripts follow the Google Shell Style Guide.
+# Step 6: our shell scripts follow the Google Shell Style Guide.
 # ShellCheck finds bugs, shfmt checks the layout, awk checks line length.
 # Outputs:
 #   Problems found, with file and line.
 #######################################
 check_shell() {
-  step '5. Shell scripts (Google Shell Style Guide)'
+  step '6. Shell scripts (Google Shell Style Guide)'
   if [[ ! -x "${VENV_BIN}/shellcheck" || ! -x "${VENV_BIN}/shfmt" ]]; then
     err 'ShellCheck or shfmt missing. Install them once with:'
     err '  .venv/bin/pip install -r tools/requirements-dev.txt'
@@ -179,7 +194,7 @@ check_shell() {
   fi
 }
 
-# Step 6a: rules from docs/coding-rules.md that no tool checks.
+# Step 7a: rules from docs/coding-rules.md that no tool checks.
 check_code_rules() {
   local -a code
   mapfile -t code < <(git ls-files 'src/*.c' 'src/*.cpp' 'src/*.h' \
@@ -201,7 +216,7 @@ check_code_rules() {
   fi
 }
 
-# Step 6b: no em dashes or en dashes in any tracked text file.
+# Step 7b: no em dashes or en dashes in any tracked text file.
 check_text_rules() {
   local -a text
   mapfile -t text < <(git ls-files \
@@ -211,7 +226,7 @@ check_text_rules() {
 }
 
 #######################################
-# Step 6c: every commit in the history follows Conventional Commits,
+# Step 7c: every commit in the history follows Conventional Commits,
 # checked by the same hook Git runs before each commit.
 # Outputs:
 #   The commits that do not comply.
@@ -230,7 +245,7 @@ check_commits() {
 }
 
 #######################################
-# Step 6d: buildspec.json holds numbers only (docs/releasing.md); a
+# Step 7d: buildspec.json holds numbers only (docs/releasing.md); a
 # pre-release suffix lives in the Git tag.
 # Outputs:
 #   An explanation on stderr if the version is not valid.
@@ -250,10 +265,11 @@ main() {
   cd "$(git rev-parse --show-toplevel)" || exit 2
   check_format
   check_build
+  check_unit_tests
   check_clang_tidy
   check_analyzer
   check_shell
-  step '6. Project rules'
+  step '7. Project rules'
   check_code_rules
   check_text_rules
   check_commits
