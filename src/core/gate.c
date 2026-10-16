@@ -32,6 +32,7 @@ enum tsw_result tsw_video_gate_init(struct tsw_video_gate *gate, uint32_t fps_nu
 	gate->fps_num = fps_num;
 	gate->fps_den = fps_den;
 	gate->frames_out = 0;
+	gate->origin_ns = 0;
 	return TSW_OK;
 }
 
@@ -42,13 +43,18 @@ uint32_t tsw_video_gate_copies(struct tsw_video_gate *gate, uint64_t output_ns, 
 	if (!TSW_CHECK(speed >= 1 && speed <= TSW_MAX_SPEED))
 		return 0;
 
-	/* 1. One output frame lasts frame_ns_x_num / fps_num nanoseconds (kept as a fraction: 29.97 fps is not whole). */
+	/* 1. The first frame opens slot 0 wherever it falls (frames arrive late, at any phase); later frames
+	 *    are placed from there. One output frame lasts frame_ns_x_num / fps_num nanoseconds (kept as a
+	 *    fraction: 29.97 fps is not whole). */
+	if (gate->frames_out == 0)
+		gate->origin_ns = output_ns;
+	const uint64_t position_ns = (output_ns > gate->origin_ns) ? output_ns - gate->origin_ns : 0;
 	const uint64_t frame_ns_x_num = SECOND_NS * gate->fps_den;
 
 	/* 2. Frames due by now: every frame whose slot starts before this position plus half an input step,
 	 *    so the input frame nearest to each slot is the one sent. */
 	const uint64_t half_step_ns = frame_ns_x_num / (2u * (uint64_t)gate->fps_num * speed);
-	const uint64_t frames_due = mul_div(output_ns + half_step_ns, gate->fps_num, frame_ns_x_num) + 1;
+	const uint64_t frames_due = mul_div(position_ns + half_step_ns, gate->fps_num, frame_ns_x_num) + 1;
 
 	/* 3. Send what is missing: usually 1 or 0, more if OBS skipped frames. */
 	if (frames_due <= gate->frames_out)

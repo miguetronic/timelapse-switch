@@ -31,6 +31,7 @@ struct tsw_video_gate {
 	uint32_t fps_num; /* frame rate as a fraction, as OBS gives it: 30/1, 30000/1001 */
 	uint32_t fps_den;
 	uint64_t frames_out; /* frames sent to the encoder so far */
+	uint64_t origin_ns;  /* final-video position of the first frame: slot 0 starts there */
 };
 
 struct tsw_audio_gate {

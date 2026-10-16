@@ -135,9 +135,26 @@ static void bad_speed_or_missing_gate_sends_nothing(void)
 	TSW_EXPECT_EQ(tsw_check_failures - checks_before, 4);
 }
 
+/*
+ * Break caught: the first frame rounded to the second slot and sent twice to fill the first one,
+ * which delays the whole video by a frame. Frames reach the recorder a few frames late, so the
+ * first one can sit anywhere between two slots.
+ */
+static void first_frame_takes_the_first_slot_wherever_it_falls(void)
+{
+	struct tsw_video_gate gate;
+	TSW_EXPECT_EQ(tsw_video_gate_init(&gate, 30, 1), TSW_OK);
+	const uint64_t first = 25000000; /* 25 ms: past the middle of the first 33.3 ms slot */
+	TSW_EXPECT_EQ(tsw_video_gate_copies(&gate, first, 1), 1);
+	for (uint64_t k = 1; k < 30; k++)
+		TSW_EXPECT_EQ(tsw_video_gate_copies(&gate, first + frame_position_30fps(k, 1), 1), 1);
+	TSW_EXPECT_EQ(gate.frames_out, 30);
+}
+
 int main(void)
 {
 	real_time_sends_every_frame_once();
+	first_frame_takes_the_first_slot_wherever_it_falls();
 	timelapse_x4_sends_one_frame_in_four_at_a_steady_rhythm();
 	real_time_at_29_97_fps_never_drifts_over_24_hours();
 	frame_skipped_by_obs_is_covered_by_a_repeat();
