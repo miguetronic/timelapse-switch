@@ -98,6 +98,26 @@ static void missing_timeline_is_rejected(void)
 	TSW_EXPECT_EQ(tsw_check_failures - checks_before, 2);
 }
 
+/* Break caught: a frame or late audio block paced with the speed of the wrong section. */
+static void speed_is_the_one_of_the_section_at_that_time(void)
+{
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 0, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 1, 10 * SECOND, 8), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_speed(&timeline, 2, 9 * SECOND), 1);
+	TSW_EXPECT_EQ(tsw_timeline_speed(&timeline, 2, 10 * SECOND), 8);
+	TSW_EXPECT_EQ(tsw_timeline_speed(&timeline, 2, 60 * SECOND), 8);
+}
+
+/* Break caught: reading the speed of a missing timeline or of sections never written. */
+static void speed_of_an_impossible_request_is_real_time(void)
+{
+	const int checks_before = tsw_check_failures;
+	TSW_EXPECT_EQ(tsw_timeline_speed(NULL, 1, 0), 1);
+	TSW_EXPECT_EQ(tsw_timeline_speed(&timeline, 0, 0), 1);
+	TSW_EXPECT_EQ(tsw_timeline_speed(&timeline, TSW_TIMELINE_CAPACITY + 1, 0), 1);
+	TSW_EXPECT_EQ(tsw_check_failures - checks_before, 3);
+}
+
 int main(void)
 {
 	real_time_follows_the_clock();
@@ -110,5 +130,7 @@ int main(void)
 	switch_when_the_timeline_is_full_is_refused();
 	reading_an_impossible_count_returns_zero();
 	missing_timeline_is_rejected();
+	speed_is_the_one_of_the_section_at_that_time();
+	speed_of_an_impossible_request_is_real_time();
 	return tsw_test_failures;
 }

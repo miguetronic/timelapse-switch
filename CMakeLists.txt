@@ -68,7 +68,7 @@ function(tsw_strict_warnings target)
 endfunction()
 
 # Core logic: pure C with no OBS dependency, shared by the plugin and the unit tests (docs/coding-rules.md, D1).
-add_library(tsw-core STATIC src/core/timeline.c)
+add_library(tsw-core STATIC src/core/gate.c src/core/timeline.c)
 target_include_directories(tsw-core PUBLIC src)
 set_target_properties(tsw-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE tsw-core)

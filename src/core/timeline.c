@@ -50,3 +50,12 @@ uint64_t tsw_timeline_output_ns(const struct tsw_timeline *timeline, size_t coun
 		return segment->output_ns; /* only before the first section: the recording has not started */
 	return segment->output_ns + (time_ns - segment->start_ns) / segment->speed;
 }
+
+uint32_t tsw_timeline_speed(const struct tsw_timeline *timeline, size_t count, uint64_t time_ns)
+{
+	if (!TSW_CHECK(timeline != NULL))
+		return 1;
+	if (!TSW_CHECK(count >= 1 && count <= TSW_TIMELINE_CAPACITY))
+		return 1;
+	return segment_at(timeline, count, time_ns)->speed;
+}

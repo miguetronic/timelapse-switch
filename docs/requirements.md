@@ -18,7 +18,7 @@ Wording follows the usual convention: **must** is mandatory, **should** is recom
 | REQ-002 | Timelapse speeds must include x2, x4 and x8, and should include x16. The speed must be selectable before and during a recording. | Must | Test, Demo | Draft |
 | REQ-003 | When the user stops, the file must be complete and playable, with the timelapse sections already sped up. No post-processing step is allowed. | Must | Demo | Draft |
 | REQ-004 | In a timelapse section at speed N, exactly 1 of every N frames must be kept, at a regular cadence. | Must | Test | Draft |
-| REQ-005 | Audio and video must stay in sync across any number of switches: the gap must never exceed one audio block (about 21 ms at 48 kHz). | Must | Test, Measure | Draft |
+| REQ-005 | Audio and video must stay in sync across any number of switches, without drift: the audio never more than half an audio block from its place (10.7 ms at 48 kHz), the video never more than half a frame (16.7 ms at 30 fps), so they are never more than about 27 ms apart, well under the roughly 45 ms at which viewers notice. | Must | Test, Measure | Draft |
 | REQ-006 | During timelapse sections, the audio must be silence by default. | Must | Test | Draft |
 | REQ-007 | Each switch should add a chapter marker when the file format supports it (Hybrid MP4). | Should | Demo | Draft |
 

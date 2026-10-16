@@ -38,7 +38,8 @@ Only the two valves are new logic. The encoding and the file writing are OBS's o
 | Plugin entry | `src/plugin-main.c` | C | Load and unload; register every OBS callback (the only place where that happens). |
 | Logging | `src/plugin-support.*` | C | `tsw_log`: OBS log lines with the plugin prefix. **Exists.** |
 | Compiler differences | `src/tsw-compiler.h` | C | The only conditional compilation. **Exists.** |
-| Timeline | `src/core/timeline.c` | C | Pure math, no OBS: given the mode history, how many frames and audio samples pass. Fully unit tested. |
+| Timeline | `src/core/timeline.c` | C | Pure math, no OBS: maps any OBS time to its position in the final video. **Exists**, unit tested. |
+| Gates | `src/core/gate.c` | C | Pure math, no OBS: from that position, how many copies of each frame and which audio blocks go to the encoder. **Exists**, unit tested, including a 10-minute sync simulation. |
 | Video valve | `src/core/video-valve-rt.c` | C | Real-time: decides frame by frame, copies the frames that pass into our own video feed. |
 | Audio valve | `src/core/audio-valve-rt.c` | C | Real-time: passes the share of audio that matches the frames (silence in timelapse by default). |
 | Recorder | `src/core/recorder.c` | C | Creates the encoders, feeds and file writer from the user's OBS settings; starts, stops, adds chapters. |

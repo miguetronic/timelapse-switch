@@ -63,3 +63,11 @@ enum tsw_result tsw_timeline_switch(struct tsw_timeline *timeline, size_t count,
  * Thread: any reader. Memory: none allocated.
  */
 uint64_t tsw_timeline_output_ns(const struct tsw_timeline *timeline, size_t count, uint64_t time_ns);
+
+/*
+ * tsw_timeline_speed: speed of the section that contains OBS time time_ns.
+ *   count  number of published sections (at least 1).
+ * Returns 1 to TSW_MAX_SPEED; 1 if the arguments are invalid (after reporting a failed check).
+ * Thread: any reader. Memory: none allocated.
+ */
+uint32_t tsw_timeline_speed(const struct tsw_timeline *timeline, size_t count, uint64_t time_ns);
