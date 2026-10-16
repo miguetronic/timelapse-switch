@@ -132,7 +132,7 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
 
 **Context.** Professional releases should let users verify what they download and what it contains, without adding work that brings no information.
 
-**Decision.** Every release includes SHA-256 checksums (from the OBS template) and an SBOM in CycloneDX 1.6, generated from `buildspec.json` by `tools/make-sbom.py`. Security reports go through GitHub's private reporting (`SECURITY.md`).
+**Decision.** Every release includes SHA-256 checksums (from the OBS template) and an SBOM in CycloneDX 1.6, generated from `buildspec.json` by `tools/make-sbom.sh`. Security reports go through GitHub's private reporting (`SECURITY.md`).
 
 **Alternatives.**
 - *A bill of vulnerabilities (BOV) with every release.* The plugin ships only its own code, so it would almost always say "none known". If a vulnerability in OBS or Qt ever affects users, a statement is published at that moment, in the same CycloneDX format.

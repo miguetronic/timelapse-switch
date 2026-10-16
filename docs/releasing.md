@@ -77,6 +77,6 @@ In one place only: the `version` field of `buildspec.json`, written by release-p
 |---|---|---|
 | Installers (`.exe`, `.pkg`, `.deb`, archives) | The plugin for each operating system | CI, from the release tag |
 | `CHECKSUMS.txt` | SHA-256 of every file | CI (from the OBS template) |
-| `timelapse-switch-X.Y.Z.cdx.json` | SBOM, CycloneDX 1.6 | `tools/make-sbom.py` |
+| `timelapse-switch-X.Y.Z.cdx.json` | SBOM, CycloneDX 1.6 | `tools/make-sbom.sh` |
 
-The SBOM can be generated locally at any time with `tools/make-sbom.py`; the same commit always gives the same file.
+The SBOM can be generated locally at any time with `tools/make-sbom.sh`; the same commit always gives the same file.

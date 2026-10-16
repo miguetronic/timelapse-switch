@@ -33,6 +33,7 @@ Building a plugin is like baking from a recipe card:
 | Qt 6 | The dock's toolkit | `qt6-base` |
 | clang-tidy | Static analyzer #1 | `clang` |
 | Python 3 | Runs the pinned formatting tools | `python` |
+| jq, uuidgen | Generate the SBOM (`tools/make-sbom.sh`) | `jq`, `util-linux` |
 
 On Ubuntu, the names differ; the CI script `.github/scripts/utils.zsh/setup_ubuntu` lists them.
 

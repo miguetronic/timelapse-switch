@@ -103,7 +103,7 @@ git config core.hooksPath tools/git-hooks
 
 - Versions follow [Semantic Versioning](https://semver.org/), `MAJOR.MINOR.PATCH`. The first public release is 1.0.0.
 - **Nobody picks numbers or edits the changelog by hand.** release-please reads the commit types, keeps a release pull request up to date (new version in `buildspec.json`, new section in `CHANGELOG.md`), and publishes when the maintainer merges it.
-- Each release includes installers, checksums and an SBOM (`tools/make-sbom.py`).
+- Each release includes installers, checksums and an SBOM (`tools/make-sbom.sh`).
 - Details: `docs/releasing.md`. Security reports: `SECURITY.md`.
 
 ## Writing documentation
