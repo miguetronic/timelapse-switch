@@ -152,9 +152,25 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
 
 **Context.** Every error message in the dock has a "Learn more" link (`docs/design/ux-spec.md`, UX-085), and users need an install and usage guide in English and Spanish. Those links are built into the plugin, so their address must never change.
 
-**Decision.** The user documentation lives at `https://miguetronic.github.io/timelapse-switch/`, served by GitHub Pages. Error pages follow the pattern `https://miguetronic.github.io/timelapse-switch/errors/TSW-Exxx`. The site is plain HTML and Markdown: no framework, no cookies, no analytics.
+**Decision.** The user documentation lives at `https://miguetronic.github.io/timelapse-switch/`, served by GitHub Pages. Error pages follow the pattern `https://miguetronic.github.io/timelapse-switch/errors/TSW-Exxx`. No cookies, no analytics.
+
+The site is built with **Astro** and its documentation theme **Starlight** (amended on 2026-10-16), and GitHub Actions publishes it to GitHub Pages with Astro's official action. Pages are written in Markdown; Astro turns them into static HTML and CSS. Visitors get almost no JavaScript: only the search box, the light and dark switch, and small interactive "islands" where a page needs one (for example a demo of the dock), never a framework running the whole page. Starlight brings what a documentation site needs: English and Spanish, search that runs in the browser with no outside service (Pagefind), accessible navigation, and light and dark themes.
+
+```
+  Markdown pages (English, Spanish)                                   GitHub Pages
+  + Starlight theme   --> Astro (GitHub Actions) --> static HTML, CSS --> visitors
+  + islands (demo)                                   and a little JS
+```
 
 **Alternatives.**
 - *A custom domain from the start.* It is not needed: if one is added later, GitHub redirects the `github.io` addresses to it, so links in installed versions keep working.
+- *Plain HTML written by hand.* Nothing to install, but about 45 pages in two languages would repeat the same header, menu and footer, and sooner or later one copy would differ.
+- *Zola or Hugo* (one program each, written in Rust and Go). Fewer moving parts, but search, components and the documentation layout would have to be built by hand.
+- *Jekyll*, built into GitHub Pages: slow, ageing, and it needs Ruby to preview the site locally.
+- *Docusaurus*: sends React to every visitor and is built for much larger documentation.
+- *WordPress*: needs a server and a database, constant updates, and keeps the content away from the code it documents.
 
-**Consequences.** The site is published with 1.0.0, when there is a working plugin and a real demo to show.
+**Consequences.**
+- The site is published with 1.0.0, when there is a working plugin and a real demo to show.
+- Building it needs Node.js and npm packages. They run only in GitHub Actions and on the maintainer's machine, never reach visitors and are not part of the plugin, so they do not enter its SBOM. They are pinned with a lock file and watched by Dependabot.
+- By default Astro turns file names into lowercase addresses. The error pages must keep the exact pattern above (or the plugin's link changes before 1.0.0), and a check opens every error link the plugin builds, in both languages.
