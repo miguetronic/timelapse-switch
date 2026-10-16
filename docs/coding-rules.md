@@ -9,6 +9,7 @@ Think of them like a seat belt: a little uncomfortable at first, then you stop n
 - **Part A** adapts "The Power of Ten" by Gerard J. Holzmann (NASA/JPL Laboratory for Reliable Software), ten rules written for safety critical C code. Each rule shows the original idea, our version, why it matters here, how it is checked, and an example.
 - **Part B** covers what P10 does not: threads, OBS object lifetimes, errors, readability, naming, C++ and Qt.
 - **Part C** is the review checklist and the list of approved exceptions.
+- **Part D** is how we work: tests first, the smallest complete change, performance, and evidence before claims.
 
 Where a rule says "checked by `tools/check.sh`", a machine verifies it on every run. Where it says "review", a person does. Holzmann's own point is that rules nobody can check end up ignored, so we prefer machine checks.
 
@@ -298,6 +299,9 @@ Two kinds of script are out of scope:
 Copy this into each pull request:
 
 - [ ] `tools/check.sh` passes, all green.
+- [ ] Every new behavior has a test that was seen failing before the code existed (D1).
+- [ ] No code, option or abstraction nobody asked for; shortcuts are marked `shortcut:` (D2).
+- [ ] Real-time changes come with a measurement, not a guess (D3).
 - [ ] Every loop has a visible bound (P10-2).
 - [ ] No allocation in `*-rt.c` files (P10-3).
 - [ ] Functions in `src/core/` check their parameters and results with `TSW_CHECK` (P10-5, P10-7).
@@ -316,6 +320,69 @@ A rule can only be broken with a reason, written in the code (`/* P10-x exceptio
 | P10-8 | `#pragma once` and the `#ifdef __cplusplus` header boilerplate | Standard on every compiler we support, and needed so C++ can include our C headers. |
 | P10-9 | Function pointers for OBS and Qt callbacks | Required by the OBS and Qt APIs; kept in one file per side and documented in a table. |
 | P10-10 | clang-tidy check `DeprecatedOrUnsafeBufferHandling` disabled | It requires C11 Annex K functions that don't exist on Linux or macOS. We use the bounded standard functions and check their results. |
+
+---
+
+## Part D. How we work
+
+### D1. Tests first (test-driven development)
+
+**The rule:** no production code without a test that failed first. Every change follows the same three-beat rhythm:
+
+```
+   RED                 GREEN                    REFACTOR
+   write one test  --> write the least code --> clean up names and
+   for one behavior    that makes it pass       duplication, tests
+   and WATCH IT FAIL   and watch everything     stay green
+        ^              pass                          |
+        +--------------- next behavior <------------+
+```
+
+- **Watch it fail.** A test you never saw failing may be testing nothing. It must fail for the expected reason (the behavior is missing), not because of a typo or a build error.
+- **One behavior per test**, with a name that says the behavior: `timelapse_x4_keeps_one_frame_in_four`, not `test2`. An "and" in the name means two tests.
+- **Name the break.** Before writing a test, say which bug would make it fail. If no bug would, it is not worth writing.
+- **Expected values written by hand.** Literals and hand-checked numbers, never values computed by the code under test (that test would always pass).
+- **Real code, not mocks.** Our core logic is pure C with no OBS dependency precisely so it can be tested for real. Mocks only for what is slow or external, and never assert on the mock itself.
+- **Mutation check before finishing:** imagine a wrong constant, a wrong branch or a missing check; at least one test must fail for each.
+- **Bugs start as a test.** Reproduce the bug with a failing test, then fix it.
+- **Where it does not apply:** configuration files, code imported from the OBS template, and generated files. The dock follows the rule through its state logic (pure C, tested) and an off-screen rendering test of each state.
+
+Unit tests live in `tests/unit/`, run with CTest, and are part of `tools/check.sh`. Integration tests inside a real OBS live in `tests/integration/`.
+
+### D2. The smallest complete change
+
+The best code is code never written. Before writing, take the first option that fully works:
+
+1. **Does it need to exist?** Features, options and flexibility nobody asked for are not built; they are named in one line instead.
+2. **Is it already in this codebase?** Use it the way the surrounding code does.
+3. **Does the C library, OBS or Qt already do it?** Use that.
+4. **Is it in a dependency we already have?** Use it. Never add a dependency for a few lines.
+5. **Can it be one line a reader understands at a glance?** One line.
+6. **Otherwise,** the minimum code that works.
+
+Be lazy about the solution, never about the change: finish every caller, test and document the change touches. Prefer deleting to adding. Between options of the same size, take the one that is correct on edge cases. A shortcut with a known limit is marked in the code:
+
+```c
+/* shortcut: one audio track only; add track selection when a user needs it. */
+```
+
+**Never cut:** validation at trust boundaries, error handling that prevents losing a recording, security, accessibility, or anything the requirements ask for.
+
+*Inspired by "ponytail" (D. Gebert), https://github.com/DietrichGebert/ponytail.*
+
+### D3. Performance
+
+- **Measure first.** No optimization without a measurement that shows the problem, and a second measurement that shows the gain. Numbers go in the pull request.
+- **The real-time path has a budget.** At 30 fps a frame lasts 33 ms and OBS needs most of it. Our video and audio callbacks must stay well under 1 ms on the reference PC, apart from the unavoidable frame copy. They do no allocation, no logging, no locking and no I/O (P10-3, B1).
+- **Copy only what passes.** In timelapse, frames that are skipped are never copied.
+- **Keep data in the form the platform gives it** (OBS frame formats, planar float audio). No conversions "just in case".
+- **Load tests** (4K, long sessions) run only with the maintainer's approval, because they stress the whole PC.
+
+### D4. Evidence before claims
+
+Nothing is "done", "fixed" or "passing" until the command that proves it has run, freshly, and its output has been read. That means `tools/check.sh` for code, the integration test for behavior inside OBS, and a measurement for performance. Any failure seen along the way is reported by name, even if it seems unrelated.
+
+*D1 and D4 follow "test-driven-development" and "verification-before-completion" from superpowers (J. Vincent), https://github.com/obra/superpowers.*
 
 ---
 
