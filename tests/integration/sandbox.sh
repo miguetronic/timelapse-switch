@@ -4,10 +4,11 @@
 # SPDX-FileCopyrightText: 2026 Miguel Parra (Miguetronic)
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# The sandbox OBS shared by run.sh and measure.sh: a separate OBS with its own
-# temporary configuration (XDG_CONFIG_HOME), so the user's OBS settings,
-# scenes and plugins are never touched; its obs-websocket listens on port
-# 4466 instead of the usual 4455. Source this file; it does nothing alone.
+# The sandbox OBS shared by run.sh, measure.sh and tests/ui/obs-themes.sh: a
+# separate OBS with its own temporary configuration (XDG_CONFIG_HOME), so the
+# user's OBS settings, scenes and plugins are never touched; its
+# obs-websocket listens on port 4466 instead of the usual 4455. Source this
+# file; it does nothing alone.
 
 readonly PORT=4466
 readonly PROFILE='tsw-test'
@@ -116,10 +117,44 @@ EOF
   cp -r data/locale "${obs}/plugins/timelapse-switch/data/"
   if ((probe == 1)); then
     # The test-only module that logs when OBS delivers each beep and frame.
-    mkdir -p "${obs}/plugins/tsw-sync-probe/bin/64bit"
-    cp build_x86_64/integration/tsw-sync-probe.so \
-      "${obs}/plugins/tsw-sync-probe/bin/64bit/"
+    install_module "${sandbox}" build_x86_64/integration/tsw-sync-probe.so
   fi
+}
+
+#######################################
+# Installs one more OBS module in the sandbox, such as a test-only probe.
+# Arguments:
+#   Sandbox directory, path of the module (.so); its name is the module's.
+#######################################
+install_module() {
+  local sandbox="$1" module="$2"
+  local name
+  name="$(basename "${module}" .so)"
+  local bin="${sandbox}/config/obs-studio/plugins/${name}/bin/64bit"
+  mkdir -p "${bin}"
+  cp "${module}" "${bin}/"
+}
+
+#######################################
+# Chooses the OBS theme of the sandbox (Settings > Appearance), by its id.
+# Arguments:
+#   Sandbox directory, theme id such as com.obsproject.Yami.Light.
+#######################################
+set_theme() {
+  local sandbox="$1" theme="$2"
+  printf '[Appearance]\nTheme=%s\n' "${theme}" \
+    >>"${sandbox}/config/obs-studio/user.ini"
+}
+
+#######################################
+# Chooses the language of the sandbox OBS (Settings > General).
+# Arguments:
+#   Sandbox directory, language such as es-ES.
+#######################################
+set_language() {
+  local sandbox="$1" language="$2"
+  sed -i "s/^\[General\]$/[General]\nLanguage=${language}/" \
+    "${sandbox}/config/obs-studio/user.ini"
 }
 
 # Prints the newest file matching a pattern in a directory, or nothing.

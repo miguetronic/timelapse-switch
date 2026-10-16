@@ -97,6 +97,7 @@ foreach(_tsw_target IN ITEMS ${CMAKE_PROJECT_NAME} plugin-support tsw-core tsw-d
 endforeach()
 
 option(ENABLE_UNIT_TESTS "Build the unit tests (run them with ctest)" ON)
+option(ENABLE_THEME_PROBE "Build the test-only OBS module used by tests/ui/obs-themes.sh" ON)
 if(ENABLE_UNIT_TESTS)
   enable_testing()
   add_subdirectory(tests/unit)
