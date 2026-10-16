@@ -15,7 +15,7 @@ We use the eight product qualities of **ISO/IEC 25010** as a checklist, with wha
 | Compatibility | Works next to OBS's own recording and other plugins | Public OBS API only, own recorder | ADR-002, ADR-006 |
 | Interaction capability (usability) | Obvious state, hands-free use, clear errors | UX specification with IDs | `docs/design/ux-spec.md` |
 | Reliability | Never crashes OBS, never loses a recording | "The Power of Ten" rules, checks that recover | `docs/coding-rules.md`, `tools/check.sh` |
-| Security | No surprises: no network, no data collection | No network code; dependencies are OBS's own | Inspection |
+| Security | No surprises: no network, no data collection | No network code; dependencies are OBS's own; private reporting | `SECURITY.md`, SBOM per release |
 | Maintainability | Anyone can read and change the code safely | Short functions, contracts, decisions recorded | `docs/coding-rules.md`, `docs/decisions.md` |
 | Flexibility (portability) | Windows, macOS and Linux from the same code | CMake per-OS files, CI builds for all three | `.github/workflows/` |
 
@@ -73,7 +73,7 @@ A script (`tools/trace.py`, planned) will collect these tags into a matrix (`doc
   5. Review         the maintainer reviews with the checklist in coding-rules.md, Part C
   6. CI             GitHub builds for Windows, macOS and Linux, and runs the checks
   7. Merge          into main, which always builds
-  8. Release        tag X.Y.Z (SemVer), CHANGELOG entry, test report, installers built by CI
+  8. Release        merge the release pull request (release-please): tag, changelog, installers, SBOM
 ```
 
 **Definition of done** for any change: steps 1 to 7 complete, docs updated in the same pull request, IDs referenced.

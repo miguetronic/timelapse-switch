@@ -2,6 +2,8 @@
 
 How Timelapse Switch is numbered, and how a version goes from `main` to a download on GitHub.
 
+> **Status:** the release automation (release-please) is switched on when the repository is published on GitHub. Until then, nothing is released; commits already follow the format it needs.
+
 ## Version numbers: Semantic Versioning
 
 Versions follow [Semantic Versioning 2.0.0](https://semver.org/): three numbers, `MAJOR.MINOR.PATCH`.
@@ -16,57 +18,65 @@ Think of it as a promise to users, readable from the number alone:
    +---------- MAJOR: "something changed that you may need to adapt to"
 ```
 
-**What counts as what, for this plugin (from 1.0.0 on):**
-
 | Bump | When | Examples |
 |---|---|---|
 | MAJOR | Something users rely on stops working as before | Settings or hotkeys must be set again; an OBS version, operating system or encoder is no longer supported; files are named differently |
-| MINOR | New behavior, nothing existing breaks | A new speed, a new option, a new language, a new chapter format |
+| MINOR | New behavior, nothing existing breaks | A new speed, a new option, a new language |
 | PATCH | Fixes only, no new behavior | A bug fix, a crash fix, a corrected translation |
 
-**Before 1.0.0** (initial development, where we are now): anything may change. A new feature bumps MINOR (`0.2.0`), a fix bumps PATCH (`0.2.1`). Version `1.0.0` means "stable: the promises above now apply".
+**The first public release is 1.0.0.** Until the plugin works for real, nothing is released, so the first version users see is already a stable one.
+
+## Who decides the number: the commits
+
+Every commit follows [Conventional Commits](https://www.conventionalcommits.org/) (see `CONTRIBUTING.md`), and its type decides the next version:
+
+| Commits since the last release include... | Next version (from 1.2.3) |
+|---|---|
+| only `fix:` or `perf:` | 1.2.**4** |
+| at least one `feat:` | 1.**3**.0 |
+| at least one breaking change (`feat!:` or a `BREAKING CHANGE:` footer) | **2**.0.0 |
+| only `docs:`, `test:`, `build:`, `ci:`, `refactor:`, `chore:` | no release |
+
+The commit with the biggest impact wins, and a release bumps one number only: five `feat` commits give 1.3.0, not 1.7.0.
+
+## How a release happens: the release pull request
+
+The tool is [release-please](https://github.com/googleapis/release-please). Think of it as a secretary who takes note of every change and keeps a draft of the next release on your desk:
+
+```
+   commits reach main:   fix: ...   feat: ...   fix: ...
+            |
+            v
+   release-please keeps ONE pull request open and rewrites it after every push:
+     "chore(main): release 1.3.0"
+       - buildspec.json  version 1.3.0
+       - CHANGELOG.md    new section, grouped into Features and Bug Fixes
+            |
+            |   when you want to publish: review that pull request and merge it
+            v
+   tag 1.3.0 + GitHub release + installers for Windows, macOS and Linux
+   + checksums + SBOM
+```
+
+- What the pull request shows is exactly what will be published. Merging is the only decision.
+- Not ready to publish? Leave it open; it keeps updating itself.
+- Tags have no "v" in front (`1.3.0`), which is what the OBS template's build workflow expects.
+- To force a specific number (for example the first `1.0.0`), add the footer `Release-As: 1.0.0` to a commit.
 
 ## Where the version lives
 
-There is exactly one place: the `version` field of `buildspec.json`. CMake reads it and puts it into the plugin binary (`PLUGIN_VERSION`, shown in the OBS log), the Windows file properties, the macOS installer and the names of the installer files. Nothing else holds a version number, so they can never disagree.
-
-It always holds **numbers only**, `X.Y.Z`, because CMake's `project(VERSION ...)` and the Windows and macOS version fields accept nothing else. `tools/check.sh` verifies this.
-
-## Pre-releases
-
-Before a version is final, testers can try it as a pre-release:
-
-| Form | Meaning | Example |
-|---|---|---|
-| `X.Y.Z-betaN` | Feature complete, being tested; bugs expected | `1.0.0-beta1` |
-| `X.Y.Z-rcN` | Release candidate: becomes the final version unless a serious bug appears | `1.0.0-rc1` |
-
-These are the only pre-release forms the release workflow recognizes (`.github/workflows/push.yaml`, from the OBS template). Keep N between 1 and 9: SemVer compares `beta10` and `beta2` as text, so `beta10` would sort before `beta2`.
-
-The suffix lives **only in the Git tag**. For `1.0.0-beta1`, `buildspec.json` already says `1.0.0` (the version being prepared), the tag is `1.0.0-beta1`, and GitHub shows the release as "Timelapse Switch 1.0.0-beta1", marked as a pre-release. The installer files inside it are named with `1.0.0`; that is how the OBS template works.
-
-Order, from oldest to newest: `1.0.0-beta1` < `1.0.0-beta2` < `1.0.0-rc1` < `1.0.0`.
-
-## Releasing, step by step
-
-```
-   main, all checks green
-        |
-        v
-   1. buildspec.json      "version": "X.Y.Z"   (numbers only, also for betas)
-   2. CHANGELOG.md        final versions: move the "Unreleased" lines under "## [X.Y.Z] - YYYY-MM-DD"
-                          betas and release candidates: leave them under "Unreleased"
-   3. test report         docs/test-reports/X.Y.Z.md (see docs/quality.md, section 5)
-   4. commit              chore(release): X.Y.Z
-   5. tag                 git tag -a X.Y.Z -m "Timelapse Switch X.Y.Z"   (no "v"; X.Y.Z-betaN for a beta)
-   6. push the tag        CI builds Windows, macOS and Linux and creates a DRAFT release
-   7. review the draft    check the files, paste the CHANGELOG section, then publish
-```
-
-**Why the tag has no "v":** the release workflow from the OBS template only accepts tags that are exactly a version (`1.2.3`, `1.2.3-beta1`, `1.2.3-rc1`). Any other tag builds, but no release is created.
-
-**Why a draft:** nothing reaches users until a person has looked at it. The workflow marks betas and release candidates as pre-releases on GitHub automatically.
+In one place only: the `version` field of `buildspec.json`, written by release-please. CMake puts it into the plugin binary (`PLUGIN_VERSION`, shown in the OBS log), the Windows file properties, the macOS installer and the installer file names. It holds numbers only (`X.Y.Z`), which `tools/check.sh` verifies.
 
 ## Changelog
 
-Every pull request that changes something users can notice adds a line to `CHANGELOG.md`, under `## [Unreleased]`, in one of these groups ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)): **Added**, **Changed**, **Fixed**, **Removed**, **Deprecated**, **Security**. Lines are written for users, not developers: "Switching speed now takes effect on the next frame", not "refactor valve state".
+`CHANGELOG.md` is generated from the commit messages; nobody edits it by hand. That is why the first line of every commit is written **for users**: "Speed changes now apply on the next frame", not "refactor valve state".
+
+## What each release contains
+
+| File | What it is | How it is made |
+|---|---|---|
+| Installers (`.exe`, `.pkg`, `.deb`, archives) | The plugin for each operating system | CI, from the release tag |
+| `CHECKSUMS.txt` | SHA-256 of every file | CI (from the OBS template) |
+| `timelapse-switch-X.Y.Z.cdx.json` | SBOM, CycloneDX 1.6 | `tools/make-sbom.py` |
+
+The SBOM can be generated locally at any time with `tools/make-sbom.py`; the same commit always gives the same file.

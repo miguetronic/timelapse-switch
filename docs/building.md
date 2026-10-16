@@ -43,9 +43,10 @@ git clone https://github.com/miguetronic/timelapse-switch.git
 cd timelapse-switch
 python3 -m venv .venv
 .venv/bin/pip install -r tools/requirements-dev.txt
+git config core.hooksPath tools/git-hooks
 ```
 
-The last two lines install clang-format 19.1.1 and gersemi 0.21.0 **inside the project folder** (`.venv/`, ignored by Git). They are the exact versions the OBS CI uses, so your formatting and GitHub's always agree. Nothing is installed system-wide.
+The `python3` and `pip` lines install clang-format 19.1.1 and gersemi 0.21.0 **inside the project folder** (`.venv/`, ignored by Git). They are the exact versions the OBS CI uses, so your formatting and GitHub's always agree. Nothing is installed system-wide. The last line turns on the Git hook that checks the commit message format (`CONTRIBUTING.md`).
 
 ### 3. Configure (once, about 2 seconds)
 
@@ -84,6 +85,8 @@ Summary
   PASS  P10-8: no token pasting or variadic macros
   PASS  P10-8: conditional compilation only in tsw-compiler.h
   PASS  Style: no em dashes or en dashes in any file
+  PASS  Commits: Conventional Commits format
+  PASS  Version: buildspec.json is X.Y.Z (0.1.0)
 ```
 
 To fix formatting automatically instead of only checking it:

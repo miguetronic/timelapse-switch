@@ -108,3 +108,34 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
 **Decision.** Adopt G. J. Holzmann's ten rules for safety critical code (NASA/JPL), adapted to a plugin, with machine checks wherever possible (`tools/check.sh`: strict warnings, clang-tidy, the GCC analyzer and text checks).
 
 **Consequences.** Some OBS idioms are not used in our code (`goto` cleanup, macros with variable arguments). Exceptions are allowed only with a written reason (`docs/coding-rules.md`, Part C).
+
+---
+
+## ADR-008. Conventional Commits and release-please
+
+*Date: 2026-10-16. Status: accepted; release-please is switched on when the repository is on GitHub.*
+
+**Context.** Version numbers and the changelog should follow from the work done, without manual bookkeeping, and nothing should reach users without the maintainer's review.
+
+**Decision.** Every commit follows Conventional Commits, checked by a Git hook and by `tools/check.sh`. Releases are automated with release-please: it keeps a release pull request with the next version and changelog, and publishes when the maintainer merges it. The first public release is 1.0.0.
+
+**Alternatives.**
+- *semantic-release.* It publishes as soon as a qualifying commit reaches `main`, and it updates files by pushing a commit to `main` from CI, outside review. Updating `buildspec.json` would also need extra plugins and a script. The release pull request of release-please gives a preview and keeps every change to `main` reviewed.
+
+**Consequences.** The first line of each commit is written for users, because it becomes the changelog. Tags have no "v" prefix, as the OBS template's build workflow expects.
+
+---
+
+## ADR-009. Release security: checksums and SBOM, no per-release vulnerability report
+
+*Date: 2026-10-16. Status: accepted.*
+
+**Context.** Professional releases should let users verify what they download and what it contains, without adding work that brings no information.
+
+**Decision.** Every release includes SHA-256 checksums (from the OBS template) and an SBOM in CycloneDX 1.6, generated from `buildspec.json` by `tools/make-sbom.py`. Security reports go through GitHub's private reporting (`SECURITY.md`).
+
+**Alternatives.**
+- *A bill of vulnerabilities (BOV) with every release.* The plugin ships only its own code, so it would almost always say "none known". If a vulnerability in OBS or Qt ever affects users, a statement is published at that moment, in the same CycloneDX format.
+
+**Consequences.** Kept deliberately small. Build provenance attestation and automatic vulnerability scanning can be added later if the project grows.
+

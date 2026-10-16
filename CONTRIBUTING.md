@@ -29,6 +29,7 @@ And three habits that keep the code small:
 | Know what it must do | `docs/requirements.md` and `docs/design/ux-spec.md` |
 | Understand quality, tests and traceability | `docs/quality.md` |
 | Number a version or publish a release | `docs/releasing.md` |
+| Report a security problem | `SECURITY.md` |
 
 ## How a change flows
 
@@ -61,33 +62,49 @@ And three habits that keep the code small:
 
 ## Commit messages
 
-One line saying what changed and why it matters, in the [Conventional Commits](https://www.conventionalcommits.org/) style, then details if needed, then the IDs:
+Every commit follows [Conventional Commits](https://www.conventionalcommits.org/): a type, an optional scope, then one line **written for users**, because it becomes a line of the changelog. Then details if needed, then the IDs:
 
 ```
-feat: switch speed during a timelapse section
+feat: speed changes apply on the next frame
 
-The speed chips now apply on the next frame instead of the next section.
+Before, a new speed waited for the next timelapse section.
 
 Refs: REQ-002, UX-041
 ```
 
-| Type | Use it for |
-|---|---|
-| `feat` | Something new for users |
-| `fix` | A bug fix |
-| `docs` | Documentation only |
-| `test` | Tests only |
-| `build` | Build system, CI, tools |
-| `refactor` | Code change with no change in behavior |
-| `chore` | Housekeeping |
+| Type | Use it for | Effect on the version |
+|---|---|---|
+| `feat` | Something new for users | MINOR |
+| `fix` | A bug fix | PATCH |
+| `perf` | Faster or lighter, same behavior | PATCH |
+| `docs` | Documentation only | none |
+| `test` | Tests only | none |
+| `build` | Build system, tools | none |
+| `ci` | GitHub workflows | none |
+| `refactor` | Code change with no change in behavior | none |
+| `style` | Formatting only | none |
+| `chore` | Housekeeping | none |
+| `revert` | Undoes an earlier commit | depends on what it undoes |
+
+- **Breaking changes** add `!` after the type (`feat!: new settings format`) or a `BREAKING CHANGE:` footer. They bump MAJOR.
+- **Scope** is optional and names the area: `fix(audio): ...`, `feat(dock): ...`.
+- **First line:** 72 characters at most, no period at the end.
+- **Pull requests** are merged with "Squash and merge", so the pull request title becomes the commit: it follows the same format.
+
+A Git hook checks the format before every commit. Enable it once per clone:
+
+```bash
+git config core.hooksPath tools/git-hooks
+```
+
+`tools/check.sh` also checks every commit in the history.
 
 ## Versions and changelog
 
-- Versions follow [Semantic Versioning](https://semver.org/), `MAJOR.MINOR.PATCH`: MAJOR when something users rely on changes, MINOR for new features, PATCH for fixes. `0.x` means initial development.
-- The only place that holds the version is `buildspec.json`.
-- Every user-visible change gets a line in `CHANGELOG.md` under "Unreleased", in the same pull request.
-- A release is a Git tag with the exact version and no "v" (`1.2.0`, `1.2.0-beta1`); CI builds the installers and prepares a draft release.
-- Step by step: `docs/releasing.md`.
+- Versions follow [Semantic Versioning](https://semver.org/), `MAJOR.MINOR.PATCH`. The first public release is 1.0.0.
+- **Nobody picks numbers or edits the changelog by hand.** release-please reads the commit types, keeps a release pull request up to date (new version in `buildspec.json`, new section in `CHANGELOG.md`), and publishes when the maintainer merges it.
+- Each release includes installers, checksums and an SBOM (`tools/make-sbom.py`).
+- Details: `docs/releasing.md`. Security reports: `SECURITY.md`.
 
 ## Writing documentation
 
