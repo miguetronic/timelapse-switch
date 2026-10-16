@@ -56,15 +56,31 @@ set(
   -Wunused-function
   -Werror
 )
-foreach(_tsw_target IN ITEMS ${CMAKE_PROJECT_NAME} plugin-support)
+function(tsw_strict_warnings target)
   target_compile_options(
-    ${_tsw_target}
+    ${target}
     PRIVATE
       "$<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:${_tsw_warnings};-Wstrict-prototypes;-Wmissing-prototypes>"
       "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:${_tsw_warnings}>"
       "$<$<COMPILE_LANG_AND_ID:C,MSVC>:/W4;/WX>"
       "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4;/WX>"
   )
+endfunction()
+
+# Core logic: pure C with no OBS dependency, shared by the plugin and the unit tests (docs/coding-rules.md, D1).
+add_library(tsw-core STATIC src/core/timeline.c)
+target_include_directories(tsw-core PUBLIC src)
+set_target_properties(tsw-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE tsw-core)
+
+foreach(_tsw_target IN ITEMS ${CMAKE_PROJECT_NAME} plugin-support tsw-core)
+  tsw_strict_warnings(${_tsw_target})
 endforeach()
+
+option(ENABLE_UNIT_TESTS "Build the unit tests (run them with ctest)" ON)
+if(ENABLE_UNIT_TESTS)
+  enable_testing()
+  add_subdirectory(tests/unit)
+endif()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
