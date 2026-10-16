@@ -2,7 +2,7 @@
 
 How Timelapse Switch works inside OBS, in plain words first and in detail after.
 
-> **Status:** this is the agreed design (see `docs/decisions.md`). The code is still the template skeleton; each part below is marked **planned** until it exists.
+> **Status:** this is the agreed design (see `docs/decisions.md`). The recorder, its real-time path and the hotkeys exist; the dock (the panel) and chapters are **planned**.
 
 ## The idea in one paragraph
 
@@ -31,25 +31,40 @@ OBS renders your scene 30 times per second (or whatever frame rate you set) and 
 
 Only the two valves are new logic. The encoding and the file writing are OBS's own, which keeps the plugin small and compatible with every encoder and format OBS supports.
 
-## Modules (planned)
+## Modules
 
 | Module | File(s) | Language | Job |
 |---|---|---|---|
-| Plugin entry | `src/plugin-main.c` | C | Load and unload; register every OBS callback (the only place where that happens). |
+| Plugin entry | `src/plugin-main.c` | C | Load and unload; hotkeys, settings, OBS closing. **Exists.** |
 | Logging | `src/plugin-support.*` | C | `tsw_log`: OBS log lines with the plugin prefix. **Exists.** |
 | Compiler differences | `src/tsw-compiler.h` | C | The only conditional compilation. **Exists.** |
 | Timeline | `src/core/timeline.c` | C | Pure math, no OBS: maps any OBS time to its position in the final video. **Exists**, unit tested. |
 | Gates | `src/core/gate.c` | C | Pure math, no OBS: from that position, how many copies of each frame and which audio blocks go to the encoder. **Exists**, unit tested, including a 10-minute sync simulation. |
-| Video valve | `src/core/video-valve-rt.c` | C | Real-time: decides frame by frame, copies the frames that pass into our own video feed. |
-| Audio valve | `src/core/audio-valve-rt.c` | C | Real-time: passes the share of audio that matches the frames (silence in timelapse by default). |
-| Recorder | `src/core/recorder.c` | C | Creates the encoders, feeds and file writer from the user's OBS settings; starts, stops, adds chapters. |
-| Fault log | `src/core/fault.c` | C | `TSW_CHECK` failures and error codes, safe to fill from real-time threads, emptied by the UI thread. |
+| Audio ring | `src/core/audio-ring.c` | C | Pure, no OBS: the lock-free queue that carries audio blocks from OBS's audio thread to ours. **Exists**, unit tested. |
+| Valves (real-time path) | `src/recorder-rt.c` | C | Real-time: sends each frame 0, 1 or more times into our video feed, and passes, silences or skips each audio block, as the gates say. **Exists.** |
+| Recorder | `src/recorder.c` | C | Creates the encoders, feeds and file writer from the user's OBS settings; starts, switches speed, stops (emptying the encoder first). **Exists**; chapters planned. |
+| Fault log | `src/fault.c` | C | `TSW_CHECK` failures, safe to note from real-time threads, written to the log by the UI thread. **Exists.** |
 | Platform | `src/platform/{linux,windows,macos}.c` | C | Small OS differences, picked by CMake (no `#ifdef`). |
 | Dock | `src/ui/dock.cpp` | C++ / Qt | The panel described in `docs/design/ux-spec.md`; reads counters and faults with a timer. |
 
 ## Threads
 
-See `docs/coding-rules.md`, B1, for the rules. In short: the two valves run on OBS's real-time threads and must never wait, allocate or log; everything else runs on the UI thread.
+See `docs/coding-rules.md`, B1, for the rules. In short: the valves run on OBS's real-time threads and must never wait, allocate or log; while stopping, a short check runs on OBS's graphics thread; everything else runs on the UI thread.
+
+## Timing
+
+Three details keep sound and picture together. Each one was found by measuring (`tests/integration/README.md`).
+
+```
+  OBS draws frame k at time T ----------> the plugin gets it at about T + 38 ms
+  OBS mixes the audio block of time t --> the plugin gets it at about t + 25 ms
+```
+
+1. **Stamped time, not arrival.** Frames and audio arrive late, by different amounts. The gates place each one by the time OBS stamped on it, never by when it arrived.
+2. **Start.** The timeline starts once the encoders and the file writer are running (starting them takes tens of milliseconds), and the first frame opens the first slot of the video wherever it falls. Before these two fixes the video gate repeated the first frame to fill the gap, and the video trailed the sound by about one frame.
+3. **Stop.** Encoders keep some frames (x264 about 40, so 1.3 s at 30 fps) and hand them over only as new frames arrive. After stop, the plugin keeps sending frames until the file writer has every frame sent before the stop (or nothing moves for 1 s, or 5 s pass), and then stops it at its next packet.
+
+**Memory path and GPU path.** In OBS's own recording with a GPU encoder (the `_tex` encoders), frames never leave the graphics card, and libobs labels each frame on that path with the time of the frame before it (`output_gpu_encoders` in `libobs/obs-video.c`, OBS 32.2.2). On the memory path, used by x264 and by this plugin (ADR-003), each frame keeps its own time. So the plugin's picture sits where it does in OBS's own x264 recordings, and about one frame (33 ms at 30 fps) later than in OBS's own GPU-encoder recordings. The plugin keeps the true time rather than copy that shift.
 
 ## Callback table (rule P10-9)
 
@@ -58,13 +73,18 @@ Function pointers are allowed only where OBS or Qt require a callback. Every one
 | Callback | Registered in | Called by | Thread | Status |
 |---|---|---|---|---|
 | `obs_module_load` / `obs_module_unload` | `plugin-main.c` (`OBS_DECLARE_MODULE`) | OBS at startup and exit | UI | exists |
-| Raw video callback (frame selection) | `plugin-main.c` via `obs_add_raw_video_callback` | OBS video thread, once per frame while recording | video | planned |
-| Raw audio callback (audio capture) | `plugin-main.c` via `obs_add_raw_audio_callback` | OBS audio thread, once per audio chunk | audio | planned |
-| Audio feed input | `recorder.c` via `audio_output_open` | our audio feed's thread | audio | planned |
-| Output signals (`start`, `stop`) | `recorder.c` via the output's signal handler | OBS output thread | output | planned |
-| Frontend events (exit, profile change, OBS recording) | `plugin-main.c` via `obs_frontend_add_event_callback` | OBS UI | UI | planned |
-| Hotkeys (record, stop, switch, speed) | `plugin-main.c` via `obs_hotkey_register_frontend` | OBS hotkey thread | hotkey | planned |
+| Hotkeys (`on_record`, `on_stop`, `on_timelapse`, `on_real_time`, `on_speed_key`) | `plugin-main.c` via `obs_hotkey_pair_register_frontend` and `obs_hotkey_register_frontend` | OBS hotkey thread; they only queue an action | hotkey | exists |
+| Queued action (`run_action`) | `plugin-main.c` via `obs_queue_task` | OBS UI | UI | exists |
+| Frontend events (`on_frontend_event`: OBS closing) | `plugin-main.c` via `obs_frontend_add_event_callback` | OBS UI | UI | exists; profile change and OBS recording planned |
+| Raw video (`tsw_recorder_receive_frame`) | `recorder.c` via `obs_add_raw_video_callback` | OBS video thread, once per frame while recording | video | exists |
+| Raw audio (`tsw_recorder_receive_audio`) | `recorder.c` via `obs_add_raw_audio_callback` | OBS audio thread, once per audio block while recording | audio | exists |
+| Audio feed input (`tsw_recorder_provide_audio`) | `recorder.c` via `audio_output_open` | our audio feed's thread, every 1024 samples | audio | exists |
+| Output signal `stop` (`output_stopped`) | `recorder.c` via the output's signal handler | OBS output thread, once the file is complete | output | exists |
+| Stop check (`flush_tick`) | `recorder.c` via `obs_add_tick_callback`, only while stopping | OBS graphics thread, once per frame | graphics | exists |
+| End of recording (`finish`) | `recorder.c` via `obs_queue_task` | OBS UI | UI | exists |
 | Qt signals (buttons, timer) | `src/ui/dock.cpp` via `connect` | Qt event loop | UI | planned |
+
+The sync probe of the integration test (`tests/integration/sync-probe.c`) is a separate module that is never shipped, so it is not listed.
 
 ## Why it is built this way
 

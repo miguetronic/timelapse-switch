@@ -83,10 +83,10 @@ A script (`tools/trace.py`, planned) will collect these tags into a matrix (`doc
 | Level | What | How | When |
 |---|---|---|---|
 | Unit | Pure logic (timeline math, audio share, limits) | C tests with CTest, no OBS needed | Every check run, every push |
-| Integration | The plugin inside a real OBS | Written procedures with expected results (`tests/manual/`) | Before each release |
-| Sync | Audio and video alignment after 100 switches | A test scene with a frame counter and a beep every second; the file is measured with `ffprobe` | Before each release |
+| Integration | The plugin inside a real OBS | `tests/integration/run.sh`: a separate OBS records a test media while a script presses the hotkeys; the file is checked frame by frame (`tests/integration/README.md`) | After each change to the recorder, and before each release |
+| Sync | Audio and video alignment across switches | Part of the integration test: every beep of the file is compared with where OBS itself had it (sync probe) | Same as integration |
 | Platform | Windows, macOS, Linux | CI builds; manual runs by testers | Before each release |
-| Load | 4K30, long sessions | Measured on the reference PC, **only with the maintainer's explicit approval** | Before 1.0 and after performance changes |
+| Load | 4K30, long sessions | `tests/integration/run.sh --resolution 2160 --scenario long` on the reference PC, **only with the maintainer's explicit approval** | Before 1.0 and after performance changes |
 
 Each release gets a short test report (what was run, on what, results), kept in `docs/test-reports/`.
 

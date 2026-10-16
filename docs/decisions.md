@@ -60,6 +60,7 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
 **Consequences.**
 - In 4K30 about 370 MB/s go from the GPU to memory and back. This is the same readback OBS already does for every x264 recording; the maintainer recorded 4K30 with x264 on the reference PC on 2026-10-13 without problems.
 - It must be measured with the plugin before release (REQ-014). If it is not acceptable, plan B is implemented behind the same dock.
+- On this path each frame keeps its own time, as in OBS's own x264 recordings. OBS's GPU path labels each frame with the time of the one before, so the plugin's picture sits about one frame later than in OBS's own GPU-encoder recordings (measured 2026-10-16; `docs/architecture.md`, "Timing").
 
 ---
 
