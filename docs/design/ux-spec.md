@@ -5,9 +5,9 @@ Planned repository: `github.com/miguetronic/timelapse-switch` · License: GPL-2.
 
 | Field | Value |
 |---|---|
-| Version | 0.1, draft for the author's review |
-| Date | 2026-10-15 |
-| Status | Design, before implementation. |
+| Version | 0.2, draft for the author's review |
+| Date | 2026-10-16 |
+| Status | Design. How the dock looks (theme tokens, type, spacing, three visual directions) is in `docs/design/visual-design.md`. |
 | Readers | The author, future contributors, testers and translators |
 | Standards | Inspired by ISO 9241-110:2020 and ISO 9241-210:2019. This is not a certification claim. |
 
@@ -33,12 +33,12 @@ Planned repository: `github.com/miguetronic/timelapse-switch` · License: GPL-2.
 
 ## 1. Summary of principles
 
-1. **One glance, one truth.** The state banner always answers "Am I recording, and at what speed?" with words, an icon and a shape, readable from across the room, in every OBS theme and without relying on color.
+1. **One glance, one truth.** The state banner always answers "Am I recording, and at what speed?" with words, an icon and a shape, readable from across the room, in every OBS theme and without relying on color. It carries two signals that never merge: a tally (record dot and REC) for "am I recording?" and a mode line (REAL TIME, or TIMELAPSE and the speed) for "at what speed?".
 2. **State is a noun, buttons are verbs.** The banner says what is happening ("TIMELAPSE x4"). Buttons say what will happen if pressed ("Back to real time"). This removes the classic toggle doubt: "does this button show the current state or the next one?" [S52]
 3. **Two recorders, never confused.** Timelapse Switch is a second recorder next to OBS's own. It has its own words ("Record with Timelapse Switch", "Stop and save"), its own file suffix and a reminder that stays until the user has learned the difference.
 4. **Hands busy, eyes elsewhere.** Every action works with hotkeys, a foot pedal or a macro pad. Nothing important needs a mouse or a pop-up during a session. Stopping by hotkey needs a short hold, so a bumped key never ends a two-hour session.
 5. **Never lose the take.** If something fails, the plugin stops cleanly, keeps the file, says up to which minute it is safe, and explains what happened, why, and what to do, with a `TSW-Exxx` code for support.
-6. **Native to OBS.** The dock inherits the OBS theme, style, font size and density. No hardcoded colors. It behaves like OBS where OBS already set an expectation (time format, wording patterns, hotkeys screen).
+6. **Native to OBS.** The dock inherits the OBS theme, style, font size and density. No hardcoded colors: every color is mixed at runtime from the theme and adjusted in lightness until it stands out from what it sits on. It behaves like OBS where OBS already set an expectation (time format, wording patterns, hotkeys screen).
 7. **Minimal dock, deep settings.** The dock is for the session (record, switch, speed, stop). Everything that is configured once lives in a settings dialog.
 8. **Warm and honest.** A little delight (time saved, ready-made YouTube chapters), no gimmicks, plain language, and full transparency about how the plugin was built.
 
@@ -121,7 +121,7 @@ ISO 9241-210 asks for six things, summarized here from NIST's page [S56]: an exp
 | T2 Glance test | Show the dock for 1 second at 1.5 m; the tester says the state. | 95 % correct, in all 7 theme styles and in grayscale. |
 | T3 Two-button confusion | After onboarding, ask "record this with timelapse". | At most 1 of 5 testers starts OBS's own recording. |
 | T4 Error comprehension | Inject disk-full and encoder-missing failures. | 4 of 5 can say what happened and what to do next. |
-| T5 Language fit | Spanish UI at a 260 px wide dock. | No truncated label, no hidden verb. |
+| T5 Language fit | Spanish UI at 260 and 220 px wide docks, measured against the visible area (the scroll area's viewport), not the dock's own width. | No truncated or clipped label, no hidden verb. |
 
 5. **Iterate:** fix, re-test the failed targets, then release. Testers are recruited among early adopters, on all three operating systems.
 6. **Whole experience:** from the README to the YouTube upload, not just the dock (section 5).
@@ -138,16 +138,18 @@ Why a separate recorder instead of changing OBS's own? Speeding up live means sk
 
 ### 3.2 Anatomy: six zones that never move
 
-The dock is a vertical stack of six zones. Their positions never change; only their contents do. The eye learns where to look, like the dials of a car.
+The dock is a vertical stack of six zones in four bands: Status (A and B), Action (C), Below (D and E, or a card) and Context (F). Their positions never change; only their contents do. The eye learns where to look, like the dials of a car.
 
 | Zone | Name | Contents by state |
 |---|---|---|
-| A | State banner | READY / REC · REAL TIME / TIMELAPSE x4 / SAVING / ERROR. Words, icon and frame style. |
-| B | Counters | Recorded time and final length; in timelapse also the current section. |
+| A | State banner | Two lines. A tally: READY, (o) REC, STARTING, SAVING, SAVED or ERROR. A hero: "Starts in real time", REAL TIME, TIMELAPSE x4, "Finishing the file", "File ready" or the error headline. Words, icon and frame style. |
+| B | Counters | RECORDED and FINAL VIDEO side by side, and a status line: the current stretch while recording, or a warning summary. |
 | C | Main slot | The biggest button, holding the most likely next action: Record (idle), Switch to timelapse or Back to real time (recording), Record again (error, summary). |
-| D | Speed row | Speed chips x2, x4, x8 and one custom value. When idle, also the starting mode. |
-| E | Stop slot | "Stop and save", smaller and set apart. Collapsed when idle. |
-| F | Context line | Separate-file hint, file name, audio note, info and warnings. |
+| D | Speed row | Speed chips x2, x4, x8 and x16 (a custom value later). When idle, also the starting mode. After a recording, the summary or error card takes zones D to F. |
+| E | Stop slot | "Stop and save", full width, set apart by a gap or a rule. Shown while recording and saving. |
+| F | Context line | Separate-file hint, file name, audio note, saving note, and the details of a warning. |
+
+**Fixed positions.** At a given width, language, font and density, zones A, B and C keep their pixel positions in every state, and E keeps its position in every recording state: A and B have fixed heights, the status line of B keeps its height even when empty, and cards and warning details open below C, never above it. How each zone looks, in every OBS theme, is specified in `docs/design/visual-design.md`.
 
 Why does the main slot change from Record to the switch? Because those are the next actions in each phase, and both are safe to press by accident: an unwanted switch is undone with the same button. Stopping is the one action that cannot be undone (it splits the video into two files), so Stop lives in its own place and asks for a hold when triggered by hotkey (UX-052).
 
@@ -169,127 +171,148 @@ A failure during a recording (disk full, encoder error) triggers SAVING automati
 
 ### 3.4 Mockups by state
 
-Mockups are about 300 px wide, a common dock width. Notes on the right are not part of the UI.
+Mockups are about 300 px wide, a common dock width. Notes on the right are not part of the UI. They show the structure every visual direction shares; how it looks in each OBS theme (fills, frames, sizes, spacing) is in `docs/design/visual-design.md`.
 
-**Idle (ready).** Neutral banner, dimmed counters, Record in the main slot, starting mode and speed pre-selectable, separate-file hint.
+**Idle (ready).** Neutral block with READY and how the recording will start, dimmed counters, Record in the main slot, starting mode and speed pre-selectable, separate-file hint.
 
 ```
 +-- Timelapse Switch ------------------ [?][*] +
-|                                              |
-|  READY                                       |   A  state banner (neutral fill)
-|  Will start in:  >  REAL TIME                |
-|                                              |
-|  recorded  -:--:--       final  -:--:--      |   B  counters (dimmed)
-|                                              |
+| +------------------------------------------+ |
+| | READY                                    | |   A  tally
+| | >  Starts in real time                   | |      quiet hero (no recording look)
+| +------------------------------------------+ |
+|  RECORDED              FINAL VIDEO           |   B  readout (dimmed)
+|  0:00:00               0:00:00               |
+|                                              |      status line, height kept
 |  +----------------------------------------+  |
 |  |  (o)  Record with Timelapse Switch     |  |   C  main slot: Record
 |  +----------------------------------------+  |
+|  START IN                                    |
+|  [    >  Real time   |    >> Timelapse   ]   |   D  start mode: two segments
+|  TIMELAPSE SPEED                             |
+|  [    x2   |   (x4)  |    x8   |   x16   ]   |      speed rail, armed (outlined)
 |                                              |
-|  Start in:  ( > Real time )  [>> Timelapse]  |   D  start mode + speed (radio)
-|  Speed:     [x2]  [*x4*]  [x8]  [x16]        |
-|                                              |
-|  (i) Separate file. OBS's Start Recording    |   F  context line (E, the Stop slot, is collapsed)
+|  (i) Separate file. OBS's Start Recording    |   F  context line (E is hidden)
 |      still records at normal speed.          |
 +----------------------------------------------+
 ```
 
-**Recording, real time.** Outlined banner with the record dot and the words REC and REAL TIME. Both counters advance together. The main slot offers the switch.
+**Recording, real time.** Outlined block with the tally (record dot and REC) and the words REAL TIME. Both counters advance together. The main slot offers the switch, in the place where Record was.
 
 ```
 +-- Timelapse Switch ------------------ [?][*] +
-| +------------------------------------------+ |
-| | (o) REC    >  REAL TIME                  | |   A  red dot + words, outlined frame
-| +------------------------------------------+ |
-|  0:12:03 recorded   ->   0:12:03 final       |   B  equal while in real time
-|                                              |
+| +==========================================+ |
+| | (o) REC                                  | |   A  tally: record dot + REC
+| | >  REAL TIME                             | |      hero; outlined frame
+| +==========================================+ |
+|  RECORDED              FINAL VIDEO           |   B  equal while in real time
+|  0:12:03               0:12:03               |
+|  This stretch 12:03                          |      status line: current stretch
 |  +========================================+  |
-|  ||  >>  Switch to timelapse  x4         ||  |   C  main slot = next likely action
+|  ||  >>  Switch to timelapse  x4         ||  |   C  same place as Record
 |  +========================================+  |
-|  Next speed:  [x2]  [*x4*]  [x8]  [x16]      |   D  pre-selects next timelapse speed
-|                                              |
-|  +----------------------------+              |
-|  |  []  Stop and save         |              |   E  Stop: smaller, set apart
-|  +----------------------------+              |
-|                                              |
+|  NEXT SPEED                                  |   D  pre-selects the next speed
+|  [    x2   |   (x4)  |    x8   |   x16   ]   |      armed: outlined
+|  ------------------------------------------  |
+|  [ []  Stop and save                      ]  |   E  full width, set apart
 |  File: 2026-10-15 19-30-00 tswitch.mp4       |   F  file name
 +----------------------------------------------+
 ```
 
-**Recording, timelapse.** The banner becomes a filled block (theme highlight color) with a heavier frame and fast-forward chevrons. Even without color, the shape changes from outlined to filled and the words change. The final-length counter now advances 4 times slower, and a section counter appears.
+**Recording, timelapse.** The block becomes a filled area in the theme's accent color, adjusted in lightness until it stands out from the dock, with a frame and fast-forward chevrons. The tally stays. Even without color, the shape changes from outlined to filled and the words change. The final-length counter now advances 4 times slower, and the status line shows the current stretch.
 
 ```
 +-- Timelapse Switch ------------------ [?][*] +
-| #==========================================# |
-| #  >> >>  TIMELAPSE  x4      >  >  >  >    # |   A  filled with theme highlight + chevrons
-| #==========================================# |
-|  0:31:40 recorded   ->   0:16:58 final       |   B  final grows 4x slower
-|  this section  19:37  ->  4:54               |      section counter (timelapse only)
+| ############################################ |
+| # (o) REC                         >  >  >  # |   A  filled with the theme accent (adjusted
+| # >> TIMELAPSE  x4                >  >  >  # |      to 3:1), frame, chevrons; tally stays
+| ############################################ |
+|  RECORDED              FINAL VIDEO           |   B  final grows 4x slower
+|  0:31:40               0:16:58               |
+|  This stretch x4   19:37 -> 4:54             |      status line: current stretch
 |  +========================================+  |
 |  ||  >   Back to real time               ||  |   C  verb + destination
 |  +========================================+  |
-|  Speed now:  [x2]  [*x4*]  [x8]  [x16]       |   D  changes speed on the next frame
-|                                              |
-|  +----------------------------+              |
-|  |  []  Stop and save         |              |   E  same place as before
-|  +----------------------------+              |
-|                                              |
+|  SPEED NOW                                   |   D  changes speed on the next frame
+|  [    x2   |   *x4*  |    x8   |   x16   ]   |      engaged: filled
+|  ------------------------------------------  |
+|  [ []  Stop and save                      ]  |   E  same place as before
 |  (i) Audio: silence during timelapse         |   F  what happens to audio
 +----------------------------------------------+
 ```
 
-**Error.** The banner shows icon, the word ERROR and the code. The panel gives reassurance first, then why, then what to do, with one-click fixes. The main slot is ready for a new recording.
+**Error.** The block shows the icon, the word ERROR and a plain headline. The card below the main slot gives reassurance first, then why, then what to do, with one-click fixes; the code is small, at the end. The main slot stays where it was, ready for a new recording.
 
 ```
 +-- Timelapse Switch ------------------ [?][*] +
-| +------------------------------------------+ |
-| | (X) ERROR  Recording stopped   TSW-E101  | |   A  icon + word + code, danger frame
-| +------------------------------------------+ |
-|  The disk is full.                           |      what happened
-|  Saved: everything up to 0:42:10             |      reassurance first
-|  (0:18:16 of final video).                   |
-|  Why: drive D:\ has 0 MB free.               |      why, with the real value
-|  What to do: free some space or choose       |      what to do
-|  another folder, then record again.          |
-|  [ Open folder ]  [ Change folder... ]       |      one-click fixes
-|  Copy details            Learn more (web)    |
+| +::::::::::::::::::::::::::::::::::::::::::+ |
+| : (X) ERROR                                : |   A  icon + word, dashed danger frame
+| : Recording stopped: disk full             : |      plain headline
+| +::::::::::::::::::::::::::::::::::::::::::+ |
+|  RECORDED              FINAL VIDEO           |   B  what the take reached
+|  0:42:10               0:18:16               |
 |                                              |
 |  +----------------------------------------+  |
-|  |  (o)  Record with Timelapse Switch     |  |   C  ready to try again
+|  |  (o)  Record with Timelapse Switch     |  |   C  ready to try again, same place
+|  +----------------------------------------+  |
+|  +----------------------------------------+  |
+|  | Everything up to 0:42:10 is saved    x |  |   card below C: reassurance first
+|  | (0:18:16 of final video).              |  |
+|  | Why: drive D:\ has 0 MB free.          |  |      why, with the real value
+|  | What to do: free some space or choose  |  |      what to do
+|  | another folder, then record again.     |  |
+|  | [ Open folder ]  [ Change folder... ]  |  |      one-click fixes
+|  | Copy details   Learn more    TSW-E101  |  |      links; the code small, last
 |  +----------------------------------------+  |
 +----------------------------------------------+
 ```
 
-**Warning during a recording.** The state stays in the banner. The warning slots in under the counters and can be dismissed.
+**Warning during a recording.** The state stays in the block. The warning's summary takes the status line under the counters, and its details appear below Stop, where they can be dismissed. Nothing above Stop moves.
 
 ```
 +-- Timelapse Switch ------------------ [?][*] +
-| #==========================================# |
-| #  >> >>  TIMELAPSE  x8      >  >  >  >    # |   state stays visible
-| #==========================================# |
-|  1:05:12 recorded   ->   0:24:30 final       |
-|  (!) WARNING  4% of frames lost in the       |   warning slots in under the counters
-|      last minute. The computer is busy.      |
-|      Details   TSW-E201                 [x]  |
+| ############################################ |
+| # (o) REC                         >  >  >  # |   state stays visible
+| # >> TIMELAPSE  x8                >  >  >  # |
+| ############################################ |
+|  RECORDED              FINAL VIDEO           |
+|  1:05:12               0:24:30               |
+|  (!) Warning: 4% of frames lost              |   summary takes the status line
 |  +========================================+  |
-|  ||  >   Back to real time               ||  |
+|  ||  >   Back to real time               ||  |   C does not move
 |  +========================================+  |
+|  SPEED NOW                                   |
+|  [    x2   |    x4   |   *x8*  |   x16   ]   |
+|  ------------------------------------------  |
+|  [ []  Stop and save                      ]  |
+|  +----------------------------------------+  |
+|  | (!) WARNING  4% of frames lost in the  |  |   details below Stop, dismissible
+|  | last minute. The computer is busy.     |  |
+|  | Details   TSW-E201                   x |  |
+|  +----------------------------------------+  |
 +----------------------------------------------+
 ```
 
-**Compact layout (dock narrower than about 260 px).** Same zones and order, shorter words. Full labels stay in tooltips and accessible names.
+**Compact layout (when the visible area of the dock is narrower than 260 px; it returns at 276 px).** Same zones and order, same verbs: labels wrap instead of getting shorter. Full labels stay in accessible names.
 
 ```
 +-- Timelapse Sw... ------ [*] +
-| #==========================# |   same zones, shorter words
-| # >> TIMELAPSE x4          # |
-| #==========================# |
-|  0:31:40 rec                 |
-|  0:16:58 final               |
+| ############################ |   same zones, same order
+| # (o) REC               x4 # |   the speed may move to the tally line
+| # >> TIMELAPSE             # |
+| ############################ |
+|  RECORDED    FINAL VIDEO     |
+|  0:31:40     0:16:58         |
+|  This stretch x4             |
+|  19:37 -> 4:54               |
 |  +========================+  |
-|  ||  > Real time         ||  |
-|  +========================+  |
-|  [x2][*x4*][x8][x16]         |
-|  [ [] Stop ]                 |   full names stay in tooltips and accessible names
+|  ||  >  Back to real     ||  |   verbs stay: the label wraps to
+|  ||     time             ||  |   two lines instead of becoming
+|  +========================+  |   a noun
+|  SPEED NOW                   |
+|  [  x2 | *x4*|  x8 | x16 ]   |
+|  --------------------------  |
+|  [ []  Stop and save      ]  |   full names in accessible names
 +------------------------------+
 ```
 
@@ -298,17 +321,19 @@ Mockups are about 300 px wide, a common dock width. Notes on the right are not p
 | Key (locale file) | English | Spanish | Icon | Accessible name (EN) |
 |---|---|---|---|---|
 | `Dock.Title` | Timelapse Switch | Timelapse Switch | plugin icon | Timelapse Switch |
-| `Action.Record` | Record with Timelapse Switch | Grabar con Timelapse Switch | record dot with chevrons | Start a Timelapse Switch recording |
+| `Action.Record` | Record with Timelapse Switch | Grabar con Timelapse Switch | record dot | Start a Timelapse Switch recording |
 | `Action.Stop` | Stop and save | Detener y guardar | square | Stop the Timelapse Switch recording and save the file |
 | `Action.ToTimelapse` | Switch to timelapse x4 | Pasar a timelapse x4 | fast forward | Switch to timelapse, 4 times faster |
 | `Action.ToRealTime` | Back to real time | Volver a tiempo real | play | Go back to real time |
-| `Speed.Chip` | x2 / x4 / x8 / x16 | x2 / x4 / x8 / x16 | none | Speed: 4 times faster, selected |
-| `State.Idle` | READY | LISTO | none | Ready. Will start in real time. |
-| `State.Real` | REC · REAL TIME | GRABANDO · TIEMPO REAL | record dot + play | Recording in real time |
-| `State.Timelapse` | TIMELAPSE x4 | TIMELAPSE x4 | fast forward x2 | Recording in timelapse, 4 times faster |
-| `State.Starting` / `State.Saving` | Starting... / Saving... | Iniciando... / Guardando... | spinner | Starting / Saving the file |
-| `Counter.Recorded` / `Counter.Final` | recorded / final | grabado / final | none | 12 minutes 3 seconds recorded |
+| `Speed.Value` (chips) | x2 / x4 / x8 / x16 | x2 / x4 / x8 / x16 | none | Speed, 4 times faster, next timelapse speed (or: speed now) |
+| `State.Tally.Ready` + `State.Hero.StartsRealTime` | READY / Starts in real time | LISTO / Empieza en tiempo real | play | Ready. Starts in real time. |
+| `State.Tally.Rec` + `State.Hero.RealTime` | REC / REAL TIME | GRABANDO / TIEMPO REAL | record dot + play | Recording in real time |
+| `State.Tally.Rec` + `State.Hero.Timelapse` | REC / TIMELAPSE x4 | GRABANDO / TIMELAPSE x4 | record dot + fast forward | Recording in timelapse, 4 times faster |
+| `State.Tally.Starting` / `State.Tally.Saving` | STARTING / SAVING | INICIANDO / GUARDANDO | three dots | Starting / Saving the file |
+| `Counter.Recorded.Caption` / `Counter.Final.Caption` | RECORDED / FINAL VIDEO | GRABADO / DURACIÓN FINAL | none | 12 minutes 3 seconds recorded, 12 minutes 3 seconds of final video |
 | `Hint.Separate` | Separate file. OBS's Start Recording still records at normal speed. | Archivo aparte. «Iniciar Grabación» de OBS sigue grabando a velocidad normal. | info | (same text) |
+
+The full list of keys, new ones included, is in `docs/design/visual-design.md`, section 3.3. There are no short labels for narrow docks: a label wraps to two lines instead of losing its verb (UX-004).
 
 Icon rules: the fast-forward double triangle and the play triangle are the conventions every media player uses, so they need no learning `[EXPECT]`. The UI shows the multiplication sign (`×4`); this document writes `x4` for ASCII safety. Screen readers get "4 times faster", never "x four".
 
@@ -323,11 +348,14 @@ How big must the state be? A control-room guideline puts the optimal character h
 
 On a 27" 1440p screen, Large needs about 37 px of cap height for the same 8.7 mm. The color block and the outlined-versus-filled shape of the banner are recognizable from much farther than the text, which is why the banner changes shape and not only words.
 
+**Measured baseline (2026-10-16).** In every Yami style the first dock drew its banner at the base size (13 px, 1.0x), readable only to about 0.55 m: Yami's `QWidget { font-size }` rule overrides `QWidget::setFont`. Sizes are therefore applied through the dock's own style sheet, or by painting the text, from the base font read after the theme is applied (UX-105). Each visual direction sets its Normal target between 2x and 2.75x, fitted to the dock's width (`docs/design/visual-design.md`, 3.6).
+
 ### 3.7 Theme integration
 
 What OBS does today (32.2.2 source, the latest release on 2026-08-14):
 
-- Settings > Appearance offers a Theme (Yami or System), a Style for Yami (Default, Classic, Grey, Light, Acri, Rachni), a Font Size and a Density [S3, S7]. Themes are QSS with variables and images [S1].
+- Settings > Appearance offers a Theme (Yami or System), a Style for Yami (Default, Classic, Grey, Light, Acri, Rachni), a Font Size and a Density [S3, S7]. Themes are QSS with variables and images [S1]. In 32.2.2 the System theme is hidden unless it is already selected or Windows High Contrast is on, and maintainers call it unsupported (OBS issue #11498); the dock still supports it as best effort, mainly for High Contrast.
+- Measured with the theme render harness (`tests/ui/obs-themes.sh`): the theme's highlight is only 1.03 to 2.49:1 against the dock, a checked button 1.12 to 1.89:1 against an unchecked one, and `text-danger` 1.90 to 2.93:1 on the dark styles. A theme's colors are therefore not state cues by themselves: the dock keeps their hue and adjusts their lightness until they reach 3:1 for shapes and 4.5:1 for text (`docs/design/visual-design.md`, 3.5).
 - Theme files map their variables onto the Qt palette (`--palette_window`, `--palette_highlight: var(--primary)`, `--palette_buttonText`, and so on), so a plugin that reads `QPalette` inherits the theme [S2].
 - Themes define global utility classes that any widget can opt into through its `class` property: `text-danger`, `text-warning`, `text-success`, `text-muted`, `text-large`, `text-heading`, `frame-notice`, plus icon classes such as `icon-gear` [S2]. OBS applies them with a helper that sets the property and forces a style refresh [S6].
 - OBS's own Record button changes its text from "Start Recording" to "Stop Recording" and gets the `state-active` class, which paints it with the theme's primary color, not red. It shows "Stopping Recording..." while finalizing. The Pause button is icon-only with an accessible name and tooltip that swap between "Pause Recording" and "Unpause Recording" [S4]. The `state-active` style only targets OBS's own object names (`#recordButton` and friends) [S2].
@@ -342,34 +370,41 @@ The risk goes both ways: pressing OBS's Start Recording and wondering why the sw
 1. **Different words.** Never "Start Recording". The dock says "Record with Timelapse Switch" and "Stop and save" (UX-020).
 2. **A reminder that fades out.** The separate-file hint stays until the user has finished three TS recordings, then shrinks to an info icon with the same tooltip (UX-021).
 3. **Cross-awareness.** If OBS's own recording starts while the dock is idle, the dock says so and explains how to get timelapse (TSW-E301). If both run, it warns about double load and two files (TSW-E302) (UX-022, UX-023).
-4. **No silent no-ops.** Pressing the switch while idle pre-selects the starting mode and says "Will start in TIMELAPSE x4. Press Record." (UX-024).
+4. **No silent no-ops.** Pressing the switch while idle pre-selects the starting mode and the banner says "Starts in timelapse x4" (UX-024).
 5. **Different files.** TS files end with a configurable suffix, `tswitch` by default (UX-025).
 6. **Different names in the hotkeys screen.** Every action starts with "Timelapse Switch:" (UX-026).
 7. **Different icon.** A record dot combined with fast-forward chevrons (UX-027).
 
 ### 3.9 First-run onboarding
 
-On first start after installation, the dock appears (docked near the Controls dock when OBS allows it) and shows a welcome card inside the dock. No pop-up window: the card can be ignored and the dock still works.
+On first start after installation, the dock appears (docked near the Controls dock when OBS allows it) and shows a welcome card inside the dock, below the main slot like every card (UX-002). No pop-up window: the card can be ignored and the dock still works.
 
 ```
 +-- Timelapse Switch ------------------ [?][*] +
 | +------------------------------------------+ |
-| | Welcome! 3 steps:                        | |   non-modal card, inside the dock
-| | 1. Press (o) Record here. This is a      | |
-| |    second recorder, separate from OBS's  | |
-| |    Start Recording.                      | |
-| | 2. Slow part? Press >> Timelapse.        | |
-| | 3. Press > Real time to go back.         | |
-| |    Your file comes out already sped up.  | |
-| | Using your OBS recording settings:       | |   self-description of output
-| |   Hybrid MP4, NVENC H.264, D:\Videos     | |
-| |   Change...                              | |
-| | [ ] Tell me about new versions (GitHub)  | |   opt-in, unticked
-| | [ Set up hotkeys ]        [ Got it ]     | |   two exits, both safe
+| | READY                                    | |   the dock as always
+| | >  Starts in real time                   | |
 | +------------------------------------------+ |
-|  READY    Will start in:  >  REAL TIME       |
+|  RECORDED              FINAL VIDEO           |
+|  0:00:00               0:00:00               |
+|                                              |
 |  +----------------------------------------+  |
-|  |  (o)  Record with Timelapse Switch     |  |
+|  |  (o)  Record with Timelapse Switch     |  |   C  in its usual place
+|  +----------------------------------------+  |
+|  +----------------------------------------+  |
+|  | Welcome! 3 steps:                    x |  |   non-modal card, below C
+|  | 1. Press (o) Record above. This is a   |  |
+|  |    second recorder, separate from      |  |
+|  |    OBS's Start Recording.              |  |
+|  | 2. Slow part? Press >> Timelapse.      |  |
+|  | 3. Press > Real time to go back.       |  |
+|  |    Your file comes out sped up.        |  |
+|  | Using your OBS recording settings:     |  |   self-description of output
+|  |   Hybrid MP4, NVENC H.264, D:\Videos   |  |
+|  |   Change...                            |  |
+|  | [ ] Tell me about new versions         |  |   opt-in, unticked
+|  |     (GitHub)                           |  |
+|  | [ Set up hotkeys ]      [ Got it ]     |  |   two exits, both safe
 |  +----------------------------------------+  |
 +----------------------------------------------+
 ```
@@ -453,18 +488,24 @@ Rules behind the table:
 
 ```
 +-- Timelapse Switch ------------------ [?][*] +
-|  SAVED                                       |   A  calm, neutral
-|  1:23:45 recorded   ->   0:31:10 final       |
-|  You skipped 52:35 of waiting. Nice session! |      one light touch, once
-|                                              |
-|  Speed map (recorded time, left to right):   |
-|  [>][>> x4 ..........][>][>> x8 .....][>]    |      sections at a glance
-|                                              |
-|  2026-10-15 19-30-00 tswitch.mp4             |
-|  [ Open folder ] [ Play ] [ Copy chapters ]  |      next steps for upload
+| +------------------------------------------+ |
+| | (v) SAVED                                | |   A  calm, neutral
+| | File ready                               | |
+| +------------------------------------------+ |
+|  RECORDED              FINAL VIDEO           |   B  the last take
+|  1:23:45               0:31:10               |
 |                                              |
 |  +----------------------------------------+  |
-|  |  (o)  Record with Timelapse Switch     |  |
+|  |  (o)  Record with Timelapse Switch     |  |   C  same place as always
+|  +----------------------------------------+  |
+|  +----------------------------------------+  |
+|  | 2026-10-15 19-30-00 tswitch.mp4      x |  |   card below C
+|  | You skipped 52:35 of waiting.          |  |      one light touch, once
+|  | Nice session!                          |  |
+|  | Speed map (recorded time):             |  |
+|  | [>][>> x4 ///////][>][>> x8 ////][>]   |  |      sections at a glance; timelapse
+|  | [ Open folder ] [ Play ]               |  |      hatched, never color alone
+|  | [ Copy chapters ]                      |  |      next steps for upload
 |  +----------------------------------------+  |
 +----------------------------------------------+
 ```
@@ -474,23 +515,24 @@ Rules behind the table:
 | ID | Requirement | Principle |
 |---|---|---|
 | UX-001 | The plugin MUST add exactly one dock titled "Timelapse Switch" with `obs_frontend_add_dock_by_id`, listed in the Docks menu [S8]. | [EXPECT] |
-| UX-002 | The dock MUST keep zones A to F in a fixed order in every state; only zone contents change. | [SELF] [LEARN] |
-| UX-003 | The banner MUST show the state with a word, an icon and a frame style (outlined for real time, filled with heavier frame and chevrons for timelapse, danger frame for error). Color MUST NOT be the only difference. | [SELF] |
-| UX-004 | Buttons MUST be labelled with the action they perform, verb first; they MUST NOT display the current state. | [SELF] |
+| UX-002 | The dock MUST keep zones A to F in a fixed order in every state; only zone contents change. At a given width, language, font and density, zones A, B and C MUST keep their pixel positions in every state, and E in every recording state: A and B have fixed heights, and cards and warning details open below C. | [SELF] [LEARN] [ROBUST] |
+| UX-003 | The banner MUST carry two separate signals: a tally (record dot and REC, in both recording states and never otherwise) and a mode line (REAL TIME, or TIMELAPSE and the speed). It MUST show the state with words, an icon and a frame style: outlined for real time; filled for timelapse, with a 2 px frame and fast-forward chevrons; a dashed danger frame for error. Color MUST NOT be the only difference. Idle MUST NOT look like a recording (no dot, no REC, sentence case). | [SELF] |
+| UX-004 | Buttons MUST be labelled with the action they perform, verb first; they MUST NOT display the current state. This holds at every width: a narrow dock wraps the label to two lines instead of shortening it to a noun such as "Timelapse x4", which is a state name. | [SELF] |
 | UX-005 | While recording, the main slot (zone C) MUST hold the mode switch and be the largest control. | [TASK] |
-| UX-006 | Counters MUST show recorded time and final length side by side as `h:mm:ss` (the OBS status bar format [S5]) with tabular digits. | [TASK] [EXPECT] |
-| UX-007 | In timelapse, zone B SHOULD show the current section: real time elapsed and its length in the final video. | [TASK] |
-| UX-008 | Speed chips MUST offer x2, x4, x8 and one custom value; default x4; exactly one chip selected (radio behavior). | [TASK] [CONTROL] |
+| UX-006 | Counters MUST show recorded time and final length side by side as `h:mm:ss` (the OBS status bar format [S5]) with tabular digits, small captions above them (RECORDED, FINAL VIDEO) and digits larger than body text. Idle shows a dimmed 0:00:00. | [TASK] [EXPECT] |
+| UX-007 | While recording, zone B SHOULD show the current stretch in its status line: in timelapse, real time elapsed and its length in the final video; in real time, its length. The line keeps its height in every state. | [TASK] |
+| UX-008 | Speed chips MUST offer x2, x4, x8 and x16 (a custom value MAY replace or follow x16 once open question 1 is decided); default x4; exactly one chip selected (radio behavior). The selected chip MUST carry a cue that is not color (bold and a marker). A pre-selected speed (armed: idle and real time) MUST look outlined and the live speed (engaged: timelapse) filled. | [TASK] [CONTROL] |
 | UX-009 | A speed change during timelapse MUST apply from the next frame; during real time it MUST pre-select the next timelapse speed. | [CONTROL] |
-| UX-010 | While idle, the user MUST be able to choose the starting mode, and the banner MUST state it ("Will start in: REAL TIME"). | [CONTROL] [SELF] |
-| UX-011 | "Starting..." and "Saving..." MUST be shown; controls that cannot act then are disabled, not hidden. | [SELF] [ROBUST] |
-| UX-012 | The dock MUST work from 220 px wide, switching to the compact layout below about 260 px without hiding any function. | [TASK] |
+| UX-010 | While idle, the user MUST be able to choose the starting mode with a two-segment control (Real time, Timelapse), not radio buttons, and the banner MUST state it in sentence case ("Starts in real time", "Starts in timelapse x4"). | [CONTROL] [SELF] |
+| UX-011 | "Starting" and "Saving" MUST be shown; controls that cannot act then are disabled, not hidden. While saving, zone F MUST say "Keep OBS open until the file is saved."; any busy animation stops within 5 s (UX-063). | [SELF] [ROBUST] |
+| UX-012 | The dock MUST work from 220 px wide, switching to the compact layout when its visible area (the scroll area's viewport, not the dock's own width) is narrower than 260 px, and back at 276 px or wider, without hiding any function. Its minimum width MUST NOT exceed the visible area: rows wrap or stack instead. | [TASK] |
 | UX-013 | The plugin MUST NOT open modal dialogs while a TS recording is running. | [CONTROL] [ROBUST] |
 | UX-014 | Closing the dock MUST NOT affect the recording; reopening shows the live state. | [ROBUST] |
-| UX-016 | Colors MUST come from `QPalette` roles and OBS utility classes (`text-danger`, `text-warning`, `text-success`, `text-muted`, `frame-notice`); no hardcoded colors. Styles MUST refresh on `OBS_FRONTEND_EVENT_THEME_CHANGED` [S2, S8]. | [EXPECT] |
+| UX-016 | Colors MUST come from `QPalette` roles and OBS utility classes (`text-danger`, `text-warning`, `text-success`, `text-muted`, `frame-notice`), read from unstyled probe widgets after the theme is applied, with a fallback when a class is missing (System has no `text-muted` or `frame-notice`); no hardcoded colors. Before use, each color MUST be adjusted in lightness only until it reaches 3:1 (shapes) or 4.5:1 (text) against the surface it sits on. Styles MUST refresh on `OBS_FRONTEND_EVENT_THEME_CHANGED` and on style, palette and font changes, coalesced into one pass, never by calling `setPalette` or reading back a color the dock set itself [S2, S8]. | [EXPECT] |
 | UX-017 | The plugin MUST NOT reuse OBS object names such as `#recordButton` to borrow their styles. | [ROBUST] |
-| UX-018 | Icons MUST be monochrome SVG tinted at runtime from the palette (button text, or highlighted text on filled areas), crisp at any scale. | [EXPECT] |
-| UX-019 | Every release MUST be screenshot-checked in Yami Default, Classic, Grey, Light, Acri, Rachni and System, on each OS. | [EXPECT] |
+| UX-018 | Icons MUST be monochrome vectors (painted with `QPainter`, or SVG tinted at runtime) in a color derived from the surface they sit on, painted at the screen's device pixel ratio and painted again when it changes. The record dot SHOULD use the theme's danger color: it appears in both recording states, so it never encodes the speed. OBS's own icon classes MUST NOT be relied on, because their fixed white or black fills vanish in half the themes. | [EXPECT] |
+| UX-019 | Every release MUST be screenshot-checked in Yami Default, Classic, Grey, Light, Acri, Rachni and System, on each OS. The theme render harness (`tests/ui/obs-themes.sh`) MUST draw every state in those 7 themes, in both languages, at 220, 260 and 300 px, plus Font Size 8 and 12 with Classic and Comfortable density, and check fit, fixed positions, hero size and contrast; a sandbox OBS spot check per release completes it. | [EXPECT] |
+| UX-015 | The dock SHOULD let theme authors override its derived colors through Qt properties (`TswDock { qproperty-accentColor: ...; }`, also `dangerColor`, `successColor`, `warningColor` and `surfaceColor`). Unset properties come from the theme; set ones still pass the contrast adjustment of UX-016. | [EXPECT] |
 
 ### 3.15 Requirements: confusion guards and onboarding
 
@@ -544,23 +586,27 @@ Rules behind the table:
 
 | Level | Looks like | Where | Lifetime | Example |
 |---|---|---|---|---|
-| Info | `(i)` icon + word "Info", muted text (`text-muted`) | Zone F | Until dismissed, or 15 s; always kept in history | Chapters not available in MKV |
-| Warning | `(!)` icon + word "Warning" (`text-warning`) | Under the counters; banner keeps the state | While the condition lasts, plus 30 s | Frames lost, disk space low |
-| Error | `(X)` icon + word "Error", danger frame (`text-danger`) | Replaces the banner and zones B to D | Until dismissed | Disk full, encoder failed |
+| Info | `(i)` icon + word "Info"; text in the muted color (`text-muted`) | Zone F | Until dismissed, or 15 s; always kept in history | Chapters not available in MKV |
+| Warning | `(!)` icon in the warning color + word "Warning"; text in the normal text color | Summary in zone B's status line; details in a card below Stop; the banner keeps the state | While the condition lasts, plus 30 s | Frames lost, disk space low |
+| Error | `(X)` icon + word "Error" + dashed danger frame on the banner; text in the normal text color | The banner shows the error headline; the error card takes zones D to F; zone C keeps its position | Until dismissed | Disk full, encoder failed |
+
+Status colors (danger, warning, success) color only icons, frames and bars, always next to a word. They never color body or title text: as text they fail contrast in most themes (`text-danger` is 1.90 to 2.93:1 on the dark styles, `text-warning` 2.49:1 in Light).
 
 Errors are shown where the user is looking (the dock), never only in a log, and never as a modal box during a session. This follows the usual guidance: show errors near their source, never rely on color alone, use plain language, give constructive advice, do not blame, and preserve the user's work [S54]. The last point is the heart of UX-083: the work here is the recording.
 
 ### 4.2 Message template
 
 ```
-(X) <What happened, 4 to 8 words>                      TSW-Exxx
-<Reassurance: what is safe or saved, with times>
-Why: <the cause in plain words, with the real value: path, MB free, encoder name>
-What to do: <one or two concrete steps>
-[Main fix] [Second fix]                  Copy details    Learn more
+Banner:  (X) ERROR
+         <What happened: a plain headline, 2 to 5 words>
+Card:    <Reassurance: what is safe or saved, with times>               [x]
+         Why: <the cause in plain words, with the real value: path, MB free, encoder name>
+         What to do: <one or two concrete steps>
+         [Main fix] [Second fix]
+         Copy details   Learn more                                 TSW-Exxx
 ```
 
-Writing rules: name the thing, not the user ("The disk is full", not "You filled the disk"); give real values; one idea per line; the code is always present but small; "Copy details" copies the full English log block for bug reports; "Learn more" opens the code's docs page in the UI language.
+Writing rules: name the thing, not the user ("The disk is full", not "You filled the disk"); no internal component names ("file writer", "muxer", "output"): say what happened to the user's file; give real values; one idea per line; the code is always present but small, at the end; "Copy details" copies the full English log block for bug reports; "Learn more" opens the code's docs page in the UI language.
 
 ### 4.3 Error code catalogue
 
@@ -668,8 +714,8 @@ OBS users share logs through Help > Log Files > Upload Current Log File [S7], an
 | ID | Requirement | Principle |
 |---|---|---|
 | UX-080 | Messages MUST use three levels, each with its own icon, word and style; never color alone [S44, S54]. | [SELF] |
-| UX-081 | Errors MUST replace the banner and persist until dismissed; warnings MUST NOT hide the state; info MUST be dismissible. | [SELF] [CONTROL] |
-| UX-082 | Every message MUST follow the template in 4.2: what happened, reassurance, why, what to do, code, Copy details, Learn more. | [SELF] [LEARN] |
+| UX-081 | Errors MUST take the banner (icon, ERROR and a plain headline) and show their card below the main slot, which keeps its position; they persist until dismissed (also with Esc). Warnings MUST NOT hide the state and MUST NOT move the main slot. Info MUST be dismissible. | [SELF] [CONTROL] |
+| UX-082 | Every message MUST follow the template in 4.2: a plain headline, then reassurance first, why, what to do, one main fix, Copy details and Learn more as links, and the code, small, at the end. Messages MUST NOT name internal components. | [SELF] [LEARN] |
 | UX-083 | On any failure during a recording, the plugin MUST finalize and keep the file and MUST state up to which recorded and final time it is saved. | [ROBUST] |
 | UX-084 | The dock MUST keep a history of the last 20 messages of the session, reachable from `[?]`. | [CONTROL] |
 | UX-085 | Each code MUST have a docs page in English and Spanish (`docs/errors/TSW-Exxx.md`), opened by "Learn more". | [LEARN] |
@@ -800,15 +846,17 @@ The dock is mostly used at a distance, with busy hands and divided attention. Th
 | ID | Requirement | Principle |
 |---|---|---|
 | UX-100 | State MUST NOT rely on color: every state has a word, an icon and a frame style [S44]. Release checks include grayscale and color-vision-deficiency simulation screenshots of all 7 styles. | [SELF] |
-| UX-101 | Text MUST reach 4.5:1 contrast and state frames and fills 3:1 against adjacent colors in every style [S45]. If a theme's highlight color fails at runtime, the banner MUST fall back to the outlined style with a thicker frame. | [SELF] |
-| UX-102 | Every control MUST be reachable with Tab in visual order and work with Space or Enter; arrow keys move between speed chips; Esc dismisses a message; the focus indicator comes from the theme. | [CONTROL] |
-| UX-103 | Every control MUST have an accessible name and description (Qt uses `accessibleName` as what screen readers announce, and falls back to the tooltip for the description [S47]). Icon-only compact buttons MUST have names. Speed chips announce "Speed, 4 times faster, selected". | [SELF] |
-| UX-104 | Start, stop, every switch and every error MUST be announced to screen readers with `QAccessibleAnnouncementEvent` (Qt 6.8 or newer [S49]), falling back to an accessible name change on the banner with an accessibility update event [S48]. | [SELF] |
-| UX-105 | All sizes MUST be relative to the OBS base font, so OBS's Font Size and Density settings apply [S7]. "Large" glance size MUST meet 20 arcminutes at 1.5 m (section 3.6). | [TASK] |
+| UX-101 | Text MUST reach 4.5:1 contrast, and state frames, fills and markers 3:1, against the color they actually sit on, in every style [S45]. The dock's background MUST be measured (OBS paints docks with `bg_base`, or `bg_window` in Classic), not assumed to be `palette(window)`. No Yami style's highlight reaches 3:1 against the dock (1.03 to 2.49:1), so the adjustment is the rule, not a fallback: theme colors are moved in lightness until they pass, and filled areas keep a 2 px frame in the adjusted accent. | [SELF] |
+| UX-102 | Every control MUST be reachable with Tab in visual order and work with Space or Enter; arrow keys move between speed chips; Esc dismisses a message; the focus indicator comes from the theme, strengthened where it is weak (UX-110). The focus order MUST be set explicitly in every state. In a row of chips or segments, arrow keys move focus and Space or Enter selects, so arrowing never changes a live speed by accident. | [CONTROL] |
+| UX-103 | Every control MUST have an accessible name and description (Qt uses `accessibleName` as what screen readers announce, and falls back to the tooltip for the description [S47]). Icon-only compact buttons MUST have names. Speed chips announce "Speed, 4 times faster, selected". Counters MUST have accessible names in words ("31 minutes 40 seconds recorded, 16 minutes 58 seconds of final video"), never the arrow sign. | [SELF] |
+| UX-104 | Start, stop, every switch and every error MUST be announced to screen readers with `QAccessibleAnnouncementEvent` (Qt 6.8 or newer [S49]), falling back to an accessible name change on the banner with an accessibility update event [S48]. CMake chooses between the two (one source file each), not conditional compilation (`docs/coding-rules.md`, P10-8). | [SELF] |
+| UX-105 | All sizes MUST be relative to the OBS base font, so OBS's Font Size and Density settings apply [S7]. "Large" glance size MUST meet 20 arcminutes at 1.5 m (section 3.6). Sizes MUST be applied through the dock's own style sheet or by painting, never with `QWidget::setFont` (Yami's `QWidget { font-size }` overrides it), from the base font read after the theme is applied, and again after every theme, Font Size or Density change. | [TASK] |
 | UX-106 | No flashing, no blinking; optional motion stops within 5 s and obeys "Reduce motion" [S46]. | [ENGAGE] |
-| UX-107 | Main slot buttons MUST be at least 2.5 times the base font tall; chips at least 1.8 times; Stop MUST be separated from the main slot by at least one row, to prevent mis-hits. | [ROBUST] |
+| UX-107 | Main slot buttons MUST be at least 2.5 times the base line height tall; chips and segments at least 1.8 times; Stop at least as tall as a chip, full width, and separated from the speed row by at least one row (a gap or a rule), to prevent mis-hits. Heights MUST be set after the theme is applied, because OBS themes cap button heights. | [ROBUST] |
 | UX-108 | Every dock action MUST also exist as a hotkey (hands-free parity). | [TASK] |
 | UX-109 | Information in tooltips MUST also be available elsewhere (label, docs or accessible description), since tooltips need a mouse. | [SELF] |
+| UX-110 | Keyboard focus MUST be clearly visible: a ring at least 2 px wide reaching 3:1 against the dock, shown for keyboard focus only. | [CONTROL] |
+| UX-111 | Status colors (danger, warning, success) MUST NOT color body or title text; they color icons, frames and bars next to a word. Where a theme's own pairing fails 4.5:1 for a label the dock owns (Rachni's white on cyan buttons, 2.30:1), the dock MUST correct that label's color. | [SELF] |
 
 ### 6.2 Internationalization: English and Spanish from day one
 
@@ -818,12 +866,13 @@ OBS plugins ship `data/locale/en-US.ini` and `es-ES.ini` and read them with `obs
 
 | Key | English | Chars | Spanish | Chars | Growth |
 |---|---|---|---|---|---|
-| `State.Real` | REC · REAL TIME | 15 | GRABANDO · TIEMPO REAL | 22 | 147 % |
+| `State.Hero.RealTime` | REAL TIME | 9 | TIEMPO REAL | 11 | 122 % |
+| `Counter.Final.Caption` | FINAL VIDEO | 11 | DURACIÓN FINAL | 14 | 127 % |
 | `Action.Stop` | Stop and save | 13 | Detener y guardar | 17 | 131 % |
 | `Action.ToRealTime` | Back to real time | 17 | Volver a tiempo real | 20 | 118 % |
 | `Action.ToTimelapse` | Switch to timelapse x4 | 22 | Pasar a timelapse x4 | 20 | 91 % |
 | `Action.Record` | Record with Timelapse Switch | 28 | Grabar con Timelapse Switch | 27 | 96 % |
-| `Counter.Recorded` | recorded | 8 | grabado | 7 | 88 % |
+| `Counter.Recorded.Caption` | RECORDED | 8 | GRABADO | 7 | 88 % |
 | `Hint.Separate` | Separate file. OBS's Start Recording still records at normal speed. | 67 | Archivo aparte. «Iniciar Grabación» de OBS sigue grabando a velocidad normal. | 77 | 115 % |
 
 Spanish happens to fit here, but future languages will not, so the layout must allow growth anyway.
@@ -831,7 +880,7 @@ Spanish happens to fit here, but future languages will not, so the layout must a
 | ID | Requirement | Principle |
 |---|---|---|
 | UX-120 | English (`en-US`) and Spanish (`es-ES`) MUST be complete in v1.0; no UI string may be hardcoded. | [LEARN] |
-| UX-121 | Layouts MUST let labels wrap to two lines and grow by 2x, with no fixed widths and no truncation of verbs [S51]. | [SELF] |
+| UX-121 | Layouts MUST let labels wrap to two lines and grow by 2x, with no fixed widths and no truncation of verbs [S51]. A narrow dock MUST NOT replace a verb label with a shorter noun. | [SELF] |
 | UX-122 | A pseudo-localization mode (for example `[!! Ŕéçöŕð ŵîţĥ Ţîɱéļåþšé Šŵîţçĥ !!]`) SHOULD exist for testing truncation. | [ROBUST] |
 | UX-123 | Spanish MUST be neutral: "tú" imperatives, OBS's own terms for OBS screens, and no region-marked words where avoidable (for example "duración final" rather than choosing between "vídeo" and "video"). | [EXPECT] |
 | UX-124 | The name "Timelapse Switch" MUST NOT be translated; "timelapse" stays as a loan word in Spanish. Locale files MUST carry `#` context comments for translators. | [SELF] |
@@ -857,6 +906,8 @@ Spanish happens to fit here, but future languages will not, so the layout must a
 12. **Spanish vocabulary.** Follow OBS's "vídeo" (Spain) or the Latin American "video" where the word cannot be avoided?
 13. **Update check.** Is an opt-in check of GitHub releases acceptable, or no network at all?
 14. **Other architectures.** Windows ARM64 and Linux ARM64 builds in v1, or later?
+15. **Speed chips in real time.** A chip clicked in real time only pre-selects the next timelapse speed, while a speed hotkey enters timelapse (3.11). Should the chips also start timelapse (then idle and recording could share one rail: > 1x, x2, x4, x8, x16), or stay "Next speed" with the armed look (UX-008)?
+16. **Visual direction.** Native, Studio cards or Transport (`docs/design/visual-design.md`, section 4), or a mix of them?
 
 ---
 

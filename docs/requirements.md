@@ -61,3 +61,4 @@ These come from `docs/design/ux-spec.md`, section 7, and will become requirement
 - Allow OBS's recording and ours at the same time, or warn only?
 - Sign the installers (Apple Developer ID, Windows signing) before 1.0?
 - A visible "x4" mark in the video, sped-up audio, sound cues?
+- Speed chips clicked in real time: only pre-select the next speed, or start timelapse like the speed hotkeys?
