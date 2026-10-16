@@ -36,7 +36,7 @@ if(ENABLE_QT)
   )
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.c)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/fault.c src/plugin-main.c src/recorder.c src/recorder-rt.c)
 
 # Power of Ten, rule 10 (docs/coding-rules.md): our own code builds with pedantic warnings and zero tolerance.
 # OBS and Qt headers come from imported targets (system includes), so their warnings are not reported here.

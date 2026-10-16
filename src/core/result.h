@@ -10,6 +10,8 @@
 
 enum tsw_result {
 	TSW_OK = 0,
-	TSW_E_INVALID,       /* a parameter or state broke a TSW_CHECK: a bug, reported as TSW-E901 */
-	TSW_E_TIMELINE_FULL, /* more speed switches in one recording than the timeline can hold */
+	TSW_E_INVALID,             /* a parameter or state broke a TSW_CHECK: a bug, reported as TSW-E901 */
+	TSW_E_TIMELINE_FULL,       /* more speed switches in one recording than the timeline can hold: TSW-E105 */
+	TSW_E_START_FAILED,        /* the recording could not start: TSW-E001 */
+	TSW_E_ENCODER_UNAVAILABLE, /* the recording encoder of the profile cannot be used: TSW-E002 */
 };
