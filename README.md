@@ -1,59 +1,46 @@
-# OBS Plugin Template
+# Timelapse Switch
 
-## Introduction
+**Speed up the slow parts. While you record.**
 
-The plugin template is meant to be used as a starting point for OBS Studio plugin development. It includes:
+Timelapse Switch is a plugin for OBS Studio (Windows, macOS and Linux) that lets you switch between real time and timelapse **during** a recording, without pausing. When you press Stop, the file is already finished: the parts you sped up play at x2, x4 or x8, the rest plays at normal speed, and there is nothing left to edit.
 
-* Boilerplate plugin source code
-* A CMake project file
-* GitHub Actions workflows and repository actions
+> **Status: early development (0.1.0).** The design is done and the project skeleton builds, but the plugin does not do anything useful yet. Watch the repository to know when the first version is ready.
 
-## Supported Build Environments
+## Who it is for
 
-| Platform  | Tool   |
-|-----------|--------|
-| Windows   | Visual Studio 17 2022 |
-| macOS     | XCode 16.0 |
-| Windows, macOS  | CMake 3.30.5 |
-| Ubuntu 24.04 | CMake 3.28.3 |
-| Ubuntu 24.04 | `ninja-build` |
-| Ubuntu 24.04 | `pkg-config`
-| Ubuntu 24.04 | `build-essential` |
+Anyone whose recordings have long, slow stretches:
 
-## Quick Start
+- a painter waiting for layers to dry;
+- a model maker, a crafter, a cook;
+- a developer coding live.
 
-An absolute bare-bones [Quick Start Guide](https://github.com/obsproject/obs-plugintemplate/wiki/Quick-Start-Guide) is available in the wiki.
+Today you record everything and speed it up later in an editor. With Timelapse Switch, you press a button while recording.
+
+## How it works, in one picture
+
+```
+   OBS picture  ---->  [ Timelapse Switch ]  ---->  OBS encoder  ---->  one file
+                       real time: every frame passes                    mixed speeds,
+                       timelapse x4: 1 frame out of 4 passes            ready to upload
+```
+
+Think of a tape recorder with a fast-forward pedal: while you hold the pedal, the tape records only 1 of every 4 moments, so that part plays 4 times faster. OBS encoders count frames instead of looking at the clock, so a section with fewer frames simply plays faster.
 
 ## Documentation
 
-All documentation can be found in the [Plugin Template Wiki](https://github.com/obsproject/obs-plugintemplate/wiki).
+- `docs/architecture.md`: how it works inside OBS
+- `docs/design/ux-spec.md`: the dock and installation
+- `docs/requirements.md`: what it must do
+- `docs/decisions.md`: why it is built this way
+- `docs/building.md`: how to build it
+- `CONTRIBUTING.md`: how we work, including the coding rules (based on NASA/JPL's "The Power of Ten")
 
-Suggested reading to get up and running:
+## How this project is made
 
-* [Getting started](https://github.com/obsproject/obs-plugintemplate/wiki/Getting-Started)
-* [Build system requirements](https://github.com/obsproject/obs-plugintemplate/wiki/Build-System-Requirements)
-* [Build system options](https://github.com/obsproject/obs-plugintemplate/wiki/CMake-Build-System-Options)
+Timelapse Switch is written largely with the help of an AI coding assistant (Claude, by Anthropic), and every change is reviewed by the maintainer. The code follows strict, machine-checked rules (`docs/coding-rules.md`) whoever writes it. Releases are published here on GitHub.
 
-## GitHub Actions & CI
+## License
 
-Default GitHub Actions workflows are available for the following repository actions:
+GPL-2.0-or-later, see `LICENSE`.
 
-* `push`: Run for commits or tags pushed to `master` or `main` branches.
-* `pr-pull`: Run when a Pull Request has been pushed or synchronized.
-* `dispatch`: Run when triggered by the workflow dispatch in GitHub's user interface.
-* `build-project`: Builds the actual project and is triggered by other workflows.
-* `check-format`: Checks CMake and plugin source code formatting and is triggered by other workflows.
-
-The workflows make use of GitHub repository actions (contained in `.github/actions`) and build scripts (contained in `.github/scripts`) which are not needed for local development, but might need to be adjusted if additional/different steps are required to build the plugin.
-
-### Retrieving build artifacts
-
-Successful builds on GitHub Actions will produce build artifacts that can be downloaded for testing. These artifacts are commonly simple archives and will not contain package installers or installation programs.
-
-### Building a Release
-
-To create a release, an appropriately named tag needs to be pushed to the `main`/`master` branch using semantic versioning (e.g., `12.3.4`, `23.4.5-beta2`). A draft release will be created on the associated repository with generated installer packages or installation programs attached as release artifacts.
-
-## Signing and Notarizing on macOS
-
-Basic concepts of codesigning and notarization on macOS are explained in the correspodning [Wiki article](https://github.com/obsproject/obs-plugintemplate/wiki/Codesigning-On-macOS) which has a specific section for the [GitHub Actions setup](https://github.com/obsproject/obs-plugintemplate/wiki/Codesigning-On-macOS#setting-up-code-signing-for-github-actions).
+Timelapse Switch is an independent project by Miguel Parra (Miguetronic). It is not affiliated with or endorsed by the OBS Project. OBS and OBS Studio are trademarks of their respective owners.

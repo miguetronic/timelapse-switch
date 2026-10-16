@@ -1,0 +1,110 @@
+# Decisions
+
+Each important decision is recorded here with its context, the options considered, and its consequences. This is what lets someone ask, years later, "why is it like this?" and get an answer. Records are never deleted; a decision that changes gets a new record that supersedes the old one.
+
+Format of each record: **Context** (the problem), **Decision**, **Alternatives** (and why not), **Consequences** (what we accept).
+
+---
+
+## ADR-001. Speed up while recording, not after
+
+*Date: 2026-10-14. Status: accepted.*
+
+**Context.** Creators who paint, build, cook or code want the slow parts of their recordings sped up. Today they record everything and speed it up later in an editor, or with a script that runs FFmpeg over the whole file, which takes time and disk space. On the OBS forum this feature was requested in 2023 ("switch back and forth from normal time to timelapse") with no answer.
+
+**Decision.** The file is sped up **during** the recording. When the user presses Stop, the file is final. There is no post-processing step and no external tool.
+
+**Alternatives.**
+- *Mark sections while recording, process with FFmpeg afterwards.* Keeps the original footage, but the user waits for the processing, and the plugin would depend on an FFmpeg program that OBS does not ship on Windows. Rejected by the maintainer.
+
+**Consequences.** The frames skipped in timelapse sections are not saved: the full-speed version of those sections cannot be recovered. Recording both versions at once would mean encoding twice.
+
+---
+
+## ADR-002. Our own recorder, not OBS's pause button
+
+*Date: 2026-10-14. Status: accepted.*
+
+**Context.** OBS does not let a plugin drop frames from its own recording. One idea was to pause and resume OBS's recording very quickly (for x4: let 1 frame through, pause for 3, and so on).
+
+**Decision.** The plugin runs **its own recorder**, built from OBS's own encoders and file writers, with its own Record and Stop buttons in the dock. This is the same pattern well-known plugins use (Aitum Vertical, Source Record).
+
+**Alternatives.**
+- *Pulse OBS's pause.* Rejected after reading the OBS 32 source (`libobs/obs-output.c`, `obs-encoder.c`):
+  - each pause writes a line to the OBS log, so about 15 lines per second at x4;
+  - a new pause can only start after the audio has caught up with the previous one, so the speed would be irregular;
+  - the end of a pause is detected by an exact timestamp match, so if OBS skips that one frame under load, the recording can stay paused until the end.
+
+**Consequences.**
+- There are two record buttons in OBS (OBS's and ours). The dock must make this crystal clear (`docs/design/ux-spec.md`, section 3).
+- OBS's own Record button keeps recording at normal speed.
+
+---
+
+## ADR-003. Frames pass through system memory (CPU path)
+
+*Date: 2026-10-15. Status: accepted, to be confirmed by measurement (REQ-014).*
+
+**Context.** To choose which frames reach the encoder, the plugin needs the frames outside the GPU. Today, with GPU encoders such as `hevc_ffmpeg_vaapi_tex`, a frame can go from the scene to the encoder without ever leaving the graphics card.
+
+**Decision.** The plugin receives each finished frame in system memory (`obs_add_raw_video_callback`), passes the selected ones into its own video feed (`video_output_open`), and encodes them with the CPU-frame variant of the user's encoder (for example `hevc_ffmpeg_vaapi` instead of `hevc_ffmpeg_vaapi_tex`). Audio follows the same idea with `obs_add_raw_audio_callback` and its own audio feed (`audio_output_open`), whose input can skip turns. This works because OBS encoders count frames and samples instead of reading the clock.
+
+**Alternatives.**
+- *GPU only, two encoders.* One encoder at full rate and one at 1 of N frames (`obs_encoder_set_frame_rate_divisor`), and the plugin switches between their outputs. Kept as **plan B**. Its costs:
+  - the divisor cannot change while recording, so the speed is fixed per recording;
+  - switching must wait for a keyframe, which takes up to 1 to 2 seconds;
+  - the GPU encodes about 25% more all the time at x4;
+  - the plugin would have to write the file itself, so no Hybrid MP4;
+  - joining two streams depends on each encoder's settings.
+
+**Consequences.**
+- In 4K30 about 370 MB/s go from the GPU to memory and back. This is the same readback OBS already does for every x264 recording; the maintainer recorded 4K30 with x264 on the reference PC on 2026-10-13 without problems.
+- It must be measured with the plugin before release (REQ-014). If it is not acceptable, plan B is implemented behind the same dock.
+
+---
+
+## ADR-004. Name: Timelapse Switch
+
+*Date: 2026-10-15. Status: accepted.*
+
+**Context.** The OBS Project's resource policy does not allow "OBS" in the names or logos of third-party tools, and recommends against the `obs-` prefix in new repository names.
+
+**Decision.** The plugin is called **Timelapse Switch**: it says what it does. Repository `miguetronic/timelapse-switch`.
+
+**Consequences.** "Plugin for OBS Studio" appears only as a description, never as part of the name or the logo.
+
+---
+
+## ADR-005. Written with AI assistance, disclosed openly
+
+*Date: 2026-10-15. Status: accepted.*
+
+**Context.** Most of the code is written by an AI coding assistant (Claude, by Anthropic) and reviewed by the maintainer.
+
+**Decision.** The README says so plainly. The same rules and checks (`docs/coding-rules.md`, `tools/check.sh`) apply to every line, whoever writes it. Releases are published on GitHub.
+
+**Consequences.** The OBS forum's resources section does not accept resources written largely with AI tools, so the plugin is not listed there.
+
+---
+
+## ADR-006. C17 core, C++17 and Qt for the dock, OBS 31.1 or newer
+
+*Date: 2026-10-15. Status: accepted.*
+
+**Context.** OBS itself is written in C (libobs) and C++ with Qt (the interface). The official plugin template builds against OBS 31.1.1.
+
+**Decision.** The core logic is C17, like libobs, and the most analyzable language for rules such as P10. The dock is C++17 with Qt 6, which OBS docks require. The minimum supported OBS version is 31.1.
+
+**Consequences.** Two languages, with the rules adapted for each in `docs/coding-rules.md`. Only the public OBS API is used, never `obs-internal.h`.
+
+---
+
+## ADR-007. Coding rules: "The Power of Ten", adapted
+
+*Date: 2026-10-15. Status: accepted.*
+
+**Context.** A plugin runs inside OBS: if it crashes or freezes, OBS and the user's recording go with it. The maintainer asked for practices worthy of industrial audit.
+
+**Decision.** Adopt G. J. Holzmann's ten rules for safety critical code (NASA/JPL), adapted to a plugin, with machine checks wherever possible (`tools/check.sh`: strict warnings, clang-tidy, the GCC analyzer and text checks).
+
+**Consequences.** Some OBS idioms are not used in our code (`goto` cleanup, macros with variable arguments). Exceptions are allowed only with a written reason (`docs/coding-rules.md`, Part C).
