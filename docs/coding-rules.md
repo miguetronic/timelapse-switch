@@ -74,7 +74,7 @@ for (size_t i = 0; i < TSW_MAX_PENDING_CHUNKS && tsw_ring_has_data(ring); i++) {
 
 **Why here:** `malloc` can take an unpredictable amount of time, and a video callback has about 33 ms per frame at 30 fps, shared with OBS. Memory sized at start also means a recording can't fail halfway because memory ran out.
 
-**Checked by:** review. A text check that forbids allocation calls in `*-rt.c` files arrives in `tools/check.sh` with the first real-time file.
+**Checked by:** review, and `tools/check.sh` (step 7), which rejects allocation, logging, locking, waiting and file calls in `*-rt.c` files.
 
 ### P10-4. Functions fit on one page
 
@@ -210,7 +210,9 @@ OBS calls our code from several threads. Each has a job and a budget.
 | UI thread (Qt main) | dock, dialogs, start and stop, frontend events | allocate, log, update widgets | block for more than about 50 ms |
 | OBS video thread | raw video callback (`*-rt.c`) | copy into preallocated buffers, use atomics | allocate, log, wait on a lock, do I/O, call Qt |
 | OBS audio thread | raw audio callback, our audio input (`*-rt.c`) | same as video | same as video |
-| Encoder and output threads | none (OBS's code; we only configure it) | | |
+| OBS graphics thread | the stop check, once per frame while stopping (`flush_tick` in `recorder.c`) | read OBS counters, ask the file writer to stop | wait, do I/O, call Qt |
+| Output thread | "file writer stopped" signal (`output_stopped` in `recorder.c`) | signal an event, queue a task for the UI thread | anything else |
+| Encoder threads | none (OBS's code; we only configure it) | | |
 
 The real-time threads talk to the UI only through atomics and single-producer, single-consumer ring buffers. The UI reads them with a timer, a few times per second.
 

@@ -18,7 +18,7 @@
 #   4. clang-tidy      static analyzer #1                           (P10-10)
 #   5. GCC analyzer    static analyzer #2, gcc -fanalyzer           (P10-10)
 #   6. Shell scripts   ShellCheck, shfmt and line length (Google style)
-#   7. Project rules   checks no tool covers: P10-1, P10-8, no dashes,
+#   7. Project rules   checks no tool covers: P10-1, P10-8, B1, no dashes,
 #                      commit messages, version format
 
 set -u
@@ -139,7 +139,8 @@ check_unit_tests() {
 check_clang_tidy() {
   step '4. Static analysis: clang-tidy'
   local -a sources
-  mapfile -t sources < <(git ls-files 'src/*.c' 'src/*.cpp')
+  mapfile -t sources < <(git ls-files 'src/*.c' 'src/*.cpp' \
+    'tests/integration/*.c')
   sources+=("${BUILD_DIR}/plugin-support.c")
   clang-tidy -p "${BUILD_DIR}" --quiet \
     --removed-arg=-mno-direct-extern-access \
@@ -177,7 +178,8 @@ check_shell() {
     return
   fi
   local -a scripts
-  mapfile -t scripts < <(git ls-files 'tools/*.sh' 'tools/git-hooks/*')
+  mapfile -t scripts < <(git ls-files 'tools/*.sh' 'tools/git-hooks/*' \
+    'tests/*.sh')
   "${VENV_BIN}/shellcheck" --shell=bash "${scripts[@]}"
   record 'shell: ShellCheck (zero warnings)' "$?"
   "${VENV_BIN}/shfmt" --diff "${SHFMT_STYLE[@]}" "${scripts[@]}"
@@ -214,6 +216,15 @@ check_code_rules() {
   else
     record 'P10-8: conditional compilation only in tsw-compiler.h' 0
   fi
+  # B1: the real-time files never allocate, log, lock, wait or touch files.
+  local -a realtime
+  mapfile -t realtime < <(git ls-files 'src/*-rt.c')
+  local calls='b[mz]?alloc|brealloc|bstrdup|bfree|malloc|calloc|realloc|free'
+  calls+='|da_[a-z_]+|dstr_[a-z_]+|tsw_log|blog|printf|fprintf'
+  calls+='|pthread_mutex_lock|pthread_cond_wait|os_event_wait'
+  calls+='|os_event_timedwait|os_sleep_ms|os_sleepto_ns|fopen|os_fopen'
+  rule_absent 'B1: no allocation, logging, locks or waits in *-rt.c' \
+    "\\b(${calls})[[:space:]]*\\(" "${realtime[@]}"
 }
 
 # Step 7b: no em dashes or en dashes in any tracked text file.
