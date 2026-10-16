@@ -68,7 +68,15 @@ function(tsw_strict_warnings target)
 endfunction()
 
 # Core logic: pure C with no OBS dependency, shared by the plugin and the unit tests (docs/coding-rules.md, D1).
-add_library(tsw-core STATIC src/core/audio-ring.c src/core/gate.c src/core/timeline.c)
+add_library(
+  tsw-core
+  STATIC
+  src/core/audio-ring.c
+  src/core/dock-view.c
+  src/core/gate.c
+  src/core/session.c
+  src/core/timeline.c
+)
 target_include_directories(tsw-core PUBLIC src)
 # Header-only parts of OBS (portable atomics); the core never links libobs, so tests run without OBS.
 target_include_directories(tsw-core SYSTEM PUBLIC $<TARGET_PROPERTY:OBS::libobs,INTERFACE_INCLUDE_DIRECTORIES>)

@@ -21,3 +21,13 @@ add_executable(test-audio-ring test-audio-ring.c test-main.c)
 target_link_libraries(test-audio-ring PRIVATE tsw-core)
 tsw_strict_warnings(test-audio-ring)
 add_test(NAME audio-ring COMMAND test-audio-ring)
+
+add_executable(test-session test-session.c test-main.c)
+target_link_libraries(test-session PRIVATE tsw-core)
+tsw_strict_warnings(test-session)
+add_test(NAME session COMMAND test-session)
+
+add_executable(test-dock-view test-dock-view.c test-main.c)
+target_link_libraries(test-dock-view PRIVATE tsw-core)
+tsw_strict_warnings(test-dock-view)
+add_test(NAME dock-view COMMAND test-dock-view)

@@ -1,0 +1,261 @@
+/*
+ * Timelapse Switch
+ * SPDX-FileCopyrightText: 2026 Miguel Parra (Miguetronic)
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
+/*
+ * test-dock-view.c: what each zone of the dock shows in each state (core/dock-view.h).
+ */
+
+#include <string.h>
+
+#include "core/dock-view.h"
+#include "test.h"
+
+static const uint64_t SECOND_NS = 1000000000;
+
+static void expect_text(const char *actual, const char *expected, int line)
+{
+	if (actual == NULL || expected == NULL ? actual != expected : strcmp(actual, expected) != 0) {
+		printf("%s:%d: expected \"%s\", got \"%s\"\n", __FILE__, line, expected ? expected : "(null)",
+		       actual ? actual : "(null)");
+		tsw_test_failures++;
+	}
+}
+#define EXPECT_TEXT(actual, expected) expect_text(actual, expected, __LINE__)
+
+static struct tsw_session new_session(void)
+{
+	struct tsw_session session;
+	TSW_EXPECT_EQ(tsw_session_init(&session, 4, 0), TSW_OK);
+	return session;
+}
+
+static struct tsw_status recording(uint32_t speed)
+{
+	struct tsw_status status = {0};
+	status.phase = TSW_PHASE_RECORDING;
+	status.speed = speed;
+	status.recorded_ns = 754 * SECOND_NS; /* 0:12:34 */
+	status.final_ns = 400 * SECOND_NS;    /* 0:06:40 */
+	status.section_recorded_ns = 120 * SECOND_NS;
+	status.section_final_ns = 30 * SECOND_NS;
+	status.path = "/videos/2026-10-16 10-00-00 tswitch.mp4";
+	return status;
+}
+
+static struct tsw_status ended(uint32_t outcome, uint32_t error_code)
+{
+	struct tsw_status status = {0};
+	status.phase = TSW_PHASE_IDLE;
+	status.path = "/videos/2026-10-16 10-00-00 tswitch.mp4";
+	status.outcome = outcome;
+	status.error_code = error_code;
+	status.last_recorded_ns = 5025 * SECOND_NS; /* 1:23:45 */
+	status.last_final_ns = 1870 * SECOND_NS;    /* 0:31:10 */
+	return status;
+}
+
+static struct tsw_dock_view build(struct tsw_dock_model *model, const struct tsw_session *session,
+				  struct tsw_status status)
+{
+	struct tsw_dock_view view;
+	tsw_dock_view_build(model, session, &status, &view);
+	return view;
+}
+
+static void durations_read_as_hours_minutes_seconds(void)
+{
+	char text[TSW_TIME_TEXT];
+	tsw_format_duration(0, text);
+	EXPECT_TEXT(text, "0:00:00");
+	tsw_format_duration(59 * SECOND_NS + 999999999, text); /* whole seconds, never rounded up */
+	EXPECT_TEXT(text, "0:00:59");
+	tsw_format_duration(61 * SECOND_NS, text);
+	EXPECT_TEXT(text, "0:01:01");
+	tsw_format_duration(36000 * SECOND_NS, text);
+	EXPECT_TEXT(text, "10:00:00");
+	tsw_format_duration(UINT64_MAX, text);
+	EXPECT_TEXT(text, "9999:59:59");
+}
+
+static void idle_offers_record_and_the_starting_mode(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = {0};
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_READY);
+	EXPECT_TEXT(view.banner_text, "State.Idle");
+	EXPECT_TEXT(view.banner_detail, "State.WillStartRealTime");
+	TSW_EXPECT_TRUE(view.counters_dimmed);
+	EXPECT_TEXT(view.recorded, "-:--:--");
+	EXPECT_TEXT(view.main_text, "Action.Record");
+	TSW_EXPECT_TRUE(view.main_enabled);
+	TSW_EXPECT_TRUE(view.speeds_shown && view.speeds_enabled && view.start_mode_shown);
+	EXPECT_TEXT(view.speed_label, "Label.Speed");
+	TSW_EXPECT_EQ(view.speed_selected, 4);
+	TSW_EXPECT_TRUE(!view.stop_shown);
+	TSW_EXPECT_TRUE(!view.card_shown && !view.section_shown);
+	EXPECT_TEXT(view.context_text, "Hint.Separate");
+
+	session.start_in_timelapse = true;
+	view = build(&model, &session, status);
+	EXPECT_TEXT(view.banner_detail, "State.WillStartTimelapse");
+	TSW_EXPECT_EQ(view.banner_speed, 4);
+	TSW_EXPECT_TRUE(view.start_in_timelapse);
+}
+
+static void real_time_offers_the_switch(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, recording(1));
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_REAL_TIME);
+	EXPECT_TEXT(view.banner_text, "State.RealTime");
+	TSW_EXPECT_TRUE(view.banner_detail == NULL);
+	TSW_EXPECT_TRUE(!view.counters_dimmed && !view.section_shown);
+	EXPECT_TEXT(view.recorded, "0:12:34");
+	EXPECT_TEXT(view.final_length, "0:06:40");
+	EXPECT_TEXT(view.main_text, "Action.ToTimelapse");
+	TSW_EXPECT_EQ(view.main_speed, 4);
+	EXPECT_TEXT(view.speed_label, "Label.NextSpeed");
+	TSW_EXPECT_TRUE(!view.start_mode_shown);
+	TSW_EXPECT_TRUE(view.stop_shown && view.stop_enabled);
+	EXPECT_TEXT(view.context_text, "Hint.File");
+	EXPECT_TEXT(view.context_path, "/videos/2026-10-16 10-00-00 tswitch.mp4");
+}
+
+static void timelapse_offers_the_way_back_and_shows_the_section(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, recording(8));
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_TIMELAPSE);
+	EXPECT_TEXT(view.banner_text, "State.Timelapse");
+	TSW_EXPECT_EQ(view.banner_speed, 8);
+	TSW_EXPECT_TRUE(view.section_shown);
+	EXPECT_TEXT(view.section_recorded, "0:02:00");
+	EXPECT_TEXT(view.section_final, "0:00:30");
+	EXPECT_TEXT(view.main_text, "Action.ToRealTime");
+	EXPECT_TEXT(view.speed_label, "Label.SpeedNow");
+	TSW_EXPECT_EQ(view.speed_selected, 8); /* the speed in use, whatever chip was chosen before */
+	TSW_EXPECT_TRUE(view.stop_shown && view.stop_enabled);
+	EXPECT_TEXT(view.context_text, "Hint.AudioSilence");
+}
+
+/* UX-011: while saving, what cannot act is disabled, not hidden. */
+static void saving_disables_what_cannot_act(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = recording(1);
+	status.phase = TSW_PHASE_SAVING;
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_BUSY);
+	EXPECT_TEXT(view.banner_text, "State.Saving");
+	EXPECT_TEXT(view.main_text, "Action.Record");
+	TSW_EXPECT_TRUE(!view.main_enabled);
+	TSW_EXPECT_TRUE(view.speeds_shown && !view.speeds_enabled);
+	TSW_EXPECT_TRUE(view.stop_shown && !view.stop_enabled);
+	EXPECT_TEXT(view.recorded, "0:12:34");
+}
+
+static void a_saved_recording_opens_the_summary(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, ended(1, 0));
+	TSW_EXPECT_TRUE(view.card_shown);
+	TSW_EXPECT_EQ(view.error_code, 0);
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_SAVED);
+	EXPECT_TEXT(view.banner_text, "State.Saved");
+	TSW_EXPECT_TRUE(!view.counters_dimmed);
+	EXPECT_TEXT(view.recorded, "1:23:45");
+	EXPECT_TEXT(view.final_length, "0:31:10");
+	EXPECT_TEXT(view.skipped, "0:52:35");
+	TSW_EXPECT_TRUE(view.thank_user);
+	EXPECT_TEXT(view.main_text, "Action.Record");
+	TSW_EXPECT_TRUE(view.main_enabled && !view.speeds_shown && !view.stop_shown);
+	EXPECT_TEXT(view.context_text, "Hint.File");
+
+	/* The card stays until dismissed; the warm line is used once per OBS session. */
+	view = build(&model, &session, ended(1, 0));
+	TSW_EXPECT_TRUE(view.card_shown && view.thank_user);
+	tsw_dock_model_dismiss(&model);
+	view = build(&model, &session, ended(1, 0));
+	TSW_EXPECT_TRUE(!view.card_shown);
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_READY);
+	view = build(&model, &session, ended(2, 0));
+	TSW_EXPECT_TRUE(view.card_shown && !view.thank_user);
+}
+
+static void a_failure_opens_the_error_card(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, ended(1, 103));
+	TSW_EXPECT_TRUE(view.card_shown);
+	TSW_EXPECT_EQ(view.error_code, 103);
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_ERROR);
+	EXPECT_TEXT(view.banner_text, "State.Error");
+	TSW_EXPECT_TRUE(!view.thank_user); /* never in errors (UX-072) */
+	EXPECT_TEXT(view.main_text, "Action.Record");
+	TSW_EXPECT_TRUE(view.main_enabled);
+}
+
+/* A start that failed recorded nothing: no times to show, and no file. */
+static void a_failed_start_shows_no_times(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = ended(1, 1);
+	status.last_recorded_ns = 0;
+	status.last_final_ns = 0;
+	status.path = "";
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.card_shown);
+	TSW_EXPECT_TRUE(view.counters_dimmed);
+	EXPECT_TEXT(view.recorded, "-:--:--");
+	EXPECT_TEXT(view.final_length, "-:--:--");
+	TSW_EXPECT_TRUE(view.context_text == NULL);
+}
+
+static void a_new_recording_closes_the_card(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, ended(1, 0));
+	TSW_EXPECT_TRUE(view.card_shown);
+	struct tsw_status status = recording(1);
+	status.outcome = 1;
+	view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(!view.card_shown);
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_REAL_TIME);
+	status = ended(1, 0); /* the same outcome again: nothing new to show */
+	view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(!view.card_shown);
+}
+
+int main(void)
+{
+	durations_read_as_hours_minutes_seconds();
+	idle_offers_record_and_the_starting_mode();
+	real_time_offers_the_switch();
+	timelapse_offers_the_way_back_and_shows_the_section();
+	saving_disables_what_cannot_act();
+	a_saved_recording_opens_the_summary();
+	a_failure_opens_the_error_card();
+	a_failed_start_shows_no_times();
+	a_new_recording_closes_the_card();
+	return tsw_test_failures;
+}
