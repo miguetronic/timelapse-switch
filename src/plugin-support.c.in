@@ -4,24 +4,37 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+/*
+ * plugin-support.c: plugin identity (filled in by CMake) and the logging helper.
+ * See plugin-support.h for the contract of each function.
+ */
+
 #include <plugin-support.h>
+
+#include <stdarg.h>
+#include <stdio.h>
+
+/* Longest message we format, in bytes. OBS itself cuts log lines at 4096 bytes. */
+enum { TSW_LOG_MAX = 4096 };
 
 const char *PLUGIN_NAME = "@CMAKE_PROJECT_NAME@";
 const char *PLUGIN_VERSION = "@CMAKE_PROJECT_VERSION@";
 
-void obs_log(int log_level, const char *format, ...)
+void tsw_log(int log_level, const char *format, ...)
 {
-	size_t length = 4 + strlen(PLUGIN_NAME) + strlen(format);
-
-	char *template = malloc(length + 1);
-
-	snprintf(template, length, "[%s] %s", PLUGIN_NAME, format);
-
-	va_list(args);
-
+	/* 1. Format the caller's message into a fixed buffer on the stack (no heap memory). */
+	char message[TSW_LOG_MAX];
+	va_list args;
 	va_start(args, format);
-	blogva(log_level, template, args);
+	const int written = vsnprintf(message, sizeof(message), format, args);
 	va_end(args);
 
-	free(template);
+	/* 2. If formatting failed, still leave a trace instead of losing the event silently. */
+	if (written < 0) {
+		blog(log_level, "[%s] (a log message could not be formatted)", PLUGIN_NAME);
+		return;
+	}
+
+	/* 3. Write it with the plugin prefix. */
+	blog(log_level, "[%s] %s", PLUGIN_NAME, message);
 }

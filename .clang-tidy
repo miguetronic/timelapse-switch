@@ -1,0 +1,35 @@
+# clang-tidy configuration for Timelapse Switch.
+#
+# Every check is tied to a rule in docs/coding-rules.md ("The Power of Ten", adapted):
+#   P10-1  simple control flow     cppcoreguidelines-avoid-goto, misc-no-recursion
+#   P10-4  short functions         readability-function-size (60 lines)
+#   P10-7  check return values     bugprone-unused-return-value, cert-err33-c
+#   P10-8  limited preprocessor    cppcoreguidelines-macro-usage, bugprone-macro-*
+#   P10-10 static analysis         clang-analyzer-*, bugprone-*, cert-*, zero warnings (WarningsAsErrors)
+#
+# Exclusions (listed last, because later entries win), each one justified:
+#   bugprone-easily-swappable-parameters  style advice, not a defect; too noisy for C APIs.
+#   portability-avoid-pragma-once         "#pragma once" works on every compiler we support (GCC, Clang, MSVC)
+#                                         and is what OBS itself uses.
+#   ...DeprecatedOrUnsafeBufferHandling   asks for C11 Annex K functions (vsnprintf_s), which do not exist on
+#                                         Linux or macOS. We use the bounded functions (vsnprintf) and check
+#                                         their results instead (rule P10-7).
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  cert-*,
+  cppcoreguidelines-avoid-goto,
+  cppcoreguidelines-macro-usage,
+  misc-no-recursion,
+  readability-function-size,
+  performance-*,
+  portability-*,
+  -bugprone-easily-swappable-parameters,
+  -portability-avoid-pragma-once,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+WarningsAsErrors: "*"
+HeaderFilterRegex: ".*/src/.*"
+CheckOptions:
+  readability-function-size.LineThreshold: 60
+  cppcoreguidelines-macro-usage.AllowedRegexp: "^(TSW_|PLUGIN_)"

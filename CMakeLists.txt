@@ -15,6 +15,8 @@ add_library(${CMAKE_PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
+# plugin-support (logging helper) uses the OBS log functions and their printf checks.
+target_link_libraries(plugin-support PRIVATE OBS::libobs)
 
 if(ENABLE_FRONTEND_API)
   find_package(obs-frontend-api REQUIRED)
@@ -35,5 +37,34 @@ if(ENABLE_QT)
 endif()
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.c)
+
+# Power of Ten, rule 10 (docs/coding-rules.md): our own code builds with pedantic warnings and zero tolerance.
+# OBS and Qt headers come from imported targets (system includes), so their warnings are not reported here.
+set(
+  _tsw_warnings
+  -Wall
+  -Wextra
+  -Wpedantic
+  -Wshadow
+  -Wconversion
+  -Wsign-conversion
+  -Wformat=2
+  -Wcast-qual
+  -Wnull-dereference
+  -Wimplicit-fallthrough
+  -Wundef
+  -Wunused-function
+  -Werror
+)
+foreach(_tsw_target IN ITEMS ${CMAKE_PROJECT_NAME} plugin-support)
+  target_compile_options(
+    ${_tsw_target}
+    PRIVATE
+      "$<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:${_tsw_warnings};-Wstrict-prototypes;-Wmissing-prototypes>"
+      "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:${_tsw_warnings}>"
+      "$<$<COMPILE_LANG_AND_ID:C,MSVC>:/W4;/WX>"
+      "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4;/WX>"
+  )
+endforeach()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
