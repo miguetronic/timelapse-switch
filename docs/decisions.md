@@ -139,3 +139,18 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
 
 **Consequences.** Kept deliberately small. Build provenance attestation and automatic vulnerability scanning can be added later if the project grows.
 
+
+---
+
+## ADR-010. User documentation site on GitHub Pages
+
+*Date: 2026-10-16. Status: accepted; the site is published together with version 1.0.0.*
+
+**Context.** Every error message in the dock has a "Learn more" link (`docs/design/ux-spec.md`, UX-085), and users need an install and usage guide in English and Spanish. Those links are built into the plugin, so their address must never change.
+
+**Decision.** The user documentation lives at `https://miguetronic.github.io/timelapse-switch/`, served by GitHub Pages. Error pages follow the pattern `https://miguetronic.github.io/timelapse-switch/errors/TSW-Exxx`. The site is plain HTML and Markdown: no framework, no cookies, no analytics.
+
+**Alternatives.**
+- *A custom domain from the start.* It is not needed: if one is added later, GitHub redirects the `github.io` addresses to it, so links in installed versions keep working.
+
+**Consequences.** The site is published with 1.0.0, when there is a working plugin and a real demo to show.
