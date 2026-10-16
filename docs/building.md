@@ -47,7 +47,7 @@ python3 -m venv .venv
 git config core.hooksPath tools/git-hooks
 ```
 
-The `python3` and `pip` lines install clang-format 19.1.1 and gersemi 0.21.0 **inside the project folder** (`.venv/`, ignored by Git). They are the exact versions the OBS CI uses, so your formatting and GitHub's always agree. Nothing is installed system-wide. The last line turns on the Git hook that checks the commit message format (`CONTRIBUTING.md`).
+The `python3` and `pip` lines install clang-format 19.1.1, gersemi 0.21.0, ShellCheck and shfmt **inside the project folder** (`.venv/`, ignored by Git). clang-format and gersemi are the exact versions the OBS CI uses, so your formatting and GitHub's always agree. Nothing is installed system-wide. The last line turns on the Git hook that checks the commit message format (`CONTRIBUTING.md`).
 
 ### 3. Configure (once, about 2 seconds)
 
@@ -73,7 +73,7 @@ Any compiler warning stops the build. That is on purpose (rule P10-10 in `docs/c
 tools/check.sh
 ```
 
-It runs five steps and ends with a summary. All lines must say PASS:
+It runs six steps and ends with a summary. All lines must say PASS:
 
 ```
 Summary
@@ -82,6 +82,9 @@ Summary
   PASS  build (zero warnings)
   PASS  clang-tidy (zero warnings)
   PASS  gcc -fanalyzer (zero warnings)
+  PASS  shell: ShellCheck (zero warnings)
+  PASS  shell: layout (shfmt)
+  PASS  shell: lines of 80 characters or less
   PASS  P10-1: no goto, setjmp or longjmp
   PASS  P10-8: no token pasting or variadic macros
   PASS  P10-8: conditional compilation only in tsw-compiler.h
@@ -95,6 +98,7 @@ To fix formatting automatically instead of only checking it:
 ```bash
 PATH="$PWD/.venv/bin:$PATH" ./build-aux/run-clang-format
 PATH="$PWD/.venv/bin:$PATH" ./build-aux/run-gersemi
+.venv/bin/shfmt -w -i 2 -ci -bn tools/*.sh tools/git-hooks/*
 ```
 
 ### 6. Try it in OBS

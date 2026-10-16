@@ -1,42 +1,58 @@
-#!/usr/bin/env bash
+#!/bin/bash
+#
 # Timelapse Switch
 # SPDX-FileCopyrightText: 2026 Miguel Parra (Miguetronic)
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# commit-msg: reject a commit whose first line does not follow Conventional Commits.
+# Git commit-msg hook: rejects a commit whose first line does not follow
+# Conventional Commits. Enable it once per clone:
 #
-# Git runs it before every commit once hooks are enabled (once per clone):
 #   git config core.hooksPath tools/git-hooks
-# tools/check.sh also runs it on every commit in the history.
+#
+# tools/check.sh also runs it on every commit of the history.
 #
 #   Accepted:  feat: add x16 speed
 #              fix(audio): keep sync after many switches
-#              feat!: new settings format          ("!" marks a breaking change)
-#   Rejected:  "added x16 speed", "Fix: ...", "feat:add" (no space), subjects over 72 characters
+#              feat!: new settings format     ("!" marks a breaking change)
+#   Rejected:  "added x16 speed", "Fix: ...", "feat:add" (no space),
+#              first lines longer than 72 characters
+#
+# Arguments:
+#   Path of the file that holds the commit message (given by Git).
 
 set -u
 
-TYPES='feat|fix|perf|docs|test|build|ci|refactor|style|chore|revert'
-PATTERN="^($TYPES)(\([a-z0-9-]+\))?!?: [^ ].*$"
-MAX_LENGTH=72
+readonly TYPES='feat|fix|perf|docs|test|build|ci|refactor|style|chore|revert'
+readonly PATTERN="^(${TYPES})(\([a-z0-9-]+\))?!?: [^ ].*$"
+# Messages Git writes itself: merges, reverts, and fixups that are squashed
+# before they reach main.
+readonly GIT_MESSAGES='^(Merge |Revert "|fixup! |squash! )'
+readonly MAX_LENGTH=72
 
-subject=$(head -n 1 "$1")
+# Prints a message to stderr.
+err() {
+  echo "$*" >&2
+}
 
-# Messages Git writes itself: merges, and fixups that will be squashed before reaching main.
-if [[ $subject =~ ^(Merge |Revert \"|fixup! |squash! ) ]]; then
-	exit 0
-fi
+main() {
+  local subject
+  subject="$(head -n 1 "$1")"
+  if [[ "${subject}" =~ ${GIT_MESSAGES} ]]; then
+    return 0
+  fi
+  if [[ ! "${subject}" =~ ${PATTERN} ]]; then
+    err 'Commit message does not follow Conventional Commits:'
+    err "  ${subject}"
+    err 'Expected: <type>(<optional scope>)<optional !>: <description>'
+    err "Types: ${TYPES//|/, }."
+    err 'Example: feat: add x16 speed. See CONTRIBUTING.md.'
+    return 1
+  fi
+  if ((${#subject} > MAX_LENGTH)); then
+    err "First line has ${#subject} characters; keep it to ${MAX_LENGTH}:"
+    err "  ${subject}"
+    return 1
+  fi
+}
 
-if [[ ! $subject =~ $PATTERN ]]; then
-	echo "Commit message does not follow Conventional Commits:"
-	echo "  $subject"
-	echo "Expected: <type>(<optional scope>)<optional !>: <description>"
-	echo "Types: ${TYPES//|/, }. Example: feat: add x16 speed. See CONTRIBUTING.md."
-	exit 1
-fi
-
-if ((${#subject} > MAX_LENGTH)); then
-	echo "First line is ${#subject} characters; keep it at $MAX_LENGTH or less:"
-	echo "  $subject"
-	exit 1
-fi
+main "$@"

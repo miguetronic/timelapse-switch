@@ -1,4 +1,7 @@
-# Formatting tools pinned to the exact versions used by the OBS CI (obsproject/homebrew-tools).
+# Development tools, pinned. clang-format and gersemi: the exact versions used by the OBS CI
+# (obsproject/homebrew-tools). ShellCheck and shfmt: shell scripts, Google Shell Style Guide.
 # Install once:  python3 -m venv .venv && .venv/bin/pip install -r tools/requirements-dev.txt
 clang-format==19.1.1
 gersemi==0.21.0
+shellcheck-py==0.11.0.1
+shfmt-py==4.2.0

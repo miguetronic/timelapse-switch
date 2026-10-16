@@ -1,128 +1,266 @@
-#!/usr/bin/env bash
+#!/bin/bash
+#
 # Timelapse Switch
 # SPDX-FileCopyrightText: 2026 Miguel Parra (Miguetronic)
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# check.sh: run every automatic check of the project with one command (Linux).
+# Runs every automatic check of the project with one command (Linux).
 #
 #   tools/check.sh
 #
-# It runs all steps even if one fails, so you see every problem at once, and ends with a summary.
-# Exit code 0 means everything is green. The rules behind each step are in docs/coding-rules.md.
+# All steps run even if one fails, so every problem shows up at once, and a
+# summary comes last. Exit status 0 means everything passed. The rules
+# behind each step are in docs/coding-rules.md.
 #
-#   1. Format          clang-format 19.1.1 and gersemi 0.21.0, the same versions as the OBS CI
-#   2. Build           compiler with pedantic warnings, any warning is an error   (rule P10-10)
-#   3. clang-tidy      static analyzer #1                                          (rule P10-10)
-#   4. GCC analyzer    static analyzer #2 (gcc -fanalyzer)                         (rule P10-10)
-#   5. Project rules   simple text checks for rules no tool covers   (P10-1, P10-8, style, commits, SemVer)
+#   1. Format          clang-format and gersemi, same versions as the OBS CI
+#   2. Build           pedantic warnings, any warning is an error   (P10-10)
+#   3. clang-tidy      static analyzer #1                           (P10-10)
+#   4. GCC analyzer    static analyzer #2, gcc -fanalyzer           (P10-10)
+#   5. Shell scripts   ShellCheck, shfmt and line length (Google style)
+#   6. Project rules   checks no tool covers: P10-1, P10-8, no dashes,
+#                      commit messages, version format
 
 set -u
-cd "$(git rev-parse --show-toplevel)" || exit 2
 
-RED=$'\e[31m' GREEN=$'\e[32m' BOLD=$'\e[1m' RESET=$'\e[0m'
-declare -a SUMMARY=()
-FAILED=0
+readonly RED=$'\e[31m'
+readonly GREEN=$'\e[32m'
+readonly BOLD=$'\e[1m'
+readonly RESET=$'\e[0m'
+readonly PRESET='ubuntu-x86_64'
+readonly BUILD_DIR='build_x86_64'
+readonly ANALYZER_DIR='build_analyzer'
+readonly VENV_BIN='.venv/bin'
+# Google Shell Style Guide layout for shfmt: indent with 2 spaces, indent
+# case branches, and let "|" and "&&" start a continuation line.
+readonly -a SHFMT_STYLE=(-i 2 -ci -bn)
+readonly MAX_SHELL_LINE=80
+readonly SEMVER='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 
-# record <step name> <exit code>: remember the result of one step for the final summary.
+summary=()
+failed=0
+
+#######################################
+# Remembers the result of one check for the final summary.
+# Globals:
+#   summary, failed
+# Arguments:
+#   Name of the check.
+#   Exit status of the check: 0 means it passed.
+#######################################
 record() {
-	if [[ $2 -eq 0 ]]; then
-		SUMMARY+=("${GREEN}PASS${RESET}  $1")
-	else
-		SUMMARY+=("${RED}FAIL${RESET}  $1")
-		FAILED=1
-	fi
+  if (($2 == 0)); then
+    summary+=("${GREEN}PASS${RESET}  $1")
+  else
+    summary+=("${RED}FAIL${RESET}  $1")
+    failed=1
+  fi
 }
 
-step() { printf '\n%s== %s%s\n' "$BOLD" "$1" "$RESET"; }
+# Prints the title of a step.
+step() {
+  printf '\n%s== %s%s\n' "${BOLD}" "$1" "${RESET}"
+}
 
-# ---------------------------------------------------------------------------------------------
-step "1. Format (clang-format 19.1.1, gersemi 0.21.0)"
-if [[ -x .venv/bin/clang-format && -x .venv/bin/gersemi ]]; then
-	PATH="$PWD/.venv/bin:$PATH" ./build-aux/run-clang-format --check
-	record "format: C and C++ (clang-format)" $?
-	PATH="$PWD/.venv/bin:$PATH" ./build-aux/run-gersemi --check
-	record "format: CMake (gersemi)" $?
-else
-	echo "Formatting tools missing. Install them once with:"
-	echo "  python3 -m venv .venv && .venv/bin/pip install -r tools/requirements-dev.txt"
-	record "format (tools not installed)" 1
-fi
+# Prints a message to stderr.
+err() {
+  echo "$*" >&2
+}
 
-# ---------------------------------------------------------------------------------------------
-step "2. Build with strict warnings"
-if [[ ! -f build_x86_64/build.ninja ]]; then
-	cmake --preset ubuntu-x86_64 >/dev/null
-fi
-cmake --build build_x86_64
-record "build (zero warnings)" $?
-
-# ---------------------------------------------------------------------------------------------
-step "3. Static analysis: clang-tidy"
-# The OBS build adds a few GCC-only flags that clang-tidy (Clang) does not know; remove or silence them.
-mapfile -t SOURCES < <(git ls-files 'src/*.c' 'src/*.cpp')
-SOURCES+=(build_x86_64/plugin-support.c)
-clang-tidy -p build_x86_64 --quiet --removed-arg=-mno-direct-extern-access \
-	--extra-arg=-Wno-unknown-warning-option "${SOURCES[@]}" 2>&1 | grep -vE "warnings? generated"
-record "clang-tidy (zero warnings)" "${PIPESTATUS[0]}"
-
-# ---------------------------------------------------------------------------------------------
-step "4. Static analysis: GCC analyzer"
-# A separate build directory, so the normal build stays fast. Analyzer findings are errors (-Werror).
-if [[ ! -f build_analyzer/build.ninja ]]; then
-	cmake --preset ubuntu-x86_64 -B build_analyzer -DCMAKE_C_FLAGS=-fanalyzer >/dev/null
-fi
-cmake --build build_analyzer
-record "gcc -fanalyzer (zero warnings)" $?
-
-# ---------------------------------------------------------------------------------------------
-step "5. Project rules"
-
-# rule_absent <description> <extended regex> <files...>: fail if the pattern appears in any file.
+#######################################
+# Fails a check if a pattern appears in any of the given files.
+# Arguments:
+#   Name of the check.
+#   Extended regular expression.
+#   Files to search.
+# Outputs:
+#   The matching lines, if any.
+#######################################
 rule_absent() {
-	local description=$1 pattern=$2
-	shift 2
-	if grep -nE "$pattern" "$@" 2>/dev/null; then
-		record "$description" 1
-	else
-		record "$description" 0
-	fi
+  local name="$1"
+  local pattern="$2"
+  shift 2
+  if grep -nE "${pattern}" "$@" 2>/dev/null; then
+    record "${name}" 1
+  else
+    record "${name}" 0
+  fi
 }
 
-mapfile -t CODE < <(git ls-files 'src/*.c' 'src/*.cpp' 'src/*.h' 'src/*.hpp' 'src/*.c.in')
-mapfile -t TEXT < <(git ls-files | grep -vE '^LICENSE$|\.(png|jpg|gif|ico|icns|webp)$')
+#######################################
+# Step 1: source formatting, with the pinned tool versions in .venv.
+# Outputs:
+#   Formatter messages; an install hint on stderr if tools are missing.
+#######################################
+check_format() {
+  step '1. Format (clang-format 19.1.1, gersemi 0.21.0)'
+  if [[ ! -x "${VENV_BIN}/clang-format" || ! -x "${VENV_BIN}/gersemi" ]]; then
+    err 'Formatting tools missing. Install them once with:'
+    err '  python3 -m venv .venv'
+    err '  .venv/bin/pip install -r tools/requirements-dev.txt'
+    record 'format (tools not installed)' 1
+    return
+  fi
+  PATH="${PWD}/${VENV_BIN}:${PATH}" ./build-aux/run-clang-format --check
+  record 'format: C and C++ (clang-format)' "$?"
+  PATH="${PWD}/${VENV_BIN}:${PATH}" ./build-aux/run-gersemi --check
+  record 'format: CMake (gersemi)' "$?"
+}
 
-rule_absent "P10-1: no goto, setjmp or longjmp" '\bgoto\b|\bsetjmp\b|\blongjmp\b' "${CODE[@]}"
-rule_absent "P10-8: no token pasting or variadic macros" '##|__VA_ARGS__' "${CODE[@]}"
-# Conditional compilation lives only in src/tsw-compiler.h. The one exception is the standard
-# header boilerplate "#ifdef __cplusplus / extern "C"", which lets C++ code include our C headers.
-mapfile -t NOT_COMPILER_H < <(printf '%s\n' "${CODE[@]}" | grep -v '^src/tsw-compiler.h$')
-if grep -nE '^[[:space:]]*#[[:space:]]*(if|ifdef|ifndef|elif)\b' "${NOT_COMPILER_H[@]}" | grep -v '__cplusplus'; then
-	record "P10-8: conditional compilation only in tsw-compiler.h" 1
-else
-	record "P10-8: conditional compilation only in tsw-compiler.h" 0
-fi
-rule_absent "Style: no em dashes or en dashes in any file" $'\u2014|\u2013' "${TEXT[@]}"
+# Step 2: build with the strict warnings set in CMakeLists.txt.
+check_build() {
+  step '2. Build with strict warnings'
+  if [[ ! -f "${BUILD_DIR}/build.ninja" ]]; then
+    cmake --preset "${PRESET}" >/dev/null
+  fi
+  cmake --build "${BUILD_DIR}"
+  record 'build (zero warnings)' "$?"
+}
 
-# Conventional Commits (CONTRIBUTING.md): every commit in the history, checked by the same hook Git runs.
-BAD_COMMITS=0
-while IFS= read -r sha; do
-	if ! git log -1 --format=%B "$sha" | tools/git-hooks/commit-msg /dev/stdin >/dev/null; then
-		echo "  $(git log -1 --format='%h %s' "$sha")"
-		BAD_COMMITS=1
-	fi
-done < <(git rev-list HEAD)
-record "Commits: Conventional Commits format" "$BAD_COMMITS"
+#######################################
+# Step 3: clang-tidy on our C and C++ sources. The OBS build adds a few
+# GCC-only flags that clang-tidy (Clang) does not know; they are removed
+# or silenced here.
+#######################################
+check_clang_tidy() {
+  step '3. Static analysis: clang-tidy'
+  local -a sources
+  mapfile -t sources < <(git ls-files 'src/*.c' 'src/*.cpp')
+  sources+=("${BUILD_DIR}/plugin-support.c")
+  clang-tidy -p "${BUILD_DIR}" --quiet \
+    --removed-arg=-mno-direct-extern-access \
+    --extra-arg=-Wno-unknown-warning-option "${sources[@]}" 2>&1 \
+    | grep -vE 'warnings? generated'
+  record 'clang-tidy (zero warnings)' "${PIPESTATUS[0]}"
+}
 
-# SemVer (docs/releasing.md): buildspec.json holds numbers only; a pre-release suffix lives in the Git tag.
-VERSION=$(python3 -c 'import json; print(json.load(open("buildspec.json"))["version"])')
-if [[ $VERSION =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-	record "Version: buildspec.json is X.Y.Z ($VERSION)" 0
-else
-	echo "buildspec.json version \"$VERSION\" must be X.Y.Z, numbers only (see docs/releasing.md)"
-	record "Version: buildspec.json is X.Y.Z ($VERSION)" 1
-fi
+#######################################
+# Step 4: GCC's static analyzer, in its own build directory so the normal
+# build stays fast. Its findings are errors (-Werror).
+#######################################
+check_analyzer() {
+  step '4. Static analysis: GCC analyzer'
+  if [[ ! -f "${ANALYZER_DIR}/build.ninja" ]]; then
+    cmake --preset "${PRESET}" -B "${ANALYZER_DIR}" \
+      -DCMAKE_C_FLAGS=-fanalyzer >/dev/null
+  fi
+  cmake --build "${ANALYZER_DIR}"
+  record 'gcc -fanalyzer (zero warnings)' "$?"
+}
 
-# ---------------------------------------------------------------------------------------------
-printf '\n%sSummary%s\n' "$BOLD" "$RESET"
-printf '  %s\n' "${SUMMARY[@]}"
-exit "$FAILED"
+#######################################
+# Step 5: our shell scripts follow the Google Shell Style Guide.
+# ShellCheck finds bugs, shfmt checks the layout, awk checks line length.
+# Outputs:
+#   Problems found, with file and line.
+#######################################
+check_shell() {
+  step '5. Shell scripts (Google Shell Style Guide)'
+  if [[ ! -x "${VENV_BIN}/shellcheck" || ! -x "${VENV_BIN}/shfmt" ]]; then
+    err 'ShellCheck or shfmt missing. Install them once with:'
+    err '  .venv/bin/pip install -r tools/requirements-dev.txt'
+    record 'shell scripts (tools not installed)' 1
+    return
+  fi
+  local -a scripts
+  mapfile -t scripts < <(git ls-files 'tools/*.sh' 'tools/git-hooks/*')
+  "${VENV_BIN}/shellcheck" --shell=bash "${scripts[@]}"
+  record 'shell: ShellCheck (zero warnings)' "$?"
+  "${VENV_BIN}/shfmt" --diff "${SHFMT_STYLE[@]}" "${scripts[@]}"
+  record 'shell: layout (shfmt)' "$?"
+  local long_lines
+  long_lines="$(awk -v max="${MAX_SHELL_LINE}" \
+    'length > max { print FILENAME ":" FNR ": " length " characters" }' \
+    "${scripts[@]}")"
+  if [[ -n "${long_lines}" ]]; then
+    echo "${long_lines}"
+    record "shell: lines of ${MAX_SHELL_LINE} characters or less" 1
+  else
+    record "shell: lines of ${MAX_SHELL_LINE} characters or less" 0
+  fi
+}
+
+# Step 6a: rules from docs/coding-rules.md that no tool checks.
+check_code_rules() {
+  local -a code
+  mapfile -t code < <(git ls-files 'src/*.c' 'src/*.cpp' 'src/*.h' \
+    'src/*.hpp' 'src/*.c.in')
+  rule_absent 'P10-1: no goto, setjmp or longjmp' \
+    '\bgoto\b|\bsetjmp\b|\blongjmp\b' "${code[@]}"
+  rule_absent 'P10-8: no token pasting or variadic macros' \
+    '##|__VA_ARGS__' "${code[@]}"
+  # Conditional compilation lives only in src/tsw-compiler.h. The exception
+  # is the "#ifdef __cplusplus" boilerplate that lets C++ include C headers.
+  local -a others
+  mapfile -t others < <(printf '%s\n' "${code[@]}" \
+    | grep -v '^src/tsw-compiler.h$')
+  if grep -nE '^[[:space:]]*#[[:space:]]*(if|ifdef|ifndef|elif)\b' \
+    "${others[@]}" | grep -v '__cplusplus'; then
+    record 'P10-8: conditional compilation only in tsw-compiler.h' 1
+  else
+    record 'P10-8: conditional compilation only in tsw-compiler.h' 0
+  fi
+}
+
+# Step 6b: no em dashes or en dashes in any tracked text file.
+check_text_rules() {
+  local -a text
+  mapfile -t text < <(git ls-files \
+    | grep -vE '^LICENSE$|\.(png|jpg|gif|ico|icns|webp)$')
+  rule_absent 'Style: no em dashes or en dashes in any file' \
+    $'\u2014|\u2013' "${text[@]}"
+}
+
+#######################################
+# Step 6c: every commit in the history follows Conventional Commits,
+# checked by the same hook Git runs before each commit.
+# Outputs:
+#   The commits that do not comply.
+#######################################
+check_commits() {
+  local bad=0
+  local sha
+  while IFS= read -r sha; do
+    if ! git log -1 --format=%B "${sha}" \
+      | tools/git-hooks/commit-msg /dev/stdin >/dev/null 2>&1; then
+      git log -1 --format='  %h %s' "${sha}"
+      bad=1
+    fi
+  done < <(git rev-list HEAD)
+  record 'Commits: Conventional Commits format' "${bad}"
+}
+
+#######################################
+# Step 6d: buildspec.json holds numbers only (docs/releasing.md); a
+# pre-release suffix lives in the Git tag.
+# Outputs:
+#   An explanation on stderr if the version is not valid.
+#######################################
+check_version() {
+  local version
+  version="$(jq -r .version buildspec.json)"
+  if [[ "${version}" =~ ${SEMVER} ]]; then
+    record "Version: buildspec.json is X.Y.Z (${version})" 0
+  else
+    err "buildspec.json version \"${version}\" must be X.Y.Z, numbers only"
+    record "Version: buildspec.json is X.Y.Z (${version})" 1
+  fi
+}
+
+main() {
+  cd "$(git rev-parse --show-toplevel)" || exit 2
+  check_format
+  check_build
+  check_clang_tidy
+  check_analyzer
+  check_shell
+  step '6. Project rules'
+  check_code_rules
+  check_text_rules
+  check_commits
+  check_version
+  printf '\n%sSummary%s\n' "${BOLD}" "${RESET}"
+  printf '  %s\n' "${summary[@]}"
+  exit "${failed}"
+}
+
+main "$@"

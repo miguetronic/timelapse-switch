@@ -18,7 +18,8 @@ Where a rule says "checked by `tools/check.sh`", a machine verifies it on every 
 |---|---|---|
 | Core logic, in C17 | `src/core/`, `src/plugin-*.c` | All rules, fully |
 | Dock and dialogs, in C++17 with Qt | `src/ui/` | All rules, with the C++ adaptations marked "C++" |
-| Tests and tools | `tests/`, `tools/` | Readability, error checking and zero warnings; the rest is relaxed |
+| Tests | `tests/` | Readability, error checking and zero warnings; the rest is relaxed |
+| Shell scripts | `tools/` | [Google Shell Style Guide](https://google.github.io/styleguide/shellguide.html), see B7 |
 
 ---
 
@@ -265,6 +266,28 @@ Formatting is never discussed in review: `clang-format` 19.1.1 (the OBS style: t
 - Widgets are updated only on the UI thread. From other threads, use `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`.
 - Every visible text comes from `obs_module_text("...")` and the files in `data/locale/`; nothing visible is hardcoded.
 - Every interactive widget has an accessible name, for screen readers.
+
+### B7. Shell scripts
+
+Our scripts (`tools/*.sh`, `tools/git-hooks/*`) follow the [Google Shell Style Guide](https://google.github.io/styleguide/shellguide.html). In short:
+
+- **Bash only:** first line `#!/bin/bash`, options with `set` (`set -u`, or `set -euo pipefail` for scripts that must stop at the first error).
+- **Layout:** 2 spaces, no tabs; lines of 80 characters at most; `; then` and `; do` on the same line; a long pipeline is split with `|` at the start of each continuation line.
+- **Comments:** a header saying what the script does and how to run it; a header block for every function that is not both short and obvious (description, globals, arguments, outputs, returns).
+- **Names:** functions and variables in `lower_case`; constants in `UPPER_CASE`, declared at the top with `readonly`; variables inside functions declared `local`, on a separate line when the value comes from a command (`local version` then `version="$(...)"`), so the command's exit status is not lost.
+- **Structure:** a script with functions puts them after the constants and ends with `main "$@"`.
+- **Quoting and expansions:** always `"${var}"` (quoted, with braces), `"$@"` for arguments, arrays for lists, `$(...)` never backticks, `[[ ... ]]` for tests and `(( ... ))` for arithmetic.
+- **Errors:** messages for the user go to stderr (`err "..."`); every command's result is checked.
+
+**Checked by:** `tools/check.sh` step 5: ShellCheck (zero warnings), shfmt with the Google layout (`-i 2 -ci -bn`) and a check for lines over 80 characters. To fix the layout automatically:
+
+```bash
+.venv/bin/shfmt -w -i 2 -ci -bn tools/*.sh tools/git-hooks/*
+```
+
+Two kinds of script are out of scope:
+- The scripts that come with the OBS template (zsh and PowerShell, in `.github/scripts/` and `build-aux/`) keep the template's own style, so they can be updated from upstream.
+- The scripts keep their `.sh` extension, which the guide allows for executables, so their names stay recognizable.
 
 ---
 
