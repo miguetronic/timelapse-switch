@@ -63,6 +63,16 @@ struct tsw_recorder {
 	uint64_t flush_seen_ns;  /* graphics thread only: when that count last grew */
 	volatile long speed;
 	uint64_t start_ns;
+	uint64_t stop_ns;          /* when stop was asked; 0 before */
+	bool chapters_unavailable; /* the format has no chapters; logged once per recording */
+	uint32_t markers;          /* chapter markers added by hand in this recording */
+
+	/* The last recording that ended, or failed to start (tsw_recorder_get_status). UI thread only. */
+	uint32_t outcome;    /* grows by 1 each time */
+	uint32_t error_code; /* its TSW-Exxx number, 0 if saved fine */
+	uint64_t last_recorded_ns;
+	uint64_t last_final_ns;
+	char *last_path; /* owned: replaced at the next outcome, freed in tsw_recorder_destroy */
 };
 
 /* The real-time callbacks (recorder-rt.c); recorder.c hands them to OBS. */

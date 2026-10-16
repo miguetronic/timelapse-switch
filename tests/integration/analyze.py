@@ -18,6 +18,8 @@ probe (sync-probe.c: when OBS delivered each beep and each frame):
                   relative to its frame (REQ-005): what the plugin adds, not what the
                   test media or OBS bring
     silence       timelapse sections are silent (REQ-006)
+    chapters      one chapter per section, where the section starts, named after its speed
+                  (REQ-007; Hybrid MP4 only)
     lost frames   frames lost because the computer could not keep up
 
 Prints one PASS or FAIL line per check; the exit status is the number of failures.
@@ -26,6 +28,7 @@ Needs ffmpeg and ffprobe. Standard library only.
 
 import argparse
 import array
+import json
 import re
 import statistics
 import subprocess
@@ -155,7 +158,7 @@ def check_sync(report: Report, sections: list[dict], numbers: list[int], onsets:
     if not obs_offsets:
         report.check("sync", False, "no sync probe lines in the OBS log (see tests/integration/README.md)")
         return
-    added, per_section, cursor = [], [], 0
+    added, per_section, cursor, unmatched = [], [], 0, 0
     for s in (s for s in sections if s["speed"] == 1):
         section = []
         for onset in (t for t in onsets if s["out_start"] + 0.2 < t < s["out_end"] - 0.2):
@@ -165,9 +168,11 @@ def check_sync(report: Report, sections: list[dict], numbers: list[int], onsets:
             # The same beep in the probe's list: the next one with that frame number (the media loops).
             match = next((k for k in range(cursor, len(obs_offsets))
                           if obs_offsets[k][0] == beep_frame % MEDIA_FRAMES), None)
-            if match is not None:
-                cursor = match
-                section.append(onset - expected - obs_offsets[match][1])
+            if match is None:
+                unmatched += 1
+                continue
+            cursor = match
+            section.append(onset - expected - obs_offsets[match][1])
         if section:
             added += section
             per_section.append((s["out_start"], statistics.median(section)))
@@ -177,9 +182,24 @@ def check_sync(report: Report, sections: list[dict], numbers: list[int], onsets:
     worst = max(added, key=abs)
     obs_own = statistics.median(offset for _, offset in obs_offsets)
     details = ", ".join(f"{m * 1000:+.1f} ms at {t:.0f} s" for t, m in per_section)
-    report.check("sync", abs(worst) <= SYNC_LIMIT_S,
+    report.check("sync", abs(worst) <= SYNC_LIMIT_S and unmatched == 0,
                  f"worst {worst * 1000:+.1f} ms from OBS's own sync (limit {SYNC_LIMIT_S * 1000:.0f}), "
-                 f"{len(added)} beeps; OBS's own: {obs_own * 1000:+.1f} ms; per section {details}")
+                 f"{len(added)} beeps, {unmatched} not in the probe's list; OBS's own: {obs_own * 1000:+.1f} ms; "
+                 f"per section {details}")
+
+
+def check_chapters(report: Report, sections: list[dict], path: str) -> None:
+    """Hybrid MP4 gets a chapter per section, placed within 0.1 s (3 frames) of the section's start."""
+    probe = json.loads(run("ffprobe", "-v", "error", "-show_chapters", "-of", "json", path))
+    chapters = [(float(c["start_time"]), c.get("tags", {}).get("title", "")) for c in probe.get("chapters", [])]
+    problems = []
+    if len(chapters) != len(sections):
+        problems.append(f"{len(chapters)} chapters for {len(sections)} sections")
+    for s, (start, title) in zip(sections, chapters):
+        name = "Real time" if s["speed"] == 1 else f"Timelapse \u00d7{s['speed']}"
+        if abs(start - s["out_start"]) > 0.1 or title != name:
+            problems.append(f"\"{title}\" at {start:.3f} s, expected \"{name}\" at {s['out_start']:.3f} s")
+    report.check("chapters", not problems, "; ".join(problems[:3]) or f"{len(chapters)} chapters, one per section")
 
 
 def check_silence(report: Report, sections: list[dict], samples: array.array) -> None:
@@ -213,6 +233,7 @@ def main() -> int:
     check_rhythm(report, sections, numbers)
     check_sync(report, sections, numbers, beep_onsets(samples), probe_offsets(args.log))
     check_silence(report, sections, samples)
+    check_chapters(report, sections, args.recording)
     report.check("lost frames", lost <= args.allow_lost_frames, f"{lost * 100:.2f}% lost")
     return report.failures
 

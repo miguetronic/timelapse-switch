@@ -23,6 +23,7 @@
 #include <stdint.h>
 
 #include "core/result.h"
+#include "core/status.h"
 #include "tsw-compiler.h"
 
 struct tsw_recorder;
@@ -56,3 +57,12 @@ bool tsw_recorder_is_active(struct tsw_recorder *recorder);
 
 /* tsw_recorder_speed: speed of the current section (1 when idle). Thread: any. */
 uint32_t tsw_recorder_speed(struct tsw_recorder *recorder);
+
+/* tsw_recorder_add_marker: a numbered chapter marker here (Hybrid MP4; UX-054). Thread: UI. */
+void tsw_recorder_add_marker(struct tsw_recorder *recorder);
+
+/*
+ * tsw_recorder_get_status: what the recorder is doing now, and how the last recording ended.
+ * The path in it is borrowed: valid until the next start or stop. Thread: UI.
+ */
+void tsw_recorder_get_status(struct tsw_recorder *recorder, struct tsw_status *status);

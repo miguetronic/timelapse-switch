@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include <obs-frontend-api.h>
+#include <obs-module.h>
 #include <util/config-file.h>
 #include <util/dstr.h>
 #include <util/platform.h>
@@ -271,6 +272,18 @@ static void flush_tick(void *param, float seconds)
 	}
 }
 
+/* How the last recording ended, for the dock (tsw_recorder_get_status). Takes ownership of path. */
+static void record_outcome(struct tsw_recorder *recorder, uint32_t error_code, uint64_t recorded_ns, uint64_t final_ns,
+			   char *path)
+{
+	recorder->outcome++;
+	recorder->error_code = error_code;
+	recorder->last_recorded_ns = recorded_ns;
+	recorder->last_final_ns = final_ns;
+	bfree(recorder->last_path);
+	recorder->last_path = path;
+}
+
 /* UI thread, after the output stopped: report, then release. */
 static void finish(void *param)
 {
@@ -280,13 +293,22 @@ static void finish(void *param)
 	if (!os_atomic_load_bool(&recorder->active))
 		return; /* already finished: tsw_recorder_close waited for it */
 	const char *error = obs_output_get_last_error(recorder->output);
-	if (error != NULL && *error != '\0')
+	const bool failed = error != NULL && *error != '\0';
+	if (failed)
 		tsw_log(LOG_ERROR, "TSW-E103 error | the file writer reported a problem | cause=\"%s\"", error);
 	tsw_log(LOG_INFO, "recording saved: %s", recorder->path);
 	tsw_fault_log_new();
 	obs_remove_tick_callback(flush_tick, recorder);
 	os_atomic_set_bool(&recorder->flushing, false);
+
+	/* What was saved: up to the stop, or up to now if the file writer stopped by itself. */
+	const uint64_t end_ns = recorder->stop_ns != 0 ? recorder->stop_ns : os_gettime_ns();
+	const size_t sections = (size_t)os_atomic_load_long(&recorder->sections);
+	const uint64_t final_ns = sections > 0 ? tsw_timeline_output_ns(&recorder->timeline, sections, end_ns) : 0;
+	char *path = recorder->path;
+	recorder->path = NULL;
 	release_media(recorder);
+	record_outcome(recorder, failed ? 103 : 0, end_ns - recorder->start_ns, final_ns, path);
 }
 
 /* Output thread, when the file writer stopped. */
@@ -317,11 +339,46 @@ static enum tsw_result create_output(struct tsw_recorder *recorder)
 	return TSW_OK;
 }
 
+/* Hybrid MP4 only: a chapter in the UI language (REQ-007, UX-044, UX-054); "%1" in its name becomes number.
+ * OBS places it on the first frame drawn after this call. */
+static void add_chapter(struct tsw_recorder *recorder, const char *name_key, uint32_t number)
+{
+	struct dstr name = {0};
+	struct dstr digits = {0};
+	dstr_copy(&name, obs_module_text(name_key));
+	dstr_printf(&digits, "%u", number);
+	dstr_replace(&name, "%1", digits.array);
+	dstr_free(&digits);
+	calldata_t data;
+	calldata_init(&data);
+	calldata_set_string(&data, "chapter_name", name.array);
+	const bool added = proc_handler_call(obs_output_get_proc_handler(recorder->output), "add_chapter", &data);
+	calldata_free(&data);
+	dstr_free(&name);
+	if (!added && !recorder->chapters_unavailable) {
+		recorder->chapters_unavailable = true;
+		tsw_log(LOG_INFO, "TSW-E006 info | chapters are not available in this format | format=%s",
+			profile_format());
+	}
+}
+
+/* The TSW-Exxx number shown for a failed start. */
+static uint32_t start_error_number(enum tsw_result result)
+{
+	if (result == TSW_E_START_FAILED)
+		return 1;
+	if (result == TSW_E_ENCODER_UNAVAILABLE)
+		return 2;
+	return 901;
+}
+
 /* First section of the timeline, gates at zero, counters at zero. */
 static enum tsw_result reset_timeline(struct tsw_recorder *recorder, const struct obs_video_info *ovi,
 				      const struct obs_audio_info *oai, uint32_t speed)
 {
 	recorder->start_ns = os_gettime_ns();
+	recorder->stop_ns = 0;
+	recorder->chapters_unavailable = false;
 	if (tsw_timeline_switch(&recorder->timeline, 0, recorder->start_ns, speed) != TSW_OK)
 		return TSW_E_INVALID;
 	os_atomic_set_long(&recorder->sections, 1);
@@ -367,8 +424,11 @@ enum tsw_result tsw_recorder_start(struct tsw_recorder *recorder, uint32_t speed
 		result = reset_timeline(recorder, &ovi, &oai, speed);
 	if (result != TSW_OK) {
 		release_media(recorder);
+		record_outcome(recorder, start_error_number(result), 0, 0, NULL);
 		return result;
 	}
+	recorder->markers = 0;
+	add_chapter(recorder, speed > 1 ? "Chapter.Timelapse" : "Chapter.RealTime", speed); /* before any frame: 0:00 */
 	struct video_scale_info frames = {ovi.output_format, ovi.output_width, ovi.output_height, ovi.range,
 					  ovi.colorspace};
 	obs_add_raw_video_callback(&frames, tsw_recorder_receive_frame, recorder);
@@ -386,6 +446,7 @@ void tsw_recorder_stop(struct tsw_recorder *recorder)
 	if (!os_atomic_load_bool(&recorder->capturing) || recorder->stopping)
 		return;
 	recorder->stopping = true;
+	recorder->stop_ns = os_gettime_ns();
 
 	/* 1. Summary of what came in and went out. */
 	const double real_s = (double)(os_gettime_ns() - recorder->start_ns) / (double)SECOND_NS;
@@ -432,6 +493,7 @@ enum tsw_result tsw_recorder_set_speed(struct tsw_recorder *recorder, uint32_t s
 			os_atomic_set_long(&recorder->speed, (long)speed);
 			tsw_log(LOG_INFO, "switch: speed x%u at %.6f s", speed,
 				(double)(now - recorder->start_ns) / (double)SECOND_NS);
+			add_chapter(recorder, speed > 1 ? "Chapter.Timelapse" : "Chapter.RealTime", speed);
 		} else if (result == TSW_E_TIMELINE_FULL) {
 			tsw_log(LOG_WARNING, "TSW-E105 warning | too many speed switches in one recording | max=%d",
 				TSW_TIMELINE_CAPACITY);
@@ -451,6 +513,48 @@ uint32_t tsw_recorder_speed(struct tsw_recorder *recorder)
 	if (!TSW_CHECK(recorder != NULL))
 		return 1;
 	return (uint32_t)os_atomic_load_long(&recorder->speed);
+}
+
+void tsw_recorder_add_marker(struct tsw_recorder *recorder)
+{
+	if (!TSW_CHECK(recorder != NULL))
+		return;
+	if (!os_atomic_load_bool(&recorder->capturing) || recorder->stopping)
+		return;
+	recorder->markers++;
+	add_chapter(recorder, "Chapter.Marker", recorder->markers);
+	tsw_log(LOG_INFO, "marker %u at %.6f s", recorder->markers,
+		(double)(os_gettime_ns() - recorder->start_ns) / (double)SECOND_NS);
+}
+
+void tsw_recorder_get_status(struct tsw_recorder *recorder, struct tsw_status *status)
+{
+	if (!TSW_CHECK(recorder != NULL && status != NULL))
+		return;
+	memset(status, 0, sizeof(*status));
+	status->outcome = recorder->outcome;
+	status->error_code = recorder->error_code;
+	status->last_recorded_ns = recorder->last_recorded_ns;
+	status->last_final_ns = recorder->last_final_ns;
+	status->path = recorder->path != NULL ? recorder->path
+					      : (recorder->last_path != NULL ? recorder->last_path : "");
+	status->speed = 1;
+	if (!os_atomic_load_bool(&recorder->active))
+		return; /* idle */
+
+	/* Recording, or saving: then the counters stay where stop was pressed. */
+	const bool saving = recorder->stopping || !os_atomic_load_bool(&recorder->capturing);
+	status->phase = saving ? TSW_PHASE_SAVING : TSW_PHASE_RECORDING;
+	status->speed = (uint32_t)os_atomic_load_long(&recorder->speed);
+	const size_t sections = (size_t)os_atomic_load_long(&recorder->sections);
+	if (sections == 0)
+		return;
+	const uint64_t now = (saving && recorder->stop_ns != 0) ? recorder->stop_ns : os_gettime_ns();
+	const struct tsw_segment *section = &recorder->timeline.segments[sections - 1];
+	status->recorded_ns = now > recorder->start_ns ? now - recorder->start_ns : 0;
+	status->final_ns = tsw_timeline_output_ns(&recorder->timeline, sections, now);
+	status->section_recorded_ns = now > section->start_ns ? now - section->start_ns : 0;
+	status->section_final_ns = status->final_ns > section->output_ns ? status->final_ns - section->output_ns : 0;
 }
 
 struct tsw_recorder *tsw_recorder_create(void)
@@ -485,6 +589,7 @@ void tsw_recorder_destroy(struct tsw_recorder *recorder)
 		return;
 	tsw_recorder_close(recorder);
 	live_recorder = NULL;
+	bfree(recorder->last_path);
 	os_event_destroy(recorder->saved);
 	pthread_mutex_destroy(&recorder->switch_mutex);
 	bfree(recorder);
