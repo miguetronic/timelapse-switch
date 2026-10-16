@@ -16,3 +16,8 @@ if(UNIX AND NOT APPLE)
 endif()
 tsw_strict_warnings(test-sync)
 add_test(NAME sync COMMAND test-sync)
+
+add_executable(test-audio-ring test-audio-ring.c test-main.c)
+target_link_libraries(test-audio-ring PRIVATE tsw-core)
+tsw_strict_warnings(test-audio-ring)
+add_test(NAME audio-ring COMMAND test-audio-ring)
