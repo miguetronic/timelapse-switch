@@ -514,7 +514,7 @@ Rules behind the table:
 - **Session summary** after Stop: recorded versus final length, "You skipped 52:35 of waiting", a speed map strip, the file name, and buttons for Open folder, Play and Copy chapters.
 - **Copy chapters** produces YouTube description timestamps on the final timeline. YouTube needs the first stamp at 00:00, at least three stamps and chapters of 10 seconds or more [S67]; if the session does not meet that, the dialog explains why and offers a merged version.
 - **One warm line per session, never in errors.** "Nice session!" appears once in the summary and nowhere else.
-- **An icon worth recognizing:** a record dot with fast-forward chevrons.
+- **An icon worth recognizing:** the plugin's symbol, a flat band with a folded stretch (one recording, one compressed stretch), shown in the About dialog and the welcome card (3.18).
 
 ```
 +-- Timelapse Switch ------------------ [?][*] +
@@ -569,6 +569,12 @@ Rules behind the table:
 | UX-131 | While paused, the user MUST be able to choose how to resume on one rail, "Resume in", that takes the speed chips' place and height: Real time, x2, x4, x8 and x16, the choice marked as armed (outlined and bold). Real time means resume in real time; a speed means resume in timelapse at that speed. The mode and speed hotkeys choose too. None of them resumes by itself. The choice starts from the mode and speed before the pause and lasts until that pause ends. At 300 and 260 px the five segments MUST show their words in both languages; where "Real time" cannot fit on the rail's one row, its play glyph stands for it, with the words in its tooltip and accessible name. | [CONTROL] |
 | UX-132 | While paused, RECORDED and FINAL VIDEO MUST stand still (paused time never counts in either), and the status line MUST show how long the pause has lasted ("Paused for 0:01:12"). | [TASK] [SELF] |
 | UX-133 | Pause and resume MUST act at once and as often as the user wants; only a second press within 400 ms of the previous pause or resume is taken as a double press and ignored (UX-046). Stopping while paused MUST save the file like any other stop. | [CONTROL] [ROBUST] |
+| UX-134 | Health MUST be silent while all is well. When an issue appears, zone F MUST show the most urgent one, in this order: disk low (TSW-E102, with the minutes left), frames lost (TSW-E201, with the count), encoder falling behind (TSW-E203); with an icon, words and the code, never color alone. It goes away when the condition ends, except lost frames, which stay with their count until the recording ends (3.17). | [SELF] [ROBUST] |
+| UX-135 | The dock MUST offer a "Details" section, closed by default and never opened by itself, that remembers whether it was open. While recording or paused it shows the values of 3.17; after a recording, the summary card shows waiting skipped and the speed map. | [TASK] [CONTROL] |
+| UX-136 | The speed map MUST be a thin strip of the session's recorded time cut into equal slices (48): real time plain, timelapse hatched more densely the faster it is, paused as a gap; never color alone; each slice has the speed that covers most of it (`tsw_timeline_map`). | [SELF] |
+| UX-137 | Monitoring MUST NOT cost anything measurable: values come from the recorder's counters and the timeline, and the disk is asked at most once per second. The dock MUST NOT show the computer's CPU, GPU or RAM (OBS's Stats dock does). | [ROBUST] |
+| UX-138 | The dock MUST NOT carry a permanent footer or link. "Timelapse Switch by Miguetronic", with the symbol, version and links (documentation, miguetronic.com, GitHub, license) and the non-affiliation line, MUST be in an About dialog reachable from the dock's menu, next to Help; and in the welcome card. Links open only on an explicit click (3.18). | [CONTROL] [EXPECT] |
+| UX-139 | The module MUST give OBS its name ("Timelapse Switch"), a translated description and its author ("Miguetronic"), so OBS's list of plugins shows them. | [EXPECT] |
 
 ### 3.15 Requirements: confusion guards and onboarding
 
@@ -616,6 +622,36 @@ Rules behind the table:
 
 ---
 
+### 3.17 Monitoring: silent health, details on demand
+
+The dock is used mid-recording, with busy hands, so every number competes for attention. Monitoring follows one rule: **silence when all is well, one clear line when something needs attention, everything else only on request.**
+
+```
+  always             RECORDED, FINAL VIDEO, this stretch          (zones A and B, as today)
+  only when needed   one health line in zone F, the most urgent:  disk low (TSW-E102)
+                                                                   frames lost (TSW-E201)
+                                                                   encoder falling behind (TSW-E203)
+  on request         a "Details" section, closed by default:
+                       waiting skipped (recorded minus final), compression (recorded / final)
+                       file size and MB per minute, free disk and time left at that rate
+                       time in real time, in timelapse and paused; switches, pauses, chapters
+                       encoder backlog now (for example 1 of 16 frames)
+                       the speed map of the session so far
+```
+
+What it never shows: the computer's CPU, GPU or RAM. OBS's Stats dock already does, and repeating it adds noise and cost. Every value comes from counters the recorder already keeps, and the disk is asked at most once per second, so monitoring costs nothing measurable (`docs/performance.md`).
+
+### 3.18 Who made it: attribution without clutter
+
+"Timelapse Switch by Miguetronic" is shown where people look for it, never in the way of a recording:
+
+- the **About** dialog: the symbol, the version, "by Miguetronic", links to the documentation site, miguetronic.com, the GitHub repository and the license, and "Not affiliated with or endorsed by the OBS Project";
+- the dock's **menu** (a small menu button in the dock's top corner): Help, which opens the documentation site, and About;
+- the **welcome card** of the first run;
+- OBS's own list of plugins: name, description and author come from the module (`obs_module_name`, `obs_module_description`, `OBS_MODULE_AUTHOR`).
+
+The dock itself carries no permanent footer or link. A stray click on a link mid-recording would open a browser and take the focus away from OBS, and on Wayland OBS hotkeys only work while OBS has the focus (3.11).
+
 ## 4. Error and feedback UX
 
 ### 4.1 Three levels, never color alone
@@ -662,6 +698,7 @@ Codes share one namespace, `TSW-Exxx`, for every condition users might search fo
 | TSW-E104 | Info | OBS closed during a TS recording; the file was saved (shown at next start). |
 | TSW-E201 | Warning | Performance: frames lost because the computer could not keep up. |
 | TSW-E202 | Warning | Sync: audio and video drifted apart (corrected, or not correctable). |
+| TSW-E203 | Warning | Performance: the encoder is falling behind (half its waiting room is full); frames may soon be lost. |
 | TSW-E301 | Info | Coexistence: OBS's own recording started; it is at normal speed. |
 | TSW-E302 | Warning | Coexistence: both recordings are running. |
 | TSW-E303 | Info | Platform: Wayland, hotkeys only work while OBS is focused. |
