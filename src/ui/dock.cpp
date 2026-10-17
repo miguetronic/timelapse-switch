@@ -617,10 +617,20 @@ void TswDock::updateNarrow(int viewportWidth)
 	updateCardRows();
 }
 
+/*
+ * The scroll area asks the dock's height for the viewport's width, but some themes then give the
+ * dock less width than that (Classic: 8 px less, from the scroll area's style-sheet frame), and a
+ * narrower dock may need more height (columns that stack, labels that wrap). So the dock holds its
+ * minimum height at what its real width needs; the scroll area then scrolls instead of squeezing
+ * (UX-121: nothing cut).
+ */
 void TswDock::resizeEvent(QResizeEvent *event)
 {
 	QFrame::resizeEvent(event);
 	updateCardRows();
+	const int needed = heightForWidth(width());
+	if (needed > 0 && minimumHeight() != needed)
+		setMinimumHeight(needed);
 }
 
 /*

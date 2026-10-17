@@ -199,7 +199,11 @@ void checkHeights(const TswDock &dock, const QString &label)
 		if (widget->height() < widget->heightForWidth(widget->width())) {
 			const auto *text = qobject_cast<const QLabel *>(widget);
 			fail(label + ": text cut in " + widget->metaObject()->className() + " \"" +
-			     (text != nullptr ? text->text() : widget->accessibleName()) + "\"");
+			     (text != nullptr ? text->text() : widget->accessibleName()) +
+			     QString("\" (%1 px wide, %2 px tall, needs %3 px)")
+				     .arg(widget->width())
+				     .arg(widget->height())
+				     .arg(widget->heightForWidth(widget->width())));
 		}
 	}
 	const auto *status = dock.findChild<QWidget *>("tswStatus");
