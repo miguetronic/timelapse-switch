@@ -28,6 +28,8 @@ Build first (`tools/check.sh`, or `cmake --build build_x86_64`), with the `.venv
 tests/integration/run.sh                                     1080p, about 100 s, HEVC on VAAPI
 tests/integration/run.sh --encoder obs_x264                  the same with x264
 tests/integration/run.sh --scenario real                     25 s in real time, no switch
+tests/integration/run.sh --scenario pause                    pauses in real time and in timelapse
+tests/integration/run.sh --scenario pauses                   40 quick pauses, ends with Stop while paused
 tests/integration/run.sh --resolution 2160 --scenario long   4K, about 300 s: a load test
 ```
 
@@ -44,6 +46,8 @@ tests/integration/run.sh --resolution 2160 --scenario long   4K, about 300 s: a 
 | `standard` | about 100 s | x4, x8, 20 quick x2 switches one second apart, x16, real time in between; ends with 4 s at x4 |
 | `long` | about 300 s | the standard pattern three times; ends with 4 s at x4 |
 | `real` | 25 s | real time only |
+| `pause` | 42 s | a pause in real time and one in timelapse, each resumed at the speed it had |
+| `pauses` | about 54 s | 40 quick pauses (0.6 s paused, 0.6 s recording), each choosing while paused how to resume; ends with Stop while paused |
 
 Ending in timelapse matters: when you stop, the encoder still holds frames (x264 about 40), and the plugin must keep it moving until every one of them is in the file.
 
@@ -56,6 +60,7 @@ Ending in timelapse matters: when you stop, the encoder still holds frames (x264
 | rhythm | in each section the frame number advances by the section's speed per frame | |
 | sync | in every real-time section, each beep sits within 30 ms of where OBS itself had it, relative to its frame | REQ-005 allows 27.4 ms (half an audio block plus half a frame); the rest is measuring margin |
 | silence | timelapse sections are silent | REQ-006 |
+| pause | across each pause the picture jumps by exactly the paused time; after a pause that lasts until Stop, nothing | only scenarios with pauses run it; the jump is looked for within 0.2 s of where the log places the pause, with a margin of one step of each neighbouring section plus 3 frames |
 | lost frames | no frame was lost | |
 | feed | the plugin's summary line says how many frames, at most, waited in its feed for the encoder, between 1 and the feed's size | the number itself is information for `docs/performance.md`, section 9; only its absence fails |
 | memory leaks | OBS reports "Number of memory leaks: 0" when it closes | rule B2 |

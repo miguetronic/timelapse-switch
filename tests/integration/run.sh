@@ -8,7 +8,7 @@
 # checked (tests/integration/README.md).
 #
 #   tests/integration/run.sh [--resolution 1080|2160]
-#                            [--scenario standard|long|real]
+#                            [--scenario standard|long|real|pause|pauses]
 #                            [--encoder <OBS encoder id>] [--keep]
 #
 # Linux only. It starts a separate OBS with its own temporary configuration

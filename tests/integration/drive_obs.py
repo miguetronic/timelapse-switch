@@ -14,6 +14,11 @@ Scenarios (seconds from the start of the recording):
     standard  about 100 s: x4, x8, 20 quick x2 switches, x16, real time in between.
     long      about 300 s: the standard pattern three times (load test, 4K).
     real      25 s in real time, no switch.
+    pause     42 s: pauses in real time and in timelapse, each resumed at the speed it had
+              (REQ-019).
+    pauses    about 54 s: 40 quick pauses (0.6 s paused, 0.6 s recording), each choosing
+              while paused how to resume (real time, x2, x4, x8); ends with Stop while
+              paused (REQ-019: many quick pauses never freeze OBS nor damage the file).
 Standard and long end with 4 s at x4, so stopping is also tested in timelapse (the
 encoder still holds frames that must reach the file).
 """
@@ -89,9 +94,28 @@ def connect(port: int, wait_s: float) -> Obs:
             time.sleep(0.5)
 
 
-def scenario(name: str) -> tuple[list, int]:
+# Pause and resume in real time, then in timelapse x4; then back to real time.
+PAUSES = [(8, "Pause"), (14, "Pause"), (20, "Speed4"), (26, "Pause"), (31, "Pause"), (36, "RealTime")]
+
+
+def quick_pauses() -> tuple[list, float]:
+    """40 pause cycles: pause, choose how to resume, resume, record 0.6 s; then pause and stop."""
+    choices = ["Speed4", "RealTime", "Speed8", "RealTime", "Speed2"]
+    schedule, t = [], 2.0
+    for k in range(40):
+        schedule += [(t, "Pause"), (t + 0.3, choices[k % len(choices)]), (t + 0.6, "Pause")]
+        t += 1.2
+    schedule.append((t, "Pause"))
+    return schedule, t + 2.0
+
+
+def scenario(name: str) -> tuple[list, float]:
     if name == "real":
         return [], 25
+    if name == "pause":
+        return PAUSES, 42
+    if name == "pauses":
+        return quick_pauses()
     passes = 1 if name == "standard" else 3
     schedule = [(t + p * STANDARD_LENGTH, key) for p in range(passes) for t, key in STANDARD]
     length_s = passes * STANDARD_LENGTH
@@ -114,12 +138,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--log", required=True, help="OBS log file of this run")
-    parser.add_argument("--scenario", choices=("standard", "long", "real"), default="standard")
+    parser.add_argument("--scenario", choices=("standard", "long", "real", "pause", "pauses"),
+                        default="standard")
     args = parser.parse_args()
 
     obs = connect(args.port, wait_s=60)
     names = {hotkey for hotkey in obs.request("GetHotkeyList")["hotkeys"] if hotkey.startswith(HOTKEY)}
-    needed = {HOTKEY + key for key in ("Record", "Stop", "RealTime", "Speed2", "Speed4", "Speed8", "Speed16")}
+    needed = {HOTKEY + key for key in ("Record", "Stop", "RealTime", "Speed2", "Speed4", "Speed8", "Speed16", "Pause")}
     if not needed <= names:
         print(f"FAIL hotkeys: missing {sorted(needed - names)}")
         return 1
