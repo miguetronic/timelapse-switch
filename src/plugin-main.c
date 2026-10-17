@@ -26,6 +26,18 @@
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
+OBS_MODULE_AUTHOR("Miguetronic")
+
+/* How OBS lists the plugin (its plugin list and log). */
+const char *obs_module_name(void)
+{
+	return "Timelapse Switch";
+}
+
+const char *obs_module_description(void)
+{
+	return obs_module_text("Module.Description");
+}
 
 enum {
 	DEFAULT_TIMELAPSE_SPEED = 4,

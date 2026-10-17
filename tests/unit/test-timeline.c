@@ -192,6 +192,77 @@ static void pause_needs_room_for_its_resume(void)
 	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, TSW_TIMELINE_CAPACITY - 1, 2 * SECOND, 1), TSW_OK);
 }
 
+/* Break caught: the details telling a wrong split of the session (a pause counted as recording, a
+ * resume at the same speed counted as a switch). */
+static void totals_split_real_time_timelapse_and_pauses(void)
+{
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 0, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 1, 10 * SECOND, 4), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, 2, 30 * SECOND), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 3, 40 * SECOND, 4), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 4, 44 * SECOND, 1), TSW_OK);
+	struct tsw_timeline_totals totals;
+	tsw_timeline_get_totals(&timeline, 5, 50 * SECOND, &totals);
+	TSW_EXPECT_EQ(totals.real_time_ns, 16 * SECOND);
+	TSW_EXPECT_EQ(totals.timelapse_ns, 24 * SECOND);
+	TSW_EXPECT_EQ(totals.paused_ns, 10 * SECOND);
+	TSW_EXPECT_EQ(totals.switches, 2);
+	TSW_EXPECT_EQ(totals.pauses, 1);
+}
+
+/* Break caught: totals counting time after now, or before the start. */
+static void totals_stop_at_the_time_asked(void)
+{
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 5 * SECOND, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 1, 15 * SECOND, 8), TSW_OK);
+	struct tsw_timeline_totals totals;
+	tsw_timeline_get_totals(&timeline, 2, 12 * SECOND, &totals);
+	TSW_EXPECT_EQ(totals.real_time_ns, 7 * SECOND);
+	TSW_EXPECT_EQ(totals.timelapse_ns, 0);
+	tsw_timeline_get_totals(&timeline, 2, 1 * SECOND, &totals);
+	TSW_EXPECT_EQ(totals.real_time_ns + totals.timelapse_ns + totals.paused_ns, 0);
+}
+
+/* Break caught: the speed map showing sections in the wrong place, or missing a pause. */
+static void map_shows_each_slice_at_its_speed(void)
+{
+	uint8_t map[TSW_MAP_BUCKETS];
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 0, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 1, 12 * SECOND, 4), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, 2, 24 * SECOND), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 3, 36 * SECOND, 1), TSW_OK);
+	tsw_timeline_map(&timeline, 4, 48 * SECOND, map); /* 48 slices of 1 s */
+	TSW_EXPECT_EQ(map[0], 1);
+	TSW_EXPECT_EQ(map[11], 1);
+	TSW_EXPECT_EQ(map[12], 4);
+	TSW_EXPECT_EQ(map[23], 4);
+	TSW_EXPECT_EQ(map[24], TSW_SPEED_PAUSED);
+	TSW_EXPECT_EQ(map[35], TSW_SPEED_PAUSED);
+	TSW_EXPECT_EQ(map[36], 1);
+	TSW_EXPECT_EQ(map[47], 1);
+}
+
+/* Break caught: a slice shared by two sections taking the smaller part. */
+static void map_slice_takes_the_speed_that_covers_most_of_it(void)
+{
+	uint8_t map[TSW_MAP_BUCKETS];
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 0, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 1, 10300 * (SECOND / 1000), 8), TSW_OK);
+	tsw_timeline_map(&timeline, 2, 48 * SECOND, map);
+	TSW_EXPECT_EQ(map[9], 1);
+	TSW_EXPECT_EQ(map[10], 8); /* 10 s to 11 s: 0.3 s in real time, 0.7 s at x8 */
+}
+
+/* Break caught: an empty map (garbage) right at the start. */
+static void map_before_any_time_shows_the_first_speed(void)
+{
+	uint8_t map[TSW_MAP_BUCKETS];
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 5 * SECOND, 4), TSW_OK);
+	tsw_timeline_map(&timeline, 1, 5 * SECOND, map);
+	TSW_EXPECT_EQ(map[0], 4);
+	TSW_EXPECT_EQ(map[TSW_MAP_BUCKETS - 1], 4);
+}
+
 int main(void)
 {
 	real_time_follows_the_clock();
@@ -213,5 +284,10 @@ int main(void)
 	recorded_time_leaves_out_the_pauses();
 	pause_cannot_start_a_recording_nor_follow_a_pause();
 	pause_needs_room_for_its_resume();
+	totals_split_real_time_timelapse_and_pauses();
+	totals_stop_at_the_time_asked();
+	map_shows_each_slice_at_its_speed();
+	map_slice_takes_the_speed_that_covers_most_of_it();
+	map_before_any_time_shows_the_first_speed();
 	return tsw_test_failures;
 }

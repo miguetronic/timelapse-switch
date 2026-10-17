@@ -78,6 +78,7 @@ add_library(
   src/core/color.c
   src/core/dock-view.c
   src/core/gate.c
+  src/core/health.c
   src/core/session.c
   src/core/timeline.c
 )

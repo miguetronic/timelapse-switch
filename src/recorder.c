@@ -391,6 +391,10 @@ static enum tsw_result reset_timeline(struct tsw_recorder *recorder, const struc
 	recorder->frames_in = recorder->frames_sent = recorder->frames_lost = 0;
 	recorder->blocks_sent = recorder->ring_full = recorder->ring_empty = 0;
 	recorder->feed_peak = 0;
+	tsw_disk_meter_reset(&recorder->disk);
+	recorder->disk_checked_ns = 0;
+	recorder->disk_free_bytes = 0;
+	recorder->file_bytes = 0;
 	recorder->first_frame_ns = recorder->first_block_ns = recorder->frame_delay_ns = recorder->block_delay_ns = 0;
 	return TSW_OK;
 }
@@ -442,6 +446,24 @@ enum tsw_result tsw_recorder_start(struct tsw_recorder *recorder, uint32_t speed
 	return TSW_OK;
 }
 
+/* Where the time of the recording went, up to the stop (the dock shows the same; tests compare it). */
+static void log_totals(struct tsw_recorder *recorder)
+{
+	const size_t sections = (size_t)os_atomic_load_long(&recorder->sections);
+	if (sections == 0)
+		return;
+	struct tsw_timeline_totals totals;
+	tsw_timeline_get_totals(&recorder->timeline, sections, recorder->stop_ns, &totals);
+	const uint64_t final_ns = tsw_timeline_output_ns(&recorder->timeline, sections, recorder->stop_ns);
+	const uint64_t recorded_ns = totals.real_time_ns + totals.timelapse_ns;
+	tsw_log(LOG_INFO,
+		"totals: real time %.3f s, timelapse %.3f s, paused %.3f s | %u switches, %u pauses | final %.3f s, "
+		"waiting skipped %.3f s",
+		(double)totals.real_time_ns / 1e9, (double)totals.timelapse_ns / 1e9, (double)totals.paused_ns / 1e9,
+		totals.switches, totals.pauses, (double)final_ns / 1e9,
+		(double)(recorded_ns > final_ns ? recorded_ns - final_ns : 0) / 1e9);
+}
+
 /* A stop while paused resumes first, at the very moment of the stop and at the speed before the pause:
  * emptying the encoder needs frames AND audio flowing, because OBS's file writer interleaves them, and
  * with the audio held back by the pause it would wait for ever and never finish the file (found by the
@@ -486,6 +508,7 @@ void tsw_recorder_stop(struct tsw_recorder *recorder)
 		((double)recorder->first_frame_ns - (double)recorder->start_ns) / 1e6,
 		((double)recorder->first_block_ns - (double)recorder->start_ns) / 1e6,
 		(double)recorder->frame_delay_ns / 1e6, (double)recorder->block_delay_ns / 1e6);
+	log_totals(recorder);
 
 	/* 2. Flush, then stop. Encoders hold a few frames (x264 about 40) and hand them over only as new
 	 *    frames arrive, so frames keep flowing (one copy each) until the file writer has every frame sent
@@ -605,6 +628,51 @@ void tsw_recorder_add_marker(struct tsw_recorder *recorder)
 		(double)(os_gettime_ns() - recorder->start_ns) / (double)SECOND_NS);
 }
 
+/* The file's size and the free space where it is written, at most once per second: the dock asks ten times
+ * per second, and the disk does not change that fast. UI thread. */
+static void sample_disk(struct tsw_recorder *recorder, uint64_t now)
+{
+	if (recorder->path == NULL || now - recorder->disk_checked_ns < SECOND_NS)
+		return;
+	recorder->disk_checked_ns = now;
+	const int64_t size = os_get_file_size(recorder->path);
+	if (size >= 0) {
+		recorder->file_bytes = (uint64_t)size;
+		tsw_disk_meter_add(&recorder->disk, now, recorder->file_bytes);
+	}
+	struct dstr folder = {0};
+	dstr_copy(&folder, recorder->path);
+	const char *slash = strrchr(folder.array, '/');
+	const char *backslash = strrchr(folder.array, '\\');
+	const char *cut = (backslash != NULL && (slash == NULL || backslash > slash)) ? backslash : slash;
+	if (cut != NULL) {
+		dstr_resize(&folder, (size_t)(cut - folder.array));
+		recorder->disk_free_bytes = os_get_free_disk_space(folder.array);
+	}
+	dstr_free(&folder);
+}
+
+/* What the dock's details and health need (ux-spec 3.17), from the timeline and the counters. UI thread. */
+static void fill_monitoring(struct tsw_recorder *recorder, struct tsw_status *status, size_t sections, uint64_t now,
+			    bool saving)
+{
+	tsw_timeline_get_totals(&recorder->timeline, sections, now, &status->totals);
+	tsw_timeline_map(&recorder->timeline, sections, now, status->map);
+	status->frames_lost = (uint64_t)os_atomic_load_long(&recorder->frames_lost);
+	status->feed_size = VIDEO_CACHE_FRAMES;
+	if (!saving && recorder->video != NULL) {
+		const long waiting = os_atomic_load_long(&recorder->frames_sent) +
+				     os_atomic_load_long(&recorder->frames_lost) -
+				     (long)video_output_get_total_frames(recorder->video);
+		status->feed_waiting = waiting > 0 ? (uint32_t)waiting : 0;
+	}
+	if (!saving)
+		sample_disk(recorder, now);
+	status->file_bytes = recorder->file_bytes;
+	status->disk_free_bytes = recorder->disk_free_bytes;
+	status->bytes_per_second = tsw_disk_meter_rate(&recorder->disk);
+}
+
 void tsw_recorder_get_status(struct tsw_recorder *recorder, struct tsw_status *status)
 {
 	if (!TSW_CHECK(recorder != NULL && status != NULL))
@@ -634,6 +702,7 @@ void tsw_recorder_get_status(struct tsw_recorder *recorder, struct tsw_status *s
 	status->final_ns = tsw_timeline_output_ns(&recorder->timeline, sections, now);
 	status->section_recorded_ns = now > section->start_ns ? now - section->start_ns : 0;
 	status->section_final_ns = status->final_ns > section->output_ns ? status->final_ns - section->output_ns : 0;
+	fill_monitoring(recorder, status, sections, now, saving);
 }
 
 struct tsw_recorder *tsw_recorder_create(void)

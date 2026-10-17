@@ -13,6 +13,8 @@
 
 #include <stdint.h>
 
+#include "core/timeline.h"
+
 enum tsw_phase {
 	TSW_PHASE_IDLE,      /* no recording (also after one ended) */
 	TSW_PHASE_RECORDING, /* frames and audio are recorded */
@@ -35,4 +37,14 @@ struct tsw_status {
 	uint32_t error_code;       /* 0 = saved fine; otherwise the number of its TSW-Exxx code */
 	uint64_t last_recorded_ns; /* its recorded time and final length */
 	uint64_t last_final_ns;
+
+	/* Monitoring while recording, paused or saving (docs/design/ux-spec.md, 3.17); zero when idle. */
+	struct tsw_timeline_totals totals; /* where the time went so far */
+	uint8_t map[TSW_MAP_BUCKETS];      /* the speed map of the recording so far */
+	uint64_t frames_lost;              /* frames lost because the encoder could not keep up */
+	uint32_t feed_waiting;             /* frames waiting for the encoder now */
+	uint32_t feed_size;                /* frames the feed can hold */
+	uint64_t file_bytes;               /* size of the file so far; 0 = unknown */
+	uint64_t disk_free_bytes;          /* free space where it is written; 0 = unknown */
+	uint64_t bytes_per_second;         /* how fast the file grows; 0 = unknown or not growing */
 };

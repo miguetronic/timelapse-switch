@@ -36,3 +36,8 @@ add_executable(test-color test-color.c test-main.c)
 target_link_libraries(test-color PRIVATE tsw-core)
 tsw_strict_warnings(test-color)
 add_test(NAME color COMMAND test-color)
+
+add_executable(test-health test-health.c test-main.c)
+target_link_libraries(test-health PRIVATE tsw-core)
+tsw_strict_warnings(test-health)
+add_test(NAME health COMMAND test-health)

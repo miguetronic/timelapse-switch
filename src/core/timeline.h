@@ -36,6 +36,7 @@ enum {
 	TSW_SPEED_PAUSED = 0,         /* the speed of a paused section: the final video stands still */
 	TSW_MAX_SPEED = 16,           /* fastest timelapse: x16 (REQ-002) */
 	TSW_TIMELINE_CAPACITY = 4096, /* speed switches per recording; far beyond any real use */
+	TSW_MAP_BUCKETS = 48,         /* slices of the speed map (tsw_timeline_map) */
 };
 
 /* One section of the recording, at one speed. */
@@ -47,6 +48,15 @@ struct tsw_segment {
 
 struct tsw_timeline {
 	struct tsw_segment segments[TSW_TIMELINE_CAPACITY];
+};
+
+/* Where the time of a recording went, for the dock's details and the log (tsw_timeline_get_totals). */
+struct tsw_timeline_totals {
+	uint64_t real_time_ns; /* recorded in real time */
+	uint64_t timelapse_ns; /* recorded in timelapse, before it was sped up */
+	uint64_t paused_ns;    /* spent paused */
+	uint32_t switches;     /* changes of speed; a pause, or resuming at the same speed, is not one */
+	uint32_t pauses;
 };
 
 /*
@@ -95,3 +105,21 @@ uint32_t tsw_timeline_speed(const struct tsw_timeline *timeline, size_t count, u
  * Thread: the UI thread (it walks every section, at most TSW_TIMELINE_CAPACITY). Memory: none allocated.
  */
 uint64_t tsw_timeline_recorded_ns(const struct tsw_timeline *timeline, size_t count, uint64_t time_ns);
+
+/*
+ * tsw_timeline_get_totals: where the time from the start up to OBS time time_ns went.
+ *   count  number of published sections (at least 1).
+ * The final video is real_time_ns plus each timelapse stretch divided by its speed (tsw_timeline_output_ns).
+ * Thread: the UI thread (it walks every section). Memory: none allocated.
+ */
+void tsw_timeline_get_totals(const struct tsw_timeline *timeline, size_t count, uint64_t time_ns,
+			     struct tsw_timeline_totals *totals);
+
+/*
+ * tsw_timeline_map: the recording from its start up to time_ns, cut into TSW_MAP_BUCKETS equal slices of
+ * OBS time; each slice gets the speed that covers most of it (1, 2 to TSW_MAX_SPEED, or TSW_SPEED_PAUSED).
+ * Before any time has passed, every slice gets the speed of the first section.
+ * Thread: the UI thread. Memory: none allocated.
+ */
+void tsw_timeline_map(const struct tsw_timeline *timeline, size_t count, uint64_t time_ns,
+		      uint8_t map[TSW_MAP_BUCKETS]);

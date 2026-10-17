@@ -20,6 +20,7 @@
 
 #include "core/audio-ring.h"
 #include "core/gate.h"
+#include "core/health.h"
 #include "core/timeline.h"
 
 struct tsw_recorder {
@@ -68,6 +69,12 @@ struct tsw_recorder {
 	uint64_t stop_ns;          /* when stop was asked; 0 before */
 	bool chapters_unavailable; /* the format has no chapters; logged once per recording */
 	uint32_t markers;          /* chapter markers added by hand in this recording */
+
+	/* Disk monitoring for the dock (tsw_recorder_get_status), at most once per second. UI thread only. */
+	struct tsw_disk_meter disk;
+	uint64_t disk_checked_ns;
+	uint64_t disk_free_bytes;
+	uint64_t file_bytes;
 
 	/* The last recording that ended, or failed to start (tsw_recorder_get_status). UI thread only. */
 	uint32_t outcome;    /* grows by 1 each time */
