@@ -9,12 +9,12 @@ The dock drawn without OBS, in every state, so a person can look at it and a pro
 | Look | Qt's own Fusion look | exactly as OBS draws the dock, in each of its 7 themes |
 | Pictures | `build_x86_64/ui-screenshots/*.png` | `build_x86_64/ui-screenshots/<theme>/` and `.../contact-sheets/` |
 
-Both draw the same 8 states (idle, idle starting in timelapse, real time, timelapse, saving, summary, two errors), in English and Spanish, 300, 260 and 220 px wide, and run the same checks (`docs/design/visual-design.md`, 3.13, and the top of `test-dock.cpp`):
+Both draw the same 11 states (idle, idle starting in timelapse, real time, timelapse, paused from real time, paused from timelapse, paused after choosing timelapse x16 with a speed key, saving, summary, two errors), in English and Spanish, 300, 260 and 220 px wide, and run the same checks (`docs/design/visual-design.md`, 3.13, and the top of `test-dock.cpp`):
 
 | Check | Fails when |
 |---|---|
 | Texts | the dock asks for a key the locale file lacks |
-| Zones and fixed positions | a zone is not below the one before it; the main button moves between states, or Stop between real time, timelapse and saving |
+| Zones and fixed positions | a zone is not below the one before it; the main button moves between states, or Pause or Stop between real time, timelapse, paused and saving; Pause and Stop are neither one row nor stacked |
 | Fit | a visible widget ends past what the scroll area shows, or the dock cannot shrink to 200 px |
 | Nothing cut | a label or painted block is shorter than its lines, a painted text does not fit, or the hero falls below its floor (1.5 times the base size) |
 | No hole | the status line, whose row every state keeps, is empty |
@@ -22,7 +22,9 @@ Both draw the same 8 states (idle, idle starting in timelapse, real time, timela
 | Contrast | a token pair is under 3:1 (shapes) or 4.5:1 (text), or a label is colored with a status color |
 | Words and focus | the main button is named like a state, or Tab goes back up the dock |
 | Resize | a dock narrowed (or widened) by hand differs from one made at that width |
-| Stop and the card | they show when they should not, or the other way round; the card's two pills share a row although a label wraps |
+| Pause, Stop and the card | they show when they should not, or the other way round; the card's two pills share a row although a label wraps |
+| Cut words | a painted button is narrower than its longest word (a single word cannot wrap, so it would run past the edge) |
+| Quick pauses | 60 Pause and Resume clicks, one in four a double press within 400 ms, leave a label or the state block out of step with the core, or move Pause, Stop or the main button (UX-133) |
 | Reduce motion | with it on, the thumb still slides, or a slide under way goes on (UX-045) |
 
 ## Why the themes need their own pictures

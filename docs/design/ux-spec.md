@@ -247,6 +247,30 @@ Mockups are about 300 px wide, a common dock width. Notes on the right are not p
 +----------------------------------------------+
 ```
 
+**Paused** (REQ-019). The block keeps no record dot and no REC: a PAUSED tally with two bars, a solid pause sign at the end of the tally line, and a frame held between two thick side bars, so it reads as paused without color. The hero, the main button and the "Resume in" rail all say the mode it will resume in, chosen right here; Pause has become Resume in the same place. The counters stand still and the status line counts the pause.
+
+```
++-- Timelapse Switch ------------------ [?][*] +
+| +==========================================+ |
+| |# (||) PAUSED                     (||)   #| |   A  tally: two bars, no dot; pause sign
+| |# >> Resumes in timelapse x4             #| |      quiet hero: the mode it resumes in
+| |#                                        #| |      side bars: the pause shape
+| +==========================================+ |
+|  RECORDED              FINAL VIDEO           |   B  standing still
+|  0:31:40               0:16:58               |
+|  Paused for 0:01:12                          |      status line: how long
+|  +========================================+  |
+|  ||  >>  Resume in timelapse x4          ||  |   C  names the mode; armed (outlined)
+|  +========================================+  |
+|  TIMELAPSE SPEED                             |   D  the speed to resume at
+|  [    x2   |   (x4)  |    x8   |   x16   ]   |
+|  RESUME IN                                   |      the mode to resume in; while
+|  [    >  Real time   |   (>> Timelapse)  ]   |      recording, its room stays empty
+|  [ >>  Resume      ]  [ []  Stop and save ]  |   E  Resume where Pause was
+|  (i) Nothing is recorded until you resume.   |   F
++----------------------------------------------+
+```
+
 **Error.** The block shows the icon, the word ERROR and a plain headline. The card below the main slot gives reassurance first, then why, then what to do, with one-click fixes; the code is small, at the end. The main slot stays where it was, ready for a new recording.
 
 ```
