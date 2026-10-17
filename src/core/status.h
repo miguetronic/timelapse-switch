@@ -16,15 +16,17 @@
 enum tsw_phase {
 	TSW_PHASE_IDLE,      /* no recording (also after one ended) */
 	TSW_PHASE_RECORDING, /* frames and audio are recorded */
+	TSW_PHASE_PAUSED,    /* recording, but paused: nothing reaches the file until it resumes */
 	TSW_PHASE_SAVING,    /* stop was asked; the file is being finalized */
 };
 
 struct tsw_status {
 	enum tsw_phase phase;
-	uint32_t speed;               /* while recording: 1 = real time, N = timelapse xN */
-	uint64_t recorded_ns;         /* real time since the start */
+	uint32_t speed;               /* while recording: 1 = real time, N = timelapse xN; while paused: the
+					 speed in use before the pause */
+	uint64_t recorded_ns;         /* real time recorded since the start, pauses left out */
 	uint64_t final_ns;            /* length of the final video so far */
-	uint64_t section_recorded_ns; /* real time since the last switch */
+	uint64_t section_recorded_ns; /* real time since the last switch (while paused: how long it has been paused) */
 	uint64_t section_final_ns;    /* what that adds to the final video */
 	const char *path;             /* the file being recorded, or the last one; borrowed, may be empty */
 

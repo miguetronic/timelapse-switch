@@ -52,11 +52,22 @@ void tsw_recorder_stop(struct tsw_recorder *recorder);
  */
 enum tsw_result tsw_recorder_set_speed(struct tsw_recorder *recorder, uint32_t speed) TSW_NODISCARD;
 
+/*
+ * tsw_recorder_pause: pause the recording; nothing reaches the file until tsw_recorder_resume
+ * (REQ-019). The pause leaves no trace in the file: no chapter, no gap. Does nothing unless
+ * recording and not paused. Returns TSW_OK or TSW_E_TIMELINE_FULL. Thread: UI.
+ */
+enum tsw_result tsw_recorder_pause(struct tsw_recorder *recorder) TSW_NODISCARD;
+
+/*
+ * tsw_recorder_resume: resume a paused recording at the given speed (1 = real time). A chapter
+ * is added only if the speed differs from the one before the pause. Does nothing unless paused.
+ * Returns TSW_OK, TSW_E_INVALID or TSW_E_TIMELINE_FULL. Thread: UI.
+ */
+enum tsw_result tsw_recorder_resume(struct tsw_recorder *recorder, uint32_t speed) TSW_NODISCARD;
+
 /* tsw_recorder_is_active: true from start until the file is saved. Thread: any. */
 bool tsw_recorder_is_active(struct tsw_recorder *recorder);
-
-/* tsw_recorder_speed: speed of the current section (1 when idle). Thread: any. */
-uint32_t tsw_recorder_speed(struct tsw_recorder *recorder);
 
 /* tsw_recorder_add_marker: a numbered chapter marker here (Hybrid MP4; UX-054). Thread: UI. */
 void tsw_recorder_add_marker(struct tsw_recorder *recorder);

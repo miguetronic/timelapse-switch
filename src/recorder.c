@@ -245,6 +245,7 @@ static void release_media(struct tsw_recorder *recorder)
 	recorder->ring_storage = NULL;
 	recorder->path = NULL;
 	os_atomic_set_long(&recorder->speed, 1);
+	os_atomic_set_bool(&recorder->paused, false);
 	recorder->stopping = false;
 	os_atomic_set_bool(&recorder->active, false);
 }
@@ -305,10 +306,11 @@ static void finish(void *param)
 	const uint64_t end_ns = recorder->stop_ns != 0 ? recorder->stop_ns : os_gettime_ns();
 	const size_t sections = (size_t)os_atomic_load_long(&recorder->sections);
 	const uint64_t final_ns = sections > 0 ? tsw_timeline_output_ns(&recorder->timeline, sections, end_ns) : 0;
+	const uint64_t recorded_ns = sections > 0 ? tsw_timeline_recorded_ns(&recorder->timeline, sections, end_ns) : 0;
 	char *path = recorder->path;
 	recorder->path = NULL;
 	release_media(recorder);
-	record_outcome(recorder, failed ? 103 : 0, end_ns - recorder->start_ns, final_ns, path);
+	record_outcome(recorder, failed ? 103 : 0, recorded_ns, final_ns, path);
 }
 
 /* Output thread, when the file writer stopped. */
@@ -440,6 +442,27 @@ enum tsw_result tsw_recorder_start(struct tsw_recorder *recorder, uint32_t speed
 	return TSW_OK;
 }
 
+/* A stop while paused resumes first, at the very moment of the stop and at the speed before the pause:
+ * emptying the encoder needs frames AND audio flowing, because OBS's file writer interleaves them, and
+ * with the audio held back by the pause it would wait for ever and never finish the file (found by the
+ * "pauses" integration scenario). The final video does not change: the stop falls at that same moment.
+ * A pause always leaves room for this section (tsw_timeline_pause). UI thread. */
+static void resume_for_stop(struct tsw_recorder *recorder)
+{
+	pthread_mutex_lock(&recorder->switch_mutex);
+	if (os_atomic_load_bool(&recorder->paused)) {
+		const long sections = os_atomic_load_long(&recorder->sections);
+		const uint32_t speed = (uint32_t)os_atomic_load_long(&recorder->speed);
+		if (tsw_timeline_switch(&recorder->timeline, (size_t)sections, recorder->stop_ns, speed) == TSW_OK)
+			os_atomic_set_long(&recorder->sections, sections + 1);
+		else
+			tsw_log(LOG_ERROR, "TSW-E901 error | a stop while paused could not resume to save the file");
+		os_atomic_set_bool(&recorder->paused, false);
+		tsw_log(LOG_INFO, "stop while paused: frames and audio flow again to finish the file");
+	}
+	pthread_mutex_unlock(&recorder->switch_mutex);
+}
+
 void tsw_recorder_stop(struct tsw_recorder *recorder)
 {
 	if (!TSW_CHECK(recorder != NULL))
@@ -469,6 +492,7 @@ void tsw_recorder_stop(struct tsw_recorder *recorder)
 	 *    before the stop; flush_tick then stops it at its next packet. OBS's usual stop cannot be used: it
 	 *    waits for a packet stamped after the real stop time, and in timelapse our packets carry the
 	 *    slower time of the final video. finish() stops the capture once the file is saved. */
+	resume_for_stop(recorder);
 	recorder->flush_target = recorder->frames_sent;
 	recorder->flush_start_ns = recorder->flush_seen_ns = os_gettime_ns();
 	recorder->flush_seen = -1;
@@ -481,6 +505,9 @@ enum tsw_result tsw_recorder_set_speed(struct tsw_recorder *recorder, uint32_t s
 {
 	if (!TSW_CHECK(recorder != NULL && speed >= 1 && speed <= TSW_MAX_SPEED))
 		return TSW_E_INVALID;
+
+	if (!TSW_CHECK(!os_atomic_load_bool(&recorder->paused)))
+		return TSW_E_INVALID; /* the session resumes with tsw_recorder_resume, never with a switch */
 
 	pthread_mutex_lock(&recorder->switch_mutex);
 	enum tsw_result result = TSW_OK;
@@ -504,16 +531,66 @@ enum tsw_result tsw_recorder_set_speed(struct tsw_recorder *recorder, uint32_t s
 	return result;
 }
 
+enum tsw_result tsw_recorder_pause(struct tsw_recorder *recorder)
+{
+	if (!TSW_CHECK(recorder != NULL))
+		return TSW_E_INVALID;
+
+	pthread_mutex_lock(&recorder->switch_mutex);
+	enum tsw_result result = TSW_OK;
+	if (os_atomic_load_bool(&recorder->capturing) && !recorder->stopping &&
+	    !os_atomic_load_bool(&recorder->paused)) {
+		/* A paused section: the final video stands still, so the gates let nothing through. The speed
+		 * before the pause stays in recorder->speed: it is the one to resume at. */
+		const long sections = os_atomic_load_long(&recorder->sections);
+		const uint64_t now = os_gettime_ns();
+		result = tsw_timeline_pause(&recorder->timeline, (size_t)sections, now);
+		if (result == TSW_OK) {
+			os_atomic_set_long(&recorder->sections, sections + 1);
+			os_atomic_set_bool(&recorder->paused, true);
+			tsw_log(LOG_INFO, "pause at %.6f s", (double)(now - recorder->start_ns) / (double)SECOND_NS);
+		} else if (result == TSW_E_TIMELINE_FULL) {
+			tsw_log(LOG_WARNING, "TSW-E105 warning | too many speed switches in one recording | max=%d",
+				TSW_TIMELINE_CAPACITY);
+		}
+	}
+	pthread_mutex_unlock(&recorder->switch_mutex);
+	return result;
+}
+
+enum tsw_result tsw_recorder_resume(struct tsw_recorder *recorder, uint32_t speed)
+{
+	if (!TSW_CHECK(recorder != NULL && speed >= 1 && speed <= TSW_MAX_SPEED))
+		return TSW_E_INVALID;
+
+	pthread_mutex_lock(&recorder->switch_mutex);
+	enum tsw_result result = TSW_OK;
+	if (os_atomic_load_bool(&recorder->capturing) && !recorder->stopping &&
+	    os_atomic_load_bool(&recorder->paused)) {
+		const long sections = os_atomic_load_long(&recorder->sections);
+		const uint64_t now = os_gettime_ns();
+		result = tsw_timeline_switch(&recorder->timeline, (size_t)sections, now, speed);
+		if (result == TSW_OK) {
+			const bool new_speed = os_atomic_load_long(&recorder->speed) != (long)speed;
+			os_atomic_set_long(&recorder->sections, sections + 1);
+			os_atomic_set_long(&recorder->speed, (long)speed);
+			os_atomic_set_bool(&recorder->paused, false);
+			tsw_log(LOG_INFO, "resume: speed x%u at %.6f s", speed,
+				(double)(now - recorder->start_ns) / (double)SECOND_NS);
+			if (new_speed) /* same speed: the pause leaves no trace, not even a chapter */
+				add_chapter(recorder, speed > 1 ? "Chapter.Timelapse" : "Chapter.RealTime", speed);
+		} else if (result == TSW_E_TIMELINE_FULL) {
+			tsw_log(LOG_WARNING, "TSW-E105 warning | too many speed switches in one recording | max=%d",
+				TSW_TIMELINE_CAPACITY);
+		}
+	}
+	pthread_mutex_unlock(&recorder->switch_mutex);
+	return result;
+}
+
 bool tsw_recorder_is_active(struct tsw_recorder *recorder)
 {
 	return TSW_CHECK(recorder != NULL) && os_atomic_load_bool(&recorder->active);
-}
-
-uint32_t tsw_recorder_speed(struct tsw_recorder *recorder)
-{
-	if (!TSW_CHECK(recorder != NULL))
-		return 1;
-	return (uint32_t)os_atomic_load_long(&recorder->speed);
 }
 
 void tsw_recorder_add_marker(struct tsw_recorder *recorder)
@@ -545,14 +622,15 @@ void tsw_recorder_get_status(struct tsw_recorder *recorder, struct tsw_status *s
 
 	/* Recording, or saving: then the counters stay where stop was pressed. */
 	const bool saving = recorder->stopping || !os_atomic_load_bool(&recorder->capturing);
-	status->phase = saving ? TSW_PHASE_SAVING : TSW_PHASE_RECORDING;
+	status->phase = saving ? TSW_PHASE_SAVING
+			       : (os_atomic_load_bool(&recorder->paused) ? TSW_PHASE_PAUSED : TSW_PHASE_RECORDING);
 	status->speed = (uint32_t)os_atomic_load_long(&recorder->speed);
 	const size_t sections = (size_t)os_atomic_load_long(&recorder->sections);
 	if (sections == 0)
 		return;
 	const uint64_t now = (saving && recorder->stop_ns != 0) ? recorder->stop_ns : os_gettime_ns();
 	const struct tsw_segment *section = &recorder->timeline.segments[sections - 1];
-	status->recorded_ns = now > recorder->start_ns ? now - recorder->start_ns : 0;
+	status->recorded_ns = tsw_timeline_recorded_ns(&recorder->timeline, sections, now);
 	status->final_ns = tsw_timeline_output_ns(&recorder->timeline, sections, now);
 	status->section_recorded_ns = now > section->start_ns ? now - section->start_ns : 0;
 	status->section_final_ns = status->final_ns > section->output_ns ? status->final_ns - section->output_ns : 0;

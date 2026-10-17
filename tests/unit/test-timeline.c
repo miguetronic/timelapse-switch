@@ -118,6 +118,80 @@ static void speed_of_an_impossible_request_is_real_time(void)
 	TSW_EXPECT_EQ(tsw_check_failures - checks_before, 3);
 }
 
+/* Break caught: the final video moving on while the recording is paused. */
+static void pause_holds_the_final_video_still(void)
+{
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 0, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, 1, 10 * SECOND), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_output_ns(&timeline, 2, 20 * SECOND), 10 * SECOND);
+}
+
+/* Break caught: a gap or a jump in the final video where the pause was. */
+static void resume_continues_where_the_pause_began(void)
+{
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 0, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, 1, 10 * SECOND), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 2, 25 * SECOND, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_output_ns(&timeline, 3, 30 * SECOND), 15 * SECOND);
+}
+
+/* Break caught: a pause in timelapse losing or adding final video time. */
+static void pause_inside_timelapse_resumes_at_the_same_place(void)
+{
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 0, 4), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, 1, 8 * SECOND), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 2, 20 * SECOND, 4), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_output_ns(&timeline, 3, 20 * SECOND), 2 * SECOND);
+	TSW_EXPECT_EQ(tsw_timeline_output_ns(&timeline, 3, 24 * SECOND), 3 * SECOND);
+}
+
+/* Break caught: frames and audio of a pause being treated as real time or timelapse. */
+static void speed_during_a_pause_is_paused(void)
+{
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 0, 4), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, 1, 10 * SECOND), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_speed(&timeline, 2, 15 * SECOND), TSW_SPEED_PAUSED);
+	TSW_EXPECT_EQ(tsw_timeline_speed(&timeline, 2, 5 * SECOND), 4);
+}
+
+/* Break caught: the "recorded" counter counting the time spent paused. */
+static void recorded_time_leaves_out_the_pauses(void)
+{
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 2 * SECOND, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, 1, 12 * SECOND), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 2, 27 * SECOND, 4), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_recorded_ns(&timeline, 3, 20 * SECOND), 10 * SECOND); /* during the pause */
+	TSW_EXPECT_EQ(tsw_timeline_recorded_ns(&timeline, 3, 32 * SECOND), 15 * SECOND);
+	TSW_EXPECT_EQ(tsw_timeline_recorded_ns(&timeline, 3, 1 * SECOND), 0); /* before the start */
+}
+
+/* Break caught: a recording starting paused, or a second pause in a row hiding the speed to resume at. */
+static void pause_cannot_start_a_recording_nor_follow_a_pause(void)
+{
+	const int checks_before = tsw_check_failures;
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, 0, 0), TSW_E_INVALID);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, 0, 0, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, 1, 10 * SECOND), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, 2, 12 * SECOND), TSW_E_INVALID);
+	TSW_EXPECT_EQ(tsw_check_failures - checks_before, 2);
+}
+
+/* Break caught: a pause written past the end of a full timeline, or taking the last free section, so
+ * that its resume would not fit and the recording would stay paused for ever. */
+static void pause_needs_room_for_its_resume(void)
+{
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, TSW_TIMELINE_CAPACITY, 0), TSW_E_TIMELINE_FULL);
+
+	/* One free section left: no pause, its resume would not fit. */
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, TSW_TIMELINE_CAPACITY - 3, 0, 1), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, TSW_TIMELINE_CAPACITY - 2, 0, 4), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, TSW_TIMELINE_CAPACITY - 1, SECOND), TSW_E_TIMELINE_FULL);
+
+	/* Two free sections: the pause, then its resume in the very last one. */
+	TSW_EXPECT_EQ(tsw_timeline_pause(&timeline, TSW_TIMELINE_CAPACITY - 2, SECOND), TSW_OK);
+	TSW_EXPECT_EQ(tsw_timeline_switch(&timeline, TSW_TIMELINE_CAPACITY - 1, 2 * SECOND, 1), TSW_OK);
+}
+
 int main(void)
 {
 	real_time_follows_the_clock();
@@ -132,5 +206,12 @@ int main(void)
 	missing_timeline_is_rejected();
 	speed_is_the_one_of_the_section_at_that_time();
 	speed_of_an_impossible_request_is_real_time();
+	pause_holds_the_final_video_still();
+	resume_continues_where_the_pause_began();
+	pause_inside_timelapse_resumes_at_the_same_place();
+	speed_during_a_pause_is_paused();
+	recorded_time_leaves_out_the_pauses();
+	pause_cannot_start_a_recording_nor_follow_a_pause();
+	pause_needs_room_for_its_resume();
 	return tsw_test_failures;
 }

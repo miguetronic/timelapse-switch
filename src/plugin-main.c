@@ -30,7 +30,7 @@ OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
 enum {
 	DEFAULT_TIMELAPSE_SPEED = 4,
 	DEFAULT_STOP_HOLD_MS = 1000, /* stopping by hotkey needs a hold (UX-052) */
-	SINGLE_KEYS = 7,
+	SINGLE_KEYS = 8,
 };
 
 enum action {
@@ -45,12 +45,13 @@ enum action {
 	FASTER,
 	SLOWER,
 	CHAPTER,
+	PAUSE,
 	ACTIONS
 };
 
 /* Not const because OBS passes callback data as void *; never written. */
 static enum action ACTION[ACTIONS] = {RECORD,  STOP,     TIMELAPSE, REAL_TIME, SPEED_2, SPEED_4,
-				      SPEED_8, SPEED_16, FASTER,    SLOWER,    CHAPTER};
+				      SPEED_8, SPEED_16, FASTER,    SLOWER,    CHAPTER, PAUSE};
 static const uint32_t KEY_SPEED[4] = {2, 4, 8, 16}; /* SPEED_2 to SPEED_16 */
 
 /* Hotkeys that act on each press (the others come in pairs, see register_hotkeys). */
@@ -67,6 +68,7 @@ static const struct {
 	{"TimelapseSwitch.Faster", "Hotkey.Faster", "faster", FASTER},
 	{"TimelapseSwitch.Slower", "Hotkey.Slower", "slower", SLOWER},
 	{"TimelapseSwitch.Chapter", "Hotkey.Chapter", "chapter", CHAPTER},
+	{"TimelapseSwitch.Pause", "Hotkey.Pause", "pause", PAUSE},
 };
 
 /* The plugin's state: the only global object of the plugin (rule P10-6). */
@@ -112,6 +114,9 @@ static void run_action(void *param)
 		break;
 	case CHAPTER:
 		tsw_recorder_add_marker(plugin.recorder);
+		break;
+	case PAUSE:
+		tsw_controller_input(plugin.controller, TSW_INPUT_PAUSE, 0);
 		break;
 	case ACTIONS:
 		break;
@@ -162,8 +167,8 @@ static bool on_timelapse(void *data, obs_hotkey_pair_id id, obs_hotkey_t *hotkey
 	(void)data;
 	(void)id;
 	(void)hotkey;
-	if (!pressed || tsw_recorder_speed(plugin.recorder) > 1)
-		return false;
+	if (!pressed || tsw_controller_effective_speed(plugin.controller) > 1)
+		return false; /* already in timelapse (or starting or resuming in it): the pair's other key */
 	queue(TIMELAPSE);
 	return true;
 }
@@ -173,8 +178,8 @@ static bool on_real_time(void *data, obs_hotkey_pair_id id, obs_hotkey_t *hotkey
 	(void)data;
 	(void)id;
 	(void)hotkey;
-	if (!pressed || tsw_recorder_speed(plugin.recorder) == 1)
-		return false;
+	if (!pressed || tsw_controller_effective_speed(plugin.controller) == 1)
+		return false; /* already in real time (or starting or resuming in it): the pair's other key */
 	queue(REAL_TIME);
 	return true;
 }

@@ -11,9 +11,9 @@
  * user's choices: the speed of the next timelapse and, while idle, whether the recording will
  * start in real time or in timelapse. Pure logic with no OBS dependency, unit tested.
  *
- *   button or hotkey ---> [ session ] ---> command: start, set speed, stop, or nothing
+ *   button or hotkey ---> [ session ] ---> command: start, set speed, pause, resume, stop, or nothing
  *                             ^
- *   recorder status ----------+  (idle, recording at speed N, saving)
+ *   recorder status ----------+  (idle, recording at speed N, paused, saving)
  */
 
 #pragma once
@@ -41,6 +41,7 @@ enum tsw_input {
 	TSW_INPUT_SLOWER,          /* hotkey "Slower": the other way */
 	TSW_INPUT_START_REAL_TIME, /* dock, while idle: the recording will start in real time */
 	TSW_INPUT_START_TIMELAPSE, /* dock, while idle: the recording will start in timelapse */
+	TSW_INPUT_PAUSE,           /* dock "Pause" and hotkey "Pause or resume" (REQ-019) */
 };
 
 enum tsw_command_kind {
@@ -48,11 +49,13 @@ enum tsw_command_kind {
 	TSW_COMMAND_START,     /* start recording at speed */
 	TSW_COMMAND_SET_SPEED, /* switch to speed now */
 	TSW_COMMAND_STOP,      /* stop and save */
+	TSW_COMMAND_PAUSE,     /* pause: nothing reaches the file until it resumes */
+	TSW_COMMAND_RESUME,    /* resume at speed */
 };
 
 struct tsw_command {
 	enum tsw_command_kind kind;
-	uint32_t speed; /* START and SET_SPEED: 1 = real time, N = timelapse xN */
+	uint32_t speed; /* START, SET_SPEED and RESUME: 1 = real time, N = timelapse xN */
 };
 
 struct tsw_session {
@@ -61,6 +64,9 @@ struct tsw_session {
 	uint64_t debounce_ns;     /* a switch this soon after the previous one is ignored (UX-046) */
 	uint64_t last_switch_ns;  /* when the last switch between real time and timelapse happened */
 	bool switched;            /* last_switch_ns is set */
+	uint32_t resume_speed;    /* while paused: the speed chosen to resume at; 0 = the one before the pause */
+	uint64_t last_pause_ns;   /* when the last pause or resume happened (its own double-press guard) */
+	bool paused_once;         /* last_pause_ns is set */
 };
 
 /*
@@ -80,6 +86,14 @@ enum tsw_result tsw_session_init(struct tsw_session *session, uint32_t timelapse
  */
 struct tsw_command tsw_session_input(struct tsw_session *session, const struct tsw_status *status, enum tsw_input input,
 				     uint32_t speed, uint64_t now_ns);
+
+/*
+ * tsw_session_effective_speed: the speed the next recorded frames will use: while idle, the start
+ * chosen; while recording, the current speed; while paused, the speed it will resume at. The mode
+ * hotkeys use it to know whether they have anything to do.
+ * Returns 1 to TSW_MAX_SPEED. Thread: UI. Memory: none allocated.
+ */
+uint32_t tsw_session_effective_speed(const struct tsw_session *session, const struct tsw_status *status);
 
 #ifdef __cplusplus
 }

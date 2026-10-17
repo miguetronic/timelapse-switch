@@ -44,6 +44,14 @@ void tsw_controller_view(struct tsw_controller *controller, struct tsw_dock_view
 /* tsw_controller_dismiss: close the summary or error card. */
 void tsw_controller_dismiss(struct tsw_controller *controller);
 
+/*
+ * tsw_controller_effective_speed: the speed the next recorded frames will use (idle: the start chosen;
+ * paused: the speed it will resume at; tsw_session_effective_speed). The mode hotkeys read it to know
+ * whether they have anything to do. Kept up to date by every input and every view refresh.
+ * Returns 1 if controller is NULL (the hotkeys exist a moment before it). Thread: any (atomic read).
+ */
+uint32_t tsw_controller_effective_speed(const struct tsw_controller *controller);
+
 /* tsw_controller_timelapse_speed: the chosen speed of the next timelapse, to save in the settings. */
 uint32_t tsw_controller_timelapse_speed(const struct tsw_controller *controller);
 

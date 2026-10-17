@@ -53,7 +53,8 @@ struct tsw_recorder {
 	pthread_mutex_t switch_mutex; /* one switch at a time (UI and hotkey threads) */
 	os_event_t *saved;            /* signaled when the output has stopped */
 	volatile bool active;
-	bool stopping; /* stop was asked; UI thread only */
+	volatile bool paused; /* the last section is a pause (REQ-019); written by the UI thread */
+	bool stopping;        /* stop was asked; UI thread only */
 
 	/* Flush after stop (see tsw_recorder_stop): written by the UI thread, read by the graphics thread. */
 	volatile bool flushing;  /* send every frame, so the encoder hands over the ones it holds */

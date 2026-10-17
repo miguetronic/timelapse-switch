@@ -43,6 +43,9 @@ enum tsw_result tsw_session_init(struct tsw_session *session, uint32_t timelapse
 	session->debounce_ns = debounce_ns;
 	session->last_switch_ns = 0;
 	session->switched = false;
+	session->resume_speed = 0;
+	session->last_pause_ns = 0;
+	session->paused_once = false;
 	return TSW_OK;
 }
 
@@ -67,6 +70,7 @@ static uint32_t planned_start(const struct tsw_session *session, enum tsw_input 
 	case TSW_INPUT_RECORD:
 	case TSW_INPUT_STOP:
 	case TSW_INPUT_SPEED_CHIP:
+	case TSW_INPUT_PAUSE: /* nothing to pause while idle */
 		break;
 	}
 	return start_speed;
@@ -114,9 +118,75 @@ static uint32_t wanted_speed(struct tsw_session *session, uint32_t current, enum
 	case TSW_INPUT_STOP:
 	case TSW_INPUT_START_REAL_TIME:
 	case TSW_INPUT_START_TIMELAPSE:
+	case TSW_INPUT_PAUSE:
 		break;
 	}
 	return current;
+}
+
+/* A pause or resume this soon after the previous one is a double press, not a wish (UX-046). It has its own
+ * clock: pausing right after a speed switch is a real wish. */
+static bool pause_bounces(struct tsw_session *session, uint64_t now_ns)
+{
+	if (session->paused_once && now_ns - session->last_pause_ns < session->debounce_ns)
+		return true;
+	session->paused_once = true;
+	session->last_pause_ns = now_ns;
+	return false;
+}
+
+/* While paused: the speed to resume at after this input, from current (the speed chosen so far). */
+static uint32_t planned_resume(struct tsw_session *session, enum tsw_input input, uint32_t speed, uint32_t current)
+{
+	switch (input) {
+	case TSW_INPUT_TIMELAPSE:
+	case TSW_INPUT_START_TIMELAPSE:
+		return session->timelapse_speed;
+	case TSW_INPUT_REAL_TIME:
+	case TSW_INPUT_START_REAL_TIME:
+		return 1;
+	case TSW_INPUT_SPEED_KEY:
+		return speed;
+	case TSW_INPUT_SPEED_CHIP:
+		session->timelapse_speed = speed; /* resuming in real time: it only chooses the next timelapse */
+		return current > 1 ? speed : current;
+	case TSW_INPUT_FASTER:
+		return faster(current);
+	case TSW_INPUT_SLOWER:
+		return slower(current);
+	case TSW_INPUT_MAIN:
+	case TSW_INPUT_RECORD:
+	case TSW_INPUT_STOP:
+	case TSW_INPUT_PAUSE:
+		break;
+	}
+	return current;
+}
+
+/* While paused, only Resume (the main button, Record or Pause again) and Stop act; mode and speed inputs
+ * choose how it resumes, so a key never starts recording again by surprise (REQ-019). */
+static struct tsw_command input_while_paused(struct tsw_session *session, const struct tsw_status *status,
+					     enum tsw_input input, uint32_t speed, uint64_t now_ns)
+{
+	const uint32_t current = session->resume_speed != 0 ? session->resume_speed : status->speed;
+	if (input == TSW_INPUT_STOP) {
+		const struct tsw_command stop = {TSW_COMMAND_STOP, 0};
+		return stop;
+	}
+	if (input == TSW_INPUT_MAIN || input == TSW_INPUT_RECORD || input == TSW_INPUT_PAUSE) {
+		if (pause_bounces(session, now_ns))
+			return NOTHING;
+		session->resume_speed = 0;
+		if (current > 1)
+			session->timelapse_speed = current;
+		const struct tsw_command resume = {TSW_COMMAND_RESUME, current};
+		return resume;
+	}
+	const uint32_t planned = planned_resume(session, input, speed, current);
+	session->resume_speed = planned;
+	if (planned > 1)
+		session->timelapse_speed = planned;
+	return NOTHING;
 }
 
 struct tsw_command tsw_session_input(struct tsw_session *session, const struct tsw_status *status, enum tsw_input input,
@@ -128,16 +198,25 @@ struct tsw_command tsw_session_input(struct tsw_session *session, const struct t
 	if (takes_speed && !TSW_CHECK(is_timelapse_speed(speed)))
 		return NOTHING;
 
-	/* 1. Idle or saving: no switch to make. */
+	/* 1. Idle, saving or paused: no switch to make. */
 	if (status->phase == TSW_PHASE_IDLE)
 		return input_while_idle(session, input, speed);
-	if (status->phase != TSW_PHASE_RECORDING)
+	if (status->phase != TSW_PHASE_RECORDING && status->phase != TSW_PHASE_PAUSED)
 		return NOTHING; /* saving: the file is being finalized */
 	if (!TSW_CHECK(status->speed >= 1 && status->speed <= TSW_MAX_SPEED))
 		return NOTHING;
+	if (status->phase == TSW_PHASE_PAUSED)
+		return input_while_paused(session, status, input, speed, now_ns);
 	if (input == TSW_INPUT_STOP) {
 		const struct tsw_command stop = {TSW_COMMAND_STOP, 0};
 		return stop;
+	}
+	if (input == TSW_INPUT_PAUSE) {
+		if (pause_bounces(session, now_ns))
+			return NOTHING;
+		session->resume_speed = 0;
+		const struct tsw_command pause = {TSW_COMMAND_PAUSE, 0};
+		return pause;
 	}
 
 	/* 2. Recording: the speed asked for. A switch between real time and timelapse right after the previous
@@ -157,4 +236,22 @@ struct tsw_command tsw_session_input(struct tsw_session *session, const struct t
 		session->timelapse_speed = target;
 	const struct tsw_command set_speed = {TSW_COMMAND_SET_SPEED, target};
 	return set_speed;
+}
+
+uint32_t tsw_session_effective_speed(const struct tsw_session *session, const struct tsw_status *status)
+{
+	if (!TSW_CHECK(session != NULL && status != NULL))
+		return 1;
+	switch (status->phase) {
+	case TSW_PHASE_IDLE:
+		return session->start_in_timelapse ? session->timelapse_speed : 1;
+	case TSW_PHASE_PAUSED:
+		if (session->resume_speed != 0)
+			return session->resume_speed;
+		break;
+	case TSW_PHASE_RECORDING:
+	case TSW_PHASE_SAVING:
+		break;
+	}
+	return (status->speed >= 1 && status->speed <= TSW_MAX_SPEED) ? status->speed : 1;
 }

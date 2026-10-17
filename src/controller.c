@@ -12,6 +12,7 @@
 
 #include <util/bmem.h>
 #include <util/platform.h>
+#include <util/threading.h>
 
 #include "core/check.h"
 #include "plugin-support.h"
@@ -23,7 +24,15 @@ struct tsw_controller {
 	struct tsw_recorder *recorder; /* borrowed from plugin-main.c */
 	struct tsw_session session;
 	struct tsw_dock_model model;
+	volatile long effective_speed; /* tsw_session_effective_speed, published for the hotkey thread */
 };
+
+/* Publishes the effective speed after the session or the recorder changed (UI thread). */
+static void publish_effective_speed(struct tsw_controller *controller, const struct tsw_status *status)
+{
+	os_atomic_set_long(&controller->effective_speed,
+			   (long)tsw_session_effective_speed(&controller->session, status));
+}
 
 struct tsw_controller *tsw_controller_create(struct tsw_recorder *recorder, uint32_t timelapse_speed)
 {
@@ -37,6 +46,7 @@ struct tsw_controller *tsw_controller_create(struct tsw_recorder *recorder, uint
 		return NULL;
 	}
 	tsw_dock_model_init(&controller->model);
+	controller->effective_speed = 1;
 	return controller;
 }
 
@@ -68,10 +78,18 @@ void tsw_controller_input(struct tsw_controller *controller, enum tsw_input inpu
 	case TSW_COMMAND_STOP:
 		tsw_recorder_stop(controller->recorder);
 		break;
+	case TSW_COMMAND_PAUSE:
+		result = tsw_recorder_pause(controller->recorder);
+		break;
+	case TSW_COMMAND_RESUME:
+		result = tsw_recorder_resume(controller->recorder, command.speed);
+		break;
 	}
 	if (result != TSW_OK)
 		tsw_log(LOG_DEBUG, "input %d: command %d not applied (result %d)", (int)input, (int)command.kind,
 			(int)result);
+	tsw_recorder_get_status(controller->recorder, &status);
+	publish_effective_speed(controller, &status);
 }
 
 void tsw_controller_view(struct tsw_controller *controller, struct tsw_dock_view *view)
@@ -80,6 +98,7 @@ void tsw_controller_view(struct tsw_controller *controller, struct tsw_dock_view
 		return;
 	struct tsw_status status;
 	tsw_recorder_get_status(controller->recorder, &status);
+	publish_effective_speed(controller, &status);
 	tsw_dock_view_build(&controller->model, &controller->session, &status, view);
 }
 
@@ -95,4 +114,11 @@ uint32_t tsw_controller_timelapse_speed(const struct tsw_controller *controller)
 	if (!TSW_CHECK(controller != NULL))
 		return DEFAULT_TIMELAPSE_SPEED;
 	return controller->session.timelapse_speed;
+}
+
+uint32_t tsw_controller_effective_speed(const struct tsw_controller *controller)
+{
+	if (controller == NULL)
+		return 1;
+	return (uint32_t)os_atomic_load_long(&controller->effective_speed);
 }

@@ -50,9 +50,11 @@ void tsw_recorder_receive_frame(void *param, struct video_data *frame)
 	const size_t sections = (size_t)os_atomic_load_long(&recorder->sections);
 	const uint64_t output_ns = tsw_timeline_output_ns(&recorder->timeline, sections, frame->timestamp);
 	const uint32_t speed = tsw_timeline_speed(&recorder->timeline, sections, frame->timestamp);
-	const uint32_t copies = os_atomic_load_bool(&recorder->flushing)
-					? 1 /* stopping: keep the encoder moving (tsw_recorder_stop) */
-					: tsw_video_gate_copies(&recorder->video_gate, output_ns, speed);
+	uint32_t copies = 0; /* paused: nothing reaches the file (REQ-019) */
+	if (os_atomic_load_bool(&recorder->flushing))
+		copies = 1; /* stopping: keep the encoder moving (tsw_recorder_stop) */
+	else if (speed != TSW_SPEED_PAUSED)
+		copies = tsw_video_gate_copies(&recorder->video_gate, output_ns, speed);
 	os_atomic_set_long(&recorder->frames_in, recorder->frames_in + 1);
 	if (copies == 0)
 		return;

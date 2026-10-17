@@ -29,6 +29,15 @@ static struct tsw_status recording(uint32_t speed)
 	return status;
 }
 
+/* Paused; speed is the one in use before the pause. */
+static struct tsw_status paused(uint32_t speed)
+{
+	struct tsw_status status = {0};
+	status.phase = TSW_PHASE_PAUSED;
+	status.speed = speed;
+	return status;
+}
+
 static struct tsw_status saving(void)
 {
 	struct tsw_status status = {0};
@@ -214,6 +223,126 @@ static void invalid_speeds_are_refused(void)
 	TSW_EXPECT_EQ(tsw_check_failures - checks_before, 2);
 }
 
+/* Break caught: the Pause button or hotkey not pausing a recording. */
+static void pause_pauses_a_recording(void)
+{
+	struct tsw_session session = new_session();
+	EXPECT_COMMAND(&session, recording(1), TSW_INPUT_PAUSE, 0, 0, TSW_COMMAND_PAUSE, 0);
+	session = new_session();
+	EXPECT_COMMAND(&session, recording(8), TSW_INPUT_PAUSE, 0, 0, TSW_COMMAND_PAUSE, 0);
+}
+
+/* Break caught: resuming at another speed than the one before the pause. */
+static void resume_returns_to_the_speed_before_the_pause(void)
+{
+	struct tsw_session session = new_session();
+	EXPECT_COMMAND(&session, paused(4), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_RESUME, 4);
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_RECORD, 0, 1000 * MS, TSW_COMMAND_RESUME, 1);
+	EXPECT_COMMAND(&session, paused(8), TSW_INPUT_PAUSE, 0, 2000 * MS, TSW_COMMAND_RESUME, 8);
+}
+
+/* Break caught: Stop being ignored while paused. */
+static void stop_works_while_paused(void)
+{
+	struct tsw_session session = new_session();
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_STOP, 0, 0, TSW_COMMAND_STOP, 0);
+}
+
+/* Break caught: a mode or speed key resuming a pause by surprise, or its choice being lost. */
+static void keys_while_paused_choose_how_to_resume(void)
+{
+	struct tsw_session session = new_session();
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_TIMELAPSE, 0, 0, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_RESUME, 4);
+
+	session = new_session();
+	EXPECT_COMMAND(&session, paused(4), TSW_INPUT_REAL_TIME, 0, 0, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, paused(4), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_RESUME, 1);
+
+	session = new_session();
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_SPEED_KEY, 8, 0, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_RESUME, 8);
+
+	session = new_session();
+	EXPECT_COMMAND(&session, paused(4), TSW_INPUT_FASTER, 0, 0, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, paused(4), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_RESUME, 8);
+
+	session = new_session();
+	EXPECT_COMMAND(&session, paused(2), TSW_INPUT_SLOWER, 0, 0, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, paused(2), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_RESUME, 1);
+}
+
+/* Break caught: the speed chip resuming in timelapse when the pause came from real time. */
+static void chip_while_paused_follows_the_mode_to_resume_in(void)
+{
+	struct tsw_session session = new_session();
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_SPEED_CHIP, 8, 0, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_RESUME, 1);
+
+	session = new_session();
+	EXPECT_COMMAND(&session, paused(4), TSW_INPUT_SPEED_CHIP, 8, 0, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, paused(4), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_RESUME, 8);
+}
+
+/* Break caught: a choice made in one pause carrying over to the next pause. */
+static void the_choice_to_resume_ends_with_the_pause(void)
+{
+	struct tsw_session session = new_session();
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_TIMELAPSE, 0, 0, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_RESUME, 4);
+	EXPECT_COMMAND(&session, recording(4), TSW_INPUT_PAUSE, 0, 1000 * MS, TSW_COMMAND_PAUSE, 0);
+	EXPECT_COMMAND(&session, paused(4), TSW_INPUT_MAIN, 0, 2000 * MS, TSW_COMMAND_RESUME, 4);
+}
+
+/* Break caught: a double press of Pause pausing and resuming at once (UX-046). */
+static void a_quick_second_pause_press_is_ignored(void)
+{
+	struct tsw_session session = new_session();
+	EXPECT_COMMAND(&session, recording(1), TSW_INPUT_PAUSE, 0, 0, TSW_COMMAND_PAUSE, 0);
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_PAUSE, 0, 100 * MS, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_PAUSE, 0, 1000 * MS, TSW_COMMAND_RESUME, 1);
+}
+
+/* Break caught: a pause right after a speed switch taken for a bounce of that switch. */
+static void a_pause_right_after_a_switch_is_not_a_bounce(void)
+{
+	struct tsw_session session = new_session();
+	EXPECT_COMMAND(&session, recording(1), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_SET_SPEED, 4);
+	EXPECT_COMMAND(&session, recording(4), TSW_INPUT_PAUSE, 0, 100 * MS, TSW_COMMAND_PAUSE, 0);
+}
+
+/* Break caught: Pause acting when there is nothing to pause. */
+static void pause_does_nothing_while_idle_or_saving(void)
+{
+	struct tsw_session session = new_session();
+	EXPECT_COMMAND(&session, idle(), TSW_INPUT_PAUSE, 0, 0, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, saving(), TSW_INPUT_PAUSE, 0, 0, TSW_COMMAND_NONE, 0);
+	EXPECT_COMMAND(&session, idle(), TSW_INPUT_MAIN, 0, 0, TSW_COMMAND_START, 1); /* idle choices untouched */
+}
+
+/* Break caught: the mode keys reading the speed before a pause, or the default start, so that once a
+ * different mode is chosen the other key can no longer choose back (the timelapse and real-time keys
+ * act only when the effective mode is the other one). */
+static void effective_speed_is_what_the_next_frames_will_use(void)
+{
+	struct tsw_session session = new_session();
+	TSW_EXPECT_EQ(tsw_session_effective_speed(&session, &(struct tsw_status){0}), 1);
+	EXPECT_COMMAND(&session, idle(), TSW_INPUT_START_TIMELAPSE, 0, 0, TSW_COMMAND_NONE, 0);
+	const struct tsw_status idle_status = idle();
+	TSW_EXPECT_EQ(tsw_session_effective_speed(&session, &idle_status), 4);
+
+	const struct tsw_status recording_x8 = recording(8);
+	TSW_EXPECT_EQ(tsw_session_effective_speed(&session, &recording_x8), 8);
+
+	session = new_session();
+	const struct tsw_status paused_x1 = paused(1);
+	TSW_EXPECT_EQ(tsw_session_effective_speed(&session, &paused_x1), 1);
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_TIMELAPSE, 0, 0, TSW_COMMAND_NONE, 0);
+	TSW_EXPECT_EQ(tsw_session_effective_speed(&session, &paused_x1), 4);
+	EXPECT_COMMAND(&session, paused(1), TSW_INPUT_REAL_TIME, 0, 0, TSW_COMMAND_NONE, 0);
+	TSW_EXPECT_EQ(tsw_session_effective_speed(&session, &paused_x1), 1);
+}
+
 int main(void)
 {
 	record_starts_in_real_time_by_default();
@@ -232,5 +361,15 @@ int main(void)
 	a_quick_second_switch_is_ignored();
 	speed_changes_inside_timelapse_are_never_ignored();
 	invalid_speeds_are_refused();
+	pause_pauses_a_recording();
+	resume_returns_to_the_speed_before_the_pause();
+	stop_works_while_paused();
+	keys_while_paused_choose_how_to_resume();
+	chip_while_paused_follows_the_mode_to_resume_in();
+	the_choice_to_resume_ends_with_the_pause();
+	a_quick_second_pause_press_is_ignored();
+	a_pause_right_after_a_switch_is_not_a_bounce();
+	effective_speed_is_what_the_next_frames_will_use();
+	pause_does_nothing_while_idle_or_saving();
 	return tsw_test_failures;
 }
