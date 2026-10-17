@@ -433,7 +433,7 @@ The theme harness already draws every state in every theme. The baseline adds th
 | Focus order | Tab from the main button does not visit widgets in visual order |
 | Minimum width | `minimumSizeHint().width()` above 200 px |
 
-The harness also gains a Font Size and Density matrix (`obs-themes.sh --matrix`: Font Size 8 with Classic density, 10 with Normal, 12 with Comfortable, in Default, Light and System), because those settings change sizes the default run never sees. A sandbox OBS spot check stays part of each release (UX-019).
+The harness also gains a Font Size and Density matrix (`obs-themes.sh --matrix`: Font Size 8 with Classic density, 10 with Normal, 12 with Comfortable, in Default, Light and Classic; System was dropped from it because OBS's Font Size and Density do not reach System, and is drawn instead with a light desktop palette too), because those settings change sizes the default run never sees. A sandbox OBS spot check stays part of each release (UX-019).
 
 ---
 
@@ -589,7 +589,7 @@ The values in angle brackets are tokens that `restyle()` writes into the string.
 
 ### 4.2 Direction B: Studio cards
 
-**Concept.** A calm, premium instrument panel: soft cards floating on the OBS panel, pills for small status, and one idea carried everywhere: **outlined means next, filled means now.** The accent outline marks what will happen (the armed speed, the "Switch to timelapse" button); the accent fill marks timelapse running (the status card's speed badge, the engaged speed). Everything is painted by the dock from the tokens, so the shapes are identical under Yami and System while the colors are each theme's own.
+**Concept.** A calm, premium instrument panel: soft cards floating on the OBS panel, pills for small status, and one idea carried everywhere: **outlined means next, filled means now.** The accent outline marks what will happen (the armed speed, the "Switch to timelapse" button); the accent fill marks timelapse running (the status card's band, the engaged speed). Everything is painted by the dock from the tokens, so the shapes are identical under Yami and System while the colors are each theme's own.
 
 **Sketches, 300 px, English.**
 
@@ -597,14 +597,15 @@ The values in angle brackets are tokens that `restyle()` writes into the string.
  Idle                                        Recording, real time
 +-- Timelapse Switch ------------ [][x] +    +-- Timelapse Switch ------------ [][x] +
 |                                       |    |                                       |
-|  .---------------------------------.  |    |  .---------------------------------.  |
+|  .---------------------------------.  |    |  .=================================.  |
 |  | ( READY )                       |  |    |  | ( (o) REC )                     |  |  tally pill, danger tint
-|  | >  Starts in real time          |  |    |  | >  REAL TIME                    |  |  hero 2.25b
+|  | >  Starts in real time          |  |    |  | >  REAL TIME                    |  |  hero 2.5b
 |  | - - - - - - - - - - - - - - -   |  |    |  | - - - - - - - - - - - - - - -   |  |
-|  | RECORDED       FINAL VIDEO      |  |    |  | RECORDED       FINAL VIDEO      |  |
-|  | 0:00:00        0:00:00          |  |    |  | 0:12:03        0:12:03          |  |
-|  |                                 |  |    |  | This stretch 12:03              |  |
-|  '---------------------------------'  |    |  '---------------------------------'  |
+|  | RECORDED       FINAL VIDEO      |  |    |  | RECORDED       FINAL VIDEO      |  |  hollow: 2 px frame,
+|  | 0:00:00        0:00:00          |  |    |  | 0:12:03        0:12:03          |  |  no fill
+|  | This stretch 0:00               |  |    |  | This stretch 12:03              |  |
+|  | ------------------------------- |  |    |  | >  --  >  --  >  --  >  --  >   |  |  tape: sparse play marks
+|  '---------------------------------'  |    |  '================================='  |
 |                                       |    |                                       |
 |  ( (o) Record with Timelapse Switch ) |    |  ((  >>  Switch to timelapse x4    )) |  accent outline = next
 |                                       |    |                                       |
@@ -620,69 +621,78 @@ The values in angle brackets are tokens that `restyle()` writes into the string.
 +-- Timelapse Switch ------------ [][x] +    +-- Timelapse Switch ------------ [][x] +
 |                                       |    |                                       |
 |  .=================================.  |    |  .---------------------------------.  |
-|  | ( (o) REC )                     |  |    |  | ( (v) SAVED )                   |  |
-|  | >> TIMELAPSE           ( x4 )   |  |    |  | File ready                      |  |
-|  | - - - - - - - - - - - - - - -   |  |    |  | - - - - - - - - - - - - - - -   |  |
-|  | RECORDED       FINAL VIDEO      |  |    |  | RECORDED       FINAL VIDEO      |  |
-|  | 0:31:40        0:16:58          |  |    |  | 1:23:45        0:31:10          |  |
-|  | This stretch x4  19:37 -> 4:54  |  |    |  |                                 |  |
-|  '================================='  |    |  '---------------------------------'  |
-|   accent tint, 2 px accent frame      |    |                                       |
-|  (  >   Back to real time          )  |    |  ( (o) Record with Timelapse Switch ) |
-|                                       |    |                                       |
-|  SPEED NOW                            |    |  .---------------------------------.  |
-|  ((  x2  |#*x4*#|  x8  |  x16  ))     |    |  | 2026-10-15 19-30-00          x  |  |  engaged thumb: filled
-|                                       |    |  | tswitch.mp4                     |  |
-|  (  []  Stop and save              )  |    |  | You skipped 52:35 of waiting.   |  |
-|  (i) Audio: silence during timelapse  |    |  | Nice session!                   |  |
-+---------------------------------------+    |  | ( Open folder )  ( >  Play )    |  |
-                                             |  '---------------------------------'  |
+|  |#################################|  |    |  | ( (v) SAVED )                   |  |
+|  |# ( (o) REC )                   #|  |    |  | File ready                      |  |
+|  |# >> TIMELAPSE           ( x4 ) #|  |    |  | - - - - - - - - - - - - - - -   |  |
+|  |#################################|  |    |  | RECORDED       FINAL VIDEO      |  |
+|  | RECORDED      |FINAL VIDEO      |  |    |  | 1:23:45        0:31:10          |  |
+|  | 0:31:40       |0:16:58          |  |    |  | File: 2026-10-15 19-30-00 ts... |  |  the file it acts on
+|  | This stretch x4  19:37 -> 4:54  |  |    |  | ------------------------------- |  |
+|  | > > > > > > > > > > > > > > >   |  |    |  '---------------------------------'  |
+|  '================================='  |    |                                       |
+|                                       |    |  ( (o) Record with Timelapse Switch ) |
+|  (  >   Back to real time          )  |    |                                       |
+|                                       |    |  .---------------------------------.  |
+|  SPEED NOW                            |    |  | SESSION                       x |  |  a ticket
+|  ((  x2  |#*x4*#|  x8  |  x16  ))     |    |  | 52:35                           |  |  the waiting skipped,
+|                                       |    |  | OF WAITING SKIPPED              |  |  one big figure
+|  (  []  Stop and save              )  |    |  | Nice session!                   |  |
+|  (i) Audio: silence during timelapse  |    |  | ( Open folder )  ( >  Play )    |  |
++---------------------------------------+    |  '---------------------------------'  |
                                              +---------------------------------------+
 ```
+
+In timelapse the card is tinted and framed, with a solid accent band behind the tally and hero, a light speed badge, a bar beside FINAL VIDEO (the counter that grows slower) and chevrons on the tape, denser when faster.
 
 **Sketch, narrow (220 px, Spanish, timelapse).**
 
 ```
 +-- Timelapse Switch --- [][x] +
-|  .========================.  |
-|  | ((o) GRABANDO) ( x16 ) |  |  badge joins the tally line
-|  | >> TIMELAPSE           |  |
-|  | - - - - - - - - - - -  |  |
-|  | GRABADO DURACIÓN FINAL |  |
-|  | 0:31:40  0:16:58       |  |
-|  | Este tramo x16         |  |
-|  | 19:37 -> 1:13          |  |
-|  '========================'  |
-| ( >  Volver a tiempo real )  |
+| .==========================. |
+| |##########################| |
+| |# ((o) GRABANDO) ( x16 ) #| |  badge joins the tally line
+| |# >> TIMELAPSE           #| |
+| |##########################| |
+| | GRABADO  |DURACIÓN FINAL | |
+| | 0:31:40  |0:16:58        | |
+| | Este tramo x16           | |  two lines: the label above
+| | 19:37 -> 1:13            | |  its values
+| | >>>>>>>>>>>>>>>>>>>>>>>> | |  x16: chevrons packed tight
+| '==========================' |
+| ( >  Volver a tiempo real  ) |
 | VELOCIDAD ACTUAL             |
 | (( x2 | x4 | x8 |#x16#))     |
 |                              |
-| ( []  Detener y guardar   )  |
+| ( []  Detener y guardar    ) |
 +------------------------------+
 ```
 
 (In narrow mode the status line may take two lines; B reserves them at that width.)
 
-**Layout and spacing.** Dock margins `s3` (8 px). Group gap `s4` (12 px) between the status card, the main button, the rails and Stop; the gap above Stop is at least `L` (18 px), which is the UX-107 separation without a rule. Card padding `s4` (12 px); rows inside a card `s3` (8 px); caption to rail `s2` (4 px). The status card holds zones A and B as one group, split by a dashed `hairline` (dash 2, gap 3) at `s3` from both.
+**Layout and spacing.** Dock margins `s3` (8 px). Group gap `s4` (12 px) between the status card, the main button, the rails and Stop; the gap above Stop is at least `L` (18 px), which is the UX-107 separation without a rule. Card padding `s4` (12 px); rows inside a card `s3` (8 px); caption to rail `s2` (4 px). The status card holds zones A and B as one group, split by a dashed `hairline` (dash 2, gap 3) at `s3` from both; in timelapse the band's lower edge splits them instead.
 
-**Typography.** Tally pill text 0.75b Bold caps. Hero 2.25b Bold caps (floor 1.5b; Large 3.5b). Quiet hero 1.35b Regular (error headline Bold). Speed badge 1.5b Bold. Readout captions 0.75b Bold caps, `ink(muted, card fill)`; digits 1.6b Bold. Status line 0.9b. Main label 1.1b Bold. Rail labels 1.1b, Bold when selected. Rail captions 0.75b Bold caps `muted`. Card title 1.0b Bold; body 1.0b; links 0.95b; code 0.8b. The status card and the rails paint their text; the other labels use widget style sheets as in Native.
+**Typography.** Tally pill text 0.75b Bold caps. Hero 2.5b Bold caps (floor 1.5b; Large 3.5b). Quiet hero 1.35b Regular (error headline Bold). Speed badge 1.5b Bold. Readout captions 0.75b Bold caps, `ink(muted, card fill)`; digits 1.9b Bold (in a narrow dock they shrink to 1.5b before the columns stack). Status line 0.9b. Main label 1.1b Bold. Rail labels 1.1b, Bold when selected (shrinking to 1.0b beside their glyphs, then to 0.8b under them, before they wrap). Rail captions 0.75b Bold caps `muted`. Card header 0.75b Bold caps `muted`; the summary's figure 2.0b Bold in `ink(accent, surface)`; body 1.0b; links 0.95b. No text is smaller than 8 pt, whatever the Font Size: at Font Size 8 a 0.75b caption would be 6 pt. The status card and the rails paint their text; the other labels use widget style sheets as in Native.
 
-**Shapes.** Cards: radius `max(6, round(0.45 L))` (8 px). Pills (tally, badge, rails, Stop, card actions): radius half their height. Main button: radius `round(0.6 L)` (11 px), a rounded rectangle rather than a pill, because it may hold two lines.
+**Shapes.** Cards and the main button: twice the corner radius of the theme's own button, measured from a picture of it (8 px in the Yami themes, 4 px in Classic), so the dock's corners follow the theme. Pills (tally, badge, rails, Stop, card actions): radius half their height; a rail whose labels stack under their glyphs uses rounded rectangles instead, never tall stadiums. The main button is a rounded rectangle, because it may hold two lines.
 
-**Status card (A and B), by state:**
+**Status card (A and B), by state.** Each state has its own shape, so idle, real time and timelapse differ without color: soft and filled, hollow and outlined, a solid band.
 
 | State | Fill | Frame | Tally pill | Hero |
 |---|---|---|---|---|
 | Idle | `surface` | 1 px `hairline` | outlined 1 px `muted`, READY in `ink(muted, surface)` | quiet, play or fast-forward glyph in `muted` |
-| Real time | `surface` | 1 px `hairline` | filled `dangerTint`, record glyph `shape(danger, dangerTint)`, REC in `text` | REAL TIME in `text`, play glyph |
-| Timelapse | `accentTint` | 2 px `accent` | as real time | fast-forward glyph `ink(accent, accentTint)`, TIMELAPSE in `text`; speed badge at the right: pill in `accentFill` with a 2 px `accent` border, ×4 in `onAccent` |
-| Starting, saving | `surface` | 1 px `hairline`; a 2 px line in `accent` along the bottom inner edge sweeps left to right for at most 5 s, then stays as a full static line | outlined, busy glyph, STARTING or SAVING | quiet |
+| Real time | none: the panel shows through | 2 px `frame` (`shape(edge, panel)`) | filled `dangerTint`, record glyph `shape(danger, dangerTint)`, REC in `text` | REAL TIME in `text`, play glyph |
+| Timelapse | `accentTint`, and a solid band of `accentFill` behind the tally and hero rows | 2 px `accent` | as real time | fast-forward glyph and TIMELAPSE in `onAccent`; speed badge at the right: a pill in `badgeFill` (the lightest theme color with 3:1 on the band), ×4 in the band's color |
+| Starting, saving | `surface` | 1 px dashed `shape(edge, surface)` | outlined, busy glyph, STARTING or SAVING | quiet |
 | Summary | `surface` | 1 px `hairline` | outlined 1 px `shape(success, surface)`, check glyph, SAVED | quiet, File ready |
 | Error | `dangerTint` | 2 px dashed `danger` (dash 4, gap 3) | filled `surface`, error glyph `shape(danger, surface)`, ERROR | headline, Bold, `text` |
 
-In timelapse the FINAL VIDEO digits are painted in `ink(accent, accentTint)`: the counter that grows slower carries the timelapse color. Contrast: `text` on `accentTint` is 9.2 to 15.0:1; `accent` on `accentTint` for words and glyphs after `ink()` is at least 4.5:1; the 2 px `accent` frame is at least 3:1 against the panel; `text` on `dangerTint` is 9.8 to 15.9:1; the record dot on `dangerTint` after `shape()` is 3.00 to 4.07:1.
+In timelapse the FINAL VIDEO digits are painted in `ink(accent, accentTint)`, and a 3 px `accent` bar stands in the gutter beside them: the counter that grows slower is marked by color and by shape. Contrast: `text` on `accentTint` is 9.2 to 15.0:1; `accent` on `accentTint` for words and glyphs after `ink()` is at least 4.5:1; the 2 px `accent` frame is at least 3:1 against the panel; `text` on `dangerTint` is 9.8 to 15.9:1; the record dot on `dangerTint` after `shape()` is 3.00 to 4.07:1.
 
-**Main button (C).** Painted `TswButton`, full width, `2.5 L`:
+**The status line** keeps its row in every state, so it is never an empty hole: the current stretch while recording, frozen while saving, at zero and dimmed when nothing was recorded (idle, a start that failed), and the file's name after a take. When the row needs two lines (narrow docks), the label always takes the first and its values the second.
+
+**The tape band** (from Transport), along the bottom inner edge of the card, `0.7 L` tall, shows how fast the tape runs without a word: in timelapse, chevrons in `shape(accent, accentTint)` whose pitch tightens with the speed (×2 1.6, ×4 1.2, ×8 0.9, ×16 0.7 band heights); in real time, sparse play marks joined by a line in `frame`; while saving, one still 2 px line in `accent`; otherwise an empty tape, one faint hairline.
+
+**Main button (C).** Painted `TswButton`, full width, `2.75 L` (above the 2.5 L of UX-107: an easier target with paint on the hands):
 
 | Action | Face | Frame | Glyph | Label |
 |---|---|---|---|---|
@@ -691,7 +701,7 @@ In timelapse the FINAL VIDEO digits are painted in `ink(accent, accentTint)`: th
 | Back to real time | `raised` | none | play, `text` | `text` |
 | Disabled (saving) | `surface` | none | glyph in `muted` at 60 % | `muted` at 60 % |
 
-Hover moves the face to `hover(face)`; pressed to `pressed(face)` and the content 1 px down. The keyboard focus ring is 2 px `focus`, inset 1 px, following the radius.
+`raised` is the theme's own button face in light themes (OBS Light's white), so the dock's buttons match the Controls dock; dark themes keep the mixed face, because some paint their buttons in a loud color (Rachni's cyan). Hover moves the face to `hover(face)`; pressed to `pressed(face)` and the content 1 px down. The keyboard focus ring is 2 px `focus`, always inside the button with a 2 px gap past any frame: the edge is where the armed button has its accent outline, so focus never reads as "next".
 
 **Rails (D).** A `TswRail` paints a pill track (`surface` fill, 1 px `hairline`, height `max(1.8 L, hC)`); its `TswSegment`s paint only their labels. The selection is a **thumb**: a pill inset 2 px inside the track, under the selected segment.
 
@@ -699,35 +709,36 @@ Hover moves the face to `hover(face)`; pressed to `pressed(face)` and the conten
 |---|---|---|
 | Engaged (timelapse running) | `accentFill`, 2 px `accent` border | `onAccent`, Bold |
 | Armed (idle, real time) | `panel` (a cut-out look), 2 px `shape(accent, surface)` border | `text`, Bold |
-| Start mode, Real time selected | `raised` | `text`, Bold |
+| Start mode, Real time selected | `raised`, 1 px `edge` | `text`, Bold |
 | Unselected segment | none; `hover(surface)` capsule on hover | `text`, Regular |
 
 When the selection changes, the thumb slides to its new segment in 160 ms (OutCubic). The armed outline is 3.00 to 3.47:1 against the track after the guard; the engaged thumb is filled, so armed and engaged differ in shape, not only in color.
 
 **Stop (E).** A pill, full width, `max(1.8 L, hC)`, no fill, 1 px `edge` frame, stop glyph and label in `text`, Regular. The hold fill grows from the left as `dangerTint` with a 2 px leading edge in `shape(danger, dangerTint)`.
 
-**Cards (summary, error).** A `TswCard` with `surface` fill, 1 px `hairline`, radius 8, below the main button at `s4`. Header: the title in Bold and a round dismiss button (circle `1.6 L`, close glyph, `hover(surface)` on hover). Summary: file name (Bold, wraps), the delight line, then two pills, Open folder and Play (`raised`, glyph and label in `text`, height `1.6 L`). Error: reassurance (Bold), "Why:", "What to do:", the fix pill, then Copy details and Learn more as text links in `accentText` (underlined on hover and on keyboard focus), and a small code pill (1 px `hairline`, 0.8b `muted`). The speed map, when the recorder provides sections, is a pill-shaped strip in the summary card: real-time stretches in `raised`, timelapse stretches in `accentTint` hatched with 45 degree lines in `accent` at 30 % and labelled ×N when wide enough (hatching, so it never relies on color).
+**Cards (summary, error), as tickets** (from Transport). A `TswCard` with `surface` fill, 1 px `hairline`, the cards' radius, below the main button at `s4`. Header: a small caption, SESSION or ERROR TSW-E103 (0.75b Bold caps `muted`; the code costs no row of its own), and a round dismiss button (circle `1.6 L`, close glyph, `hover(surface)` on hover). Summary: the waiting the timelapse skipped as one big figure ("52:35", no empty hours; none when the take never sped up) with OF WAITING SKIPPED under it, the delight line, then two pills, Open folder and Play (`raised`, glyph and label in `text`, height `1.6 L`); the file is named in the status line above, which the card acts on. Error: reassurance (Bold), "Why:", "What to do:" (one short sentence or two), the fix pill, then Copy details and Learn more as text links in `accentText` (underlined on hover and on keyboard focus), side by side while they fit. The pills share a row only while neither label wraps in its half; else they stack, full width. The speed map, when the recorder provides sections, is a pill-shaped strip in the summary card: real-time stretches in `raised`, timelapse stretches in `accentTint` hatched with 45 degree lines in `accent` at 30 % and labelled ×N when wide enough (hatching, so it never relies on color).
 
 **Context line (F).** As in Native: an info glyph and `muted` text, 0.9b, on the panel.
 
 **Narrow.** Dock margins `s2`, card padding `s3`, group gap `s3`. The speed badge moves from the hero line to the right end of the tally line. Rails stay one row (×16 at 1.1b is 25 px in a 52 px segment). Card pills stack full width.
 
-**Motion.** Thumb slide 160 ms; the status card's fill and frame cross-fade in 180 ms when the state changes (`QVariantAnimation` between the two token colors); the saving sweep. Reduce motion makes all of them instant.
+**Motion** (with Native's restraint). Only the thumb slides, in 160 ms; Reduce motion makes it instant and ends a slide under way (UX-045). The status card changes state at once, and the saving line is still: the cross-fade and the sweep of the first prototype were dropped. The Stop hold fill is functional and always runs.
 
 **Accessibility.** As in 3.11. The status card is one painted widget: its accessible name is the tally and hero, its description the readout in words, updated without announcing every second; announcements come only from state changes.
 
-**Per-theme notes.** Rachni: buttons are the dock's own neutral grey (`raised`), not Rachni's cyan, and the accent is Rachni's rose (#A45674); the dock reads as a calm Rachni rather than a loud one. Acri: the tint is a deep navy (#212638) with a bright blue frame; it reads as Acri. Light: tints are pale (#C2D0EA), frames clear blue, text near black. Classic: the 8 px radius is softer than Classic's 2 px; acceptable for this direction, which is a look of its own. System: identical shapes in Fusion and Windows, colors from the desktop.
+**Per-theme notes.** Rachni: buttons are the dock's own neutral grey (`raised`), not Rachni's cyan, and the accent is Rachni's rose (#A45674); the dock reads as a calm Rachni rather than a loud one. Acri: the band is a bright blue (#4760B2) over a deep navy tint; it reads as Acri. Light: the buttons are OBS Light's white, the band a clear blue with near-black text, the tint pale. Classic: 4 px corners, from Classic's 2 px buttons; Classic also gives the dock 8 px less width than the scroll area's viewport, so the dock holds its height at what its real width needs and scrolls rather than squeezes. System: identical shapes in Fusion and Windows, colors from the desktop.
 
 **Strengths and risks.** The most refined and modern; the "outlined next, filled now" idea makes the whole dock teach itself. It looks least like OBS's stock docks in heavy themes (Rachni, Acri), and it paints more, so more code.
 
 **Prototype notes** (branch `ui-dir-cards`). Built as written, with these choices the text left open or that the screenshots asked for:
 
-- *Focus on a speed segment is a dashed ring.* A solid ring around a segment looks exactly like the armed thumb, so it would say "this is the next speed" when it is only focused. Buttons keep a solid ring; on the outlined "Switch to timelapse" button the ring sits inside the accent frame with a 2 px gap, so the two never merge.
+- *Focus on a speed segment is a dashed ring.* A solid ring around a segment looks exactly like the armed thumb, so it would say "this is the next speed" when it is only focused; on the thumb it sits inside the thumb's outline. Buttons keep a solid ring, always inside the button with a 2 px gap, so it never takes the edge where the armed button has its outline.
 - *Two-line labels are balanced* ("Record with / Timelapse Switch", never "Record with Timelapse / Switch"), and a speed stays with its word through a no-break space ("timelapse ×4", never "×4" alone on a line). The warm summary line gets its own line.
 - *The control height* `hC` is the button's painted height, not its size hint: Yami adds 2 px of transparent margin above and below, so the hint said 36 px where OBS's buttons show 32 px.
 - *Extremes, never clipping.* At Font Size 12 in a dock narrowed by a scroll bar, the main button may take three lines, a start-mode word may wrap under its glyph, and a recording hero that cannot fit at its floor size drops its leading glyph before it would shrink or clip.
 - *No glyph cache.* Glyphs are painted straight into each widget's painter, which is sharp at any screen scale; a cache can come later if a measurement shows the need (`docs/coding-rules.md`, D3).
-- *Not built yet, for lack of data in the view:* the speed map in the summary card, the warning line and card, the Starting state (no such phase is reported yet; its words exist), the Large glance size and Reduce motion settings (the dock has `setReduceMotion`), and the Stop hold fill (painted when given a progress; nothing reports a hotkey hold to the dock yet).
+- *Not built yet, for lack of data in the view:* the speed map in the summary card (its place is the tape band), the warning line and card, the Starting state (no such phase is reported yet; its words exist), the Large glance size and Reduce motion settings (the dock has `setReduceMotion`), and the Stop hold fill (painted when given a progress; nothing reports a hotkey hold to the dock yet).
+- *Grafts after the panel review* (2026-10-17, the maintainer chose this direction with them): from Transport, the hollow real-time card, the solid timelapse band, the tape band, the accent bar beside FINAL VIDEO, the summary ticket with its big figure, the error code in the card header and the taller main button; a larger hero and digits; from Native, restraint in motion, the theme's own corners and light button faces, and the tighter narrow margins. The tables above describe the result.
 
 ---
 
