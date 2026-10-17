@@ -76,6 +76,8 @@ TswGlyphIcon::TswGlyphIcon(QWidget *parent) : QWidget(parent)
 
 void TswGlyphIcon::setGlyph(TswGlyph shape, const QColor &paint, const QSize &box)
 {
+	if (glyph == shape && color == paint && size() == box && minimumSize() == box)
+		return; /* the context line sets it on every view */
 	glyph = shape;
 	color = paint;
 	setFixedSize(box);

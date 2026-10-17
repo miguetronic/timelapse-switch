@@ -167,6 +167,7 @@ void TswDock::buildZones()
 	}
 	buildCard();
 	buildContext();
+	details = new TswDetails(this, &style, lookup);
 
 	/* The zones, top to bottom; they never change places (UX-002). Each gap is a spacer that the
 	 * dock sizes by state and width (updateGaps), so a hidden zone leaves no hole. */
@@ -180,6 +181,7 @@ void TswDock::buildZones()
 	gapSpeeds = gap();
 	gapStop = gap();
 	gapContext = gap();
+	gapDetails = gap();
 	zones->addWidget(status);
 	zones->addSpacerItem(gapMain);
 	zones->addWidget(mainButton);
@@ -191,7 +193,20 @@ void TswDock::buildZones()
 	zones->addLayout(stopRow);
 	zones->addSpacerItem(gapContext);
 	zones->addWidget(contextRow);
+	zones->addSpacerItem(gapDetails);
+	zones->addWidget(details); /* last: opening it moves nothing above it (UX-002) */
 	zones->addStretch();
+}
+
+void TswDock::setDetailsOpen(bool open)
+{
+	details->setOpen(open);
+	updateGaps();
+}
+
+bool TswDock::detailsOpen() const
+{
+	return details->isOpen();
 }
 
 void TswDock::buildRails()
@@ -292,6 +307,7 @@ void TswDock::buildCard()
 	cardBody->setWordWrap(true);
 	cardTodo = new QLabel(card);
 	cardTodo->setWordWrap(true);
+	buildCardMap();
 	buildCardActions();
 
 	/* The ticket, top to bottom: a small caption and the dismiss button, the content, the actions. */
@@ -304,9 +320,28 @@ void TswDock::buildCard()
 	cardLayout->addWidget(figureBox);
 	cardLayout->addWidget(cardTitle);
 	cardLayout->addWidget(cardBody);
+	cardLayout->addWidget(cardMapBox);
 	cardLayout->addWidget(cardTodo);
 	cardLayout->addLayout(cardActions);
 	cardLayout->addWidget(linkRow);
+}
+
+/* The summary's speed map, under the warm line: where the recording ran in real time, sped up or paused
+ * (3.13, UX-136). */
+void TswDock::buildCardMap()
+{
+	cardMapBox = new QWidget(card);
+	cardMapCaption = new QLabel(cardMapBox);
+	cardMapCaption->setTextFormat(Qt::PlainText);
+	cardMapCaption->setWordWrap(true);
+	cardMapCaption->setText(text("Details.Map").toUpper());
+	cardMap = new TswSpeedMap(cardMapBox, &style);
+	cardMap->setObjectName("tswSummaryMap");
+	cardMap->setAccessibleName(text("Details.Map"));
+	auto *column = new QVBoxLayout(cardMapBox);
+	column->setContentsMargins(0, 0, 0, 0);
+	column->addWidget(cardMapCaption);
+	column->addWidget(cardMap);
 }
 
 /* Open folder and Play, then the links Copy details and Learn more. */
@@ -385,6 +420,10 @@ void TswDock::connectInputs()
 	connect(copyDetails, &QAbstractButton::clicked, this, [this]() { copyErrorDetails(); });
 	connect(learnMore, &QAbstractButton::clicked, this,
 		[this]() { QDesktopServices::openUrl(QUrl(QString(ERROR_PAGE).arg(threeDigits(view.error_texts)))); });
+	connect(details, &TswDetails::openChanged, this, [this](bool open) {
+		updateGaps();
+		emit detailsOpenChanged(open);
+	});
 }
 
 /* The keyboard focus ring shows only for keyboard focus (UX-110); Tab follows the eye (UX-102). Only
@@ -396,7 +435,7 @@ void TswDock::watchKeyFocus()
 		for (QAbstractButton *segment : rail->group()->buttons())
 			order << segment;
 	}
-	order << pauseButton << stopButton;
+	order << pauseButton << stopButton << details->toggle();
 	for (int i = 0; i < order.size(); i++) {
 		order[i]->installEventFilter(this);
 		if (i > 0)
@@ -608,13 +647,13 @@ void TswDock::applyStyleSheets()
 					.arg(t.muted.name());
 	setSheet(startCaption, caption);
 	setSheet(speedCaption, caption);
-	setSheet(context, QString("font-size: %1pt; color: %2;").arg(t.pointsAt(TswType::CONTEXT)).arg(t.muted.name()));
 	const QString onCard = t.ink(t.text, t.surface).name();
 	const QString cardCaption = QString("font-size: %1pt; font-weight: 700; color: %2;")
 					    .arg(t.pointsAt(TswType::CAPTION))
 					    .arg(t.ink(t.muted, t.surface).name());
 	setSheet(cardHeader, cardCaption);
 	setSheet(figureCaption, cardCaption);
+	setSheet(cardMapCaption, cardCaption);
 	setSheet(figure, QString("font-size: %1pt; font-weight: 700; color: %2;")
 				 .arg(t.pointsAt(TswType::FIGURE))
 				 .arg(t.ink(t.accent, t.surface).name()));
@@ -658,12 +697,14 @@ void TswDock::applyMetrics()
 	cardLayout->setSpacing(t.s3);
 	cardActions->setSpacing(t.s3);
 	figureBox->layout()->setSpacing(t.s1);
+	/* A caption close to its strip; and the strip a little apart from the pills below (3.7). */
+	cardMapBox->layout()->setSpacing(t.s2);
+	cardMapBox->layout()->setContentsMargins(0, 0, 0, t.s2);
 
 	contextRow->layout()->setSpacing(t.s2);
-	const int line = QFontMetrics(t.fontAt(TswType::CONTEXT, false)).height();
-	contextIcon->setGlyph(TswGlyph::Info, t.muted, QSize(tswGlyphSize(t.fontAt(TswType::CONTEXT, false)), line));
 	for (TswRail *rail : {startRail, speedRail, resumeRail})
 		rail->refit(); /* the "Resume in" rail's segments follow the fonts */
+	details->restyle(narrow);
 	updateGaps();
 }
 
@@ -767,6 +808,7 @@ void TswDock::updateGaps()
 	/* Stop sits at least one row away from the rails: the separation of UX-107, without a rule. */
 	setGap(gapStop, stopButton->isHidden() ? 0 : std::max(style.L, group));
 	setGap(gapContext, contextRow->isHidden() ? 0 : style.s3);
+	setGap(gapDetails, details->isHidden() ? 0 : group);
 	zones->invalidate();
 }
 
@@ -792,6 +834,7 @@ void TswDock::refresh(bool animate)
 	showPause();
 	showCard();
 	showContext();
+	details->showView(view);
 	updateGaps();
 }
 
@@ -977,6 +1020,9 @@ void TswDock::showSummaryCard()
 	cardBody->setTextFormat(Qt::PlainText);
 	cardBody->setText(text("Summary.Thanks"));
 	cardBody->setVisible(view.thank_user);
+	cardMapBox->setVisible(view.map_shown);
+	if (view.map_shown)
+		cardMap->setMap(view.map, lookup);
 	cardTodo->hide();
 	openFolder->setVisible(!path.isEmpty());
 	play->setVisible(!path.isEmpty());
@@ -989,6 +1035,7 @@ void TswDock::showErrorCard()
 {
 	cardHeader->setText(text("Card.Error", "TSW-E" + threeDigits(view.error_code)).toUpper());
 	figureBox->hide();
+	cardMapBox->hide();
 	const QByteArray prefix = "Error.E" + threeDigits(view.error_texts).toUtf8();
 	const QString saved = text(QByteArray(prefix + ".Saved").constData())
 				      .replace("%1", QString::fromUtf8(view.recorded))
@@ -1011,10 +1058,38 @@ void TswDock::showErrorCard()
 
 void TswDock::showContext()
 {
-	contextRow->setVisible(view.context_text != nullptr);
-	if (view.context_text == nullptr)
+	contextRow->setVisible(view.context_text != nullptr || view.health != 0);
+	if (view.health != 0) {
+		showHealth();
 		return;
-	context->setText(text(view.context_text, QFileInfo(path).fileName()));
+	}
+	const TswTheme &t = style;
+	const QFont font = t.fontAt(TswType::CONTEXT, false);
+	contextIcon->setGlyph(TswGlyph::Info, t.muted, QSize(tswGlyphSize(font), QFontMetrics(font).height()));
+	setSheet(context, QString("font-size: %1pt; color: %2;").arg(t.pointsAt(TswType::CONTEXT)).arg(t.muted.name()));
+	context->setTextFormat(Qt::PlainText);
+	if (view.context_text != nullptr)
+		context->setText(text(view.context_text, QFileInfo(path).fileName()));
+}
+
+/*
+ * The health line (UX-134) in zone F: the warning glyph, the words in the text color, then the code,
+ * small and muted, never split at its hyphen. Never color alone: glyph, words and code (4.1).
+ */
+void TswDock::showHealth()
+{
+	const TswTheme &t = style;
+	const QFont font = t.fontAt(TswType::CONTEXT, false);
+	contextIcon->setGlyph(TswGlyph::Warning, t.warning, QSize(tswGlyphSize(font), QFontMetrics(font).height()));
+	setSheet(context, QString("font-size: %1pt; color: %2;")
+				  .arg(t.pointsAt(TswType::CONTEXT))
+				  .arg(t.ink(t.text, t.panel).name()));
+	const QString words = text(view.health_text, tswAmountText(lookup, view.health_amount));
+	/* A word joiner after the hyphen: Qt would otherwise break "TSW-" from "E102" (nowrap keeps spaces
+	 * only). */
+	context->setTextFormat(Qt::RichText);
+	context->setText(QString("%1&nbsp; <span style=\"color: %2;\">TSW-&#8288;E%3</span>")
+				 .arg(words.toHtmlEscaped(), t.muted.name(), threeDigits(view.health_code)));
 }
 
 /* Start, every switch, saved and errors are announced once each (UX-104). */
@@ -1032,14 +1107,16 @@ void TswDock::announce()
 		words = text(view.announce_text, spokenDuration(QString::fromUtf8(view.final_length)));
 	if (view.banner == TSW_BANNER_ERROR)
 		words = text(view.announce_text, text(view.hero_text)).replace("%2", cardTitle->text());
+	if (isKey(view.announce_text, "A11y.Announce.Health")) /* a new issue: its words and code */
+		words = text(view.announce_text, text(view.health_text, tswAmountText(lookup, view.health_amount)) +
+							 " TSW-E" + threeDigits(view.health_code));
 	tswAnnounce(status, words, view.banner == TSW_BANNER_ERROR);
 }
 
 void TswDock::copyErrorDetails()
 {
-	const QString details =
-		QString("Timelapse Switch TSW-E%1 | file=\"%2\" | details: the [timelapse-switch] lines "
-			"of the OBS log (Help > Log Files)")
-			.arg(threeDigits(view.error_code), path);
-	QApplication::clipboard()->setText(details);
+	const QString report = QString("Timelapse Switch TSW-E%1 | file=\"%2\" | details: the [timelapse-switch] lines "
+				       "of the OBS log (Help > Log Files)")
+				       .arg(threeDigits(view.error_code), path);
+	QApplication::clipboard()->setText(report);
 }

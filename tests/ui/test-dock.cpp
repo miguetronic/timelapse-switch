@@ -25,7 +25,10 @@
  *     side only when neither label wraps;
  *   - Pause and Resume pressed quickly, many times, always show the state the core is in, and
  *     nothing moves (UX-133);
- *   - Reduce motion stops the one animation, the thumb's slide (UX-045).
+ *   - Reduce motion stops the one animation, the thumb's slide (UX-045);
+ *   - the monitoring (ux-spec 3.17): the Details, open while recording and paused, never move zones A
+ *     to E (UX-002); each health issue takes zone F; and the summary card shows the speed
+ *     map.
  * It also saves a picture of each case, for a person to look at.
  *
  *   test-dock <folder with en-US.ini and es-ES.ini> <folder for the pictures> [<OBS theme dumps>]
@@ -46,6 +49,7 @@
 #include <QFontInfo>
 #include <QJsonObject>
 #include <QLabel>
+#include <QRegularExpression>
 #include <QScreen>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -64,6 +68,7 @@
 #include "core/dock-view.h"
 #include "core/session.h"
 #include "obs-theme.hpp"
+#include "ui/dock-monitor.hpp"
 #include "ui/dock-theme.hpp"
 #include "ui/dock-widgets.hpp"
 #include "ui/dock.hpp"
@@ -73,10 +78,11 @@ namespace {
 const uint64_t SECOND_NS = 1000000000;
 const int WIDTHS[] = {300, 260, 220};
 const char *const LOCALES[] = {"en-US", "es-ES"};
-const int TALL = 1000;        /* px: a dock tall enough for any state, before it is fitted */
+const int TALL = 1600;        /* px: a dock tall enough for any case, the Details open, before it is fitted */
 const int SPARE_ROOM = 120;   /* px below the content: a dock in OBS is usually taller than what it shows */
 const int CENTRAL_WIDTH = 40; /* px of OBS's main window beside the dock, as in OBS */
-const char *const ZONES[] = {"tswStatus", "tswMain", "tswCard", "tswSpeeds", "tswStop", "tswContext"};
+const char *const ZONES[] = {"tswStatus", "tswMain", "tswCard", "tswSpeeds", "tswStop", "tswContext", "tswDetails"};
+const uint64_t MIB = 1048576;
 const int MAX_MINIMUM_WIDTH = 200; /* px: the dock must shrink this far, so the viewport decides (3.10) */
 const int MAX_FOCUS_STEPS = 200;   /* more than the dock has widgets: the focus chain is a loop */
 const double HERO_FLOOR = 1.5;     /* x b: the smallest the recording hero may get (4.2) */
@@ -134,7 +140,32 @@ struct Case {
 	bool startInTimelapse;
 	int choice = -1;          /* an input made before the picture (a tsw_input), or -1 */
 	uint32_t choiceSpeed = 0; /* its speed */
+	bool detailsOpen = false; /* the user left the Details open */
 };
+
+/* A session as the recorder reports it (ux-spec 3.17): real time, x4, a pause, x8, x16, back to x4. */
+void monitor(tsw_status *s)
+{
+	s->totals.real_time_ns = 723 * SECOND_NS;
+	s->totals.timelapse_ns = 1177 * SECOND_NS;
+	s->totals.paused_ns = 72 * SECOND_NS;
+	s->totals.switches = 6;
+	s->totals.pauses = 1;
+	const struct {
+		uint8_t speed;
+		int slices;
+	} runs[] = {{1, 6}, {4, 10}, {1, 4}, {0, 2}, {8, 8}, {1, 6}, {16, 4}, {4, 8}};
+	size_t at = 0;
+	for (const auto &run : runs) {
+		for (int i = 0; i < run.slices && at < TSW_MAP_BUCKETS; i++)
+			s->map[at++] = run.speed;
+	}
+	s->feed_waiting = 1;
+	s->feed_size = 16;
+	s->file_bytes = 1288490189;            /* 1.2 GB */
+	s->disk_free_bytes = 212 * 1024 * MIB; /* 212 GB */
+	s->bytes_per_second = 664064;          /* 38 MB per minute */
+}
 
 tsw_status status(enum tsw_phase phase, uint32_t speed, uint32_t outcome, uint32_t error)
 {
@@ -150,6 +181,21 @@ tsw_status status(enum tsw_phase phase, uint32_t speed, uint32_t outcome, uint32
 	s.error_code = error;
 	s.last_recorded_ns = 5025 * SECOND_NS;
 	s.last_final_ns = 1870 * SECOND_NS;
+	if (phase != TSW_PHASE_IDLE)
+		monitor(&s);
+	return s;
+}
+
+/* Recording in timelapse with one health issue (UX-134). */
+tsw_status unwell(uint32_t speed, uint32_t issue)
+{
+	tsw_status s = status(TSW_PHASE_RECORDING, speed, 0, 0);
+	if (issue == TSW_HEALTH_DISK_LOW)
+		s.disk_free_bytes = 330 * MIB; /* 8 minutes at 38 MB per minute */
+	else if (issue == TSW_HEALTH_LOST_FRAMES)
+		s.frames_lost = 37;
+	else
+		s.feed_waiting = 12;
 	return s;
 }
 
@@ -185,6 +231,10 @@ tsw_dock_view viewOf(const Case &c)
 	tsw_dock_model model{};
 	tsw_dock_model_init(&model);
 	tsw_dock_view view{};
+	if (c.status.outcome != 0) { /* a card follows a recording: its summary shows that recording's map */
+		const tsw_status before = status(TSW_PHASE_RECORDING, 4, 0, 0);
+		tsw_dock_view_build(&model, &session, &before, &view);
+	}
 	tsw_dock_view_build(&model, &session, &c.status, &view);
 	return view;
 }
@@ -233,6 +283,24 @@ void checkZones(const TswDock &dock, const Case &c, const QString &label)
 			     .arg(stop->height()));
 	if (dock.findChild<QWidget *>("tswCard")->isVisible() != (c.status.outcome != 0))
 		fail(label + ": card shown when it should not be, or the other way round");
+	/* The Details only while recording, paused or saving; open only where the user left them open. */
+	if (dock.findChild<QWidget *>("tswDetails")->isVisible() != recording)
+		fail(label + ": Details shown when they should not be, or the other way round");
+	if (dock.findChild<QWidget *>("tswDetailsCard")->isVisible() != (recording && c.detailsOpen))
+		fail(label + ": the Details card is open when it should not be, or the other way round");
+	/* UX-134: zone F holds the health line exactly while an issue is shown, with its code. */
+	const auto *context = dock.findChild<QWidget *>("tswContext")->findChild<QLabel *>();
+	const bool unwell =
+		c.status.phase != TSW_PHASE_SAVING &&
+		(c.status.frames_lost > 0 || c.status.feed_waiting * 2 >= std::max(1u, c.status.feed_size) ||
+		 (c.status.disk_free_bytes > 0 && c.status.disk_free_bytes < 600 * c.status.bytes_per_second));
+	static const QRegularExpression code("TSW-(&#8288;)?E\\d{3}"); /* the code, kept whole by a word joiner */
+	if (recording && unwell != context->text().contains(code))
+		fail(label + ": the health line is missing, or shown while all is well: " + context->text());
+	/* 3.13: the summary card shows the speed map; an error card does not. */
+	const bool summary = c.status.outcome != 0 && c.status.error_code == 0;
+	if (dock.findChild<QWidget *>("tswSummaryMap")->isVisible() != summary)
+		fail(label + ": the summary's speed map shown when it should not be, or the other way round");
 }
 
 /*
@@ -307,6 +375,19 @@ void checkHeights(const TswDock &dock, const QString &label)
 		if (rail->isVisible() && rail->property("tswClipped").toBool())
 			fail(label + ": a label is wider than its segment in " + rail->objectName());
 	}
+	/* The same for the words of a wrapped label: one wider than the label runs past its edge. */
+	static const QRegularExpression space("\\s+");
+	for (const QLabel *text : dock.findChildren<QLabel *>()) {
+		if (!text->isVisible() || !text->wordWrap() || text->textFormat() == Qt::RichText)
+			continue;
+		const QFontMetrics metrics(text->font());
+		for (const QString &word : text->text().split(space, Qt::SkipEmptyParts)) {
+			if (metrics.horizontalAdvance(word) > text->contentsRect().width())
+				fail(label + QString(": the word \"%1\" is wider than its label (%2 px)")
+						     .arg(word)
+						     .arg(text->contentsRect().width()));
+		}
+	}
 	const auto *main = dock.findChild<QWidget *>("tswMain");
 	if (main->height() < dock.theme().L * 5 / 2)
 		fail(label + ": the main button is shorter than 2.5 lines");
@@ -333,6 +414,7 @@ void checkFit(const TswDock &dock, const QWidget &viewport, const QString &label
 void checkContrast(const TswDock &dock, const QString &label)
 {
 	const TswTheme &t = dock.theme();
+	const TswMapColors map = tswMapColors(t, t.surface);
 	const struct {
 		const char *what;
 		QColor color;
@@ -357,6 +439,11 @@ void checkContrast(const TswDock &dock, const QString &label)
 		{"the paused frame and bars on the panel", t.shape(t.warning, t.panel), t.panel, SHAPE},
 		{"the pause glyph on warningTint", t.shape(t.warning, t.warningTint), t.warningTint, SHAPE},
 		{"text on warningTint", t.ink(t.text, t.warningTint), t.warningTint, TEXT},
+		{"the warning glyph of the health line on the panel", t.warning, t.panel, SHAPE},
+		{"the Details' words on their card", t.ink(t.muted, t.surface), t.surface, TEXT},
+		{"the speed map's real-time outline on its card", map.realTimeEdge, t.surface, SHAPE},
+		{"the speed map's hatching on its tint", map.hatch, map.timelapse, SHAPE},
+		{"the speed map's hatching on its card", map.hatch, t.surface, SHAPE},
 	};
 	for (const auto &pair : pairs) {
 		const double contrast = tswContrast(pair.color, pair.under);
@@ -415,8 +502,9 @@ void checkWordsAndFocus(const TswDock &dock, const QString &label)
 		if (main->accessibleName().compare(QString::fromUtf8(lookup(key)), Qt::CaseInsensitive) == 0)
 			fail(label + ": the main button is named like a state: " + main->accessibleName());
 	}
+	const QWidget *first = main;
 	int top = -1;
-	const QWidget *widget = main;
+	const QWidget *widget = first;
 	for (int step = 0; step < MAX_FOCUS_STEPS; step++) {
 		if (widget->isVisible() && widget->isEnabled() && (widget->focusPolicy() & Qt::TabFocus) &&
 		    dock.isAncestorOf(widget)) {
@@ -427,7 +515,7 @@ void checkWordsAndFocus(const TswDock &dock, const QString &label)
 			top = y;
 		}
 		widget = widget->nextInFocusChain();
-		if (widget == main)
+		if (widget == first)
 			break;
 	}
 }
@@ -482,8 +570,8 @@ void checkLayout(const TswDock &dock, const QWidget &viewport, const Case &c, co
 	checkWordsAndFocus(dock, label);
 }
 
-/* The eleven states every picture set shows, in this order: the paused ones right after the
- * recording ones they come from, so the two read side by side. */
+/* The states every picture set shows, in this order: the paused ones right after the recording ones
+ * they come from, so the two read side by side; then the monitoring cases. */
 std::vector<Case> allCases()
 {
 	return {
@@ -499,6 +587,12 @@ std::vector<Case> allCases()
 		{"summary", status(TSW_PHASE_IDLE, 1, 1, 0), false},
 		{"error-103", status(TSW_PHASE_IDLE, 1, 1, 103), false},
 		{"error-001", startFailed(), false},
+		/* Monitoring (ux-spec 3.17): the Details open, and each health issue in zone F. */
+		{"details", status(TSW_PHASE_RECORDING, 4, 0, 0), false, -1, 0, true},
+		{"details-paused", pausedAt(4), false, -1, 0, true},
+		{"health-disk", unwell(4, TSW_HEALTH_DISK_LOW), false},
+		{"health-frames", unwell(1, TSW_HEALTH_LOST_FRAMES), false},
+		{"health-encoder", unwell(4, TSW_HEALTH_ENCODER_BEHIND), false},
 	};
 }
 
@@ -527,6 +621,7 @@ QScrollArea *showCase(const Case &c, int width)
 	QScrollArea *area = TswDock::inScrollArea(dock);
 	area->setFixedWidth(width);
 	area->resize(width, TALL);
+	dock->setDetailsOpen(c.detailsOpen);
 	dock->showView(viewOf(c));
 	area->show();
 	settle();
@@ -680,7 +775,8 @@ void checkLocale(const QString &locale, const QString &pictures)
 			auto *dock = new TswDock(lookup);
 			QScrollArea *area = TswDock::inScrollArea(dock); /* as in OBS */
 			area->setFixedWidth(width);
-			area->resize(width, 1000);
+			area->resize(width, TALL);
+			dock->setDetailsOpen(c.detailsOpen);
 			dock->showView(viewOf(c));
 			area->show();
 			settle();
@@ -781,6 +877,7 @@ TswDock *dockInObs(OBSBasic &window, const Case &c, int width)
 	frame->setWidget(TswDock::inScrollArea(dock));
 	frame->setFixedWidth(width);
 	window.addDockWidget(Qt::RightDockWidgetArea, frame);
+	dock->setDetailsOpen(c.detailsOpen);
 	dock->showView(viewOf(c));
 	window.resize(width + CENTRAL_WIDTH, TALL);
 	window.show();
@@ -860,6 +957,8 @@ const Interaction INTERACTIONS[] = {
 	{"Open folder: focus", "summary", "tswOpenFolder", Act::Focus},
 	{"Close: hover", "summary", "tswDismiss", Act::Hover},
 	{"Learn more: focus", "error-103", "tswLearnMore", Act::Focus},
+	{"Details: hover", "real-time", "tswDetailsToggle", Act::Hover},
+	{"Details: focus", "details", "tswDetailsToggle", Act::Focus},
 };
 
 /* Does to widget what a mouse or a keyboard would; returns false if it did not take. */

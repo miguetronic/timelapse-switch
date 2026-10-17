@@ -161,6 +161,11 @@ void paintStroked(QPainter &p, TswGlyph glyph)
 		p.drawPolyline(chevron, 3);
 		break;
 	}
+	case TswGlyph::ChevronDown: {
+		const QPointF chevron[] = {{3, 5.5}, {8, 10.5}, {13, 5.5}};
+		p.drawPolyline(chevron, 3);
+		break;
+	}
 	case TswGlyph::Error:
 	case TswGlyph::Info:
 		paintCircled(p, glyph);

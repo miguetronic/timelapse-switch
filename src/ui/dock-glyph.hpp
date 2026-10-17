@@ -36,7 +36,8 @@ enum class TswGlyph {
 	Copy,        /* Copy details */
 	LinkOut,     /* Learn more */
 	Close,       /* card dismiss */
-	Chevron,     /* one chevron */
+	Chevron,     /* one chevron, pointing right: timelapse tape, a closed Details section */
+	ChevronDown, /* one chevron, pointing down: an open Details section */
 };
 
 /* tswPaintGlyph: paints glyph in the square centered in box, in color. Thread: UI. */

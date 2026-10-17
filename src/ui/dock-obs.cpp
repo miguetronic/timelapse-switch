@@ -53,9 +53,10 @@ TswDock *findDock()
 
 } // namespace
 
-void tsw_dock_create(struct tsw_controller *controller)
+void tsw_dock_create(struct tsw_controller *controller, bool details_open)
 {
 	auto *dock = new TswDock(moduleText);
+	dock->setDetailsOpen(details_open);
 	auto refresh = [dock, controller]() {
 		tsw_dock_view view;
 		tsw_controller_view(controller, &view);
@@ -80,6 +81,15 @@ void tsw_dock_create(struct tsw_controller *controller)
 		return;
 	}
 	obs_frontend_add_event_callback(onFrontendEvent, dock);
+}
+
+bool tsw_dock_details_open(bool *open)
+{
+	const TswDock *dock = findDock();
+	if (dock == nullptr || open == nullptr)
+		return false;
+	*open = dock->detailsOpen();
+	return true;
 }
 
 void tsw_dock_destroy(void)
