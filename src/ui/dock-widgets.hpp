@@ -89,17 +89,21 @@ struct TswStatusContent {
 
 /* The texts zones A and B may ever show at this language, so their height never changes. */
 struct TswStatusReserve {
-	QString realTimeHero;    /* REAL TIME: the hero is fitted so both recording heroes fit, */
-	QString timelapseHero;   /* TIMELAPSE, with the speed badge beside it when wide */
-	QStringList quietHeroes; /* sentences, Regular */
-	QStringList headlines;   /* error headlines, Bold */
-	QString widestSpeed;     /* ×16 */
-	QString stretchLabel;    /* the longest status line, in two parts */
+	QStringList tallies;      /* READY, REC, PAUSED, ...: the menu shares their line when it fits */
+	QStringList badgeTallies; /* REC and PAUSED: the tallies that may have a badge beside them */
+	QString realTimeHero;     /* REAL TIME: the hero is fitted so both recording heroes fit, */
+	QString timelapseHero;    /* TIMELAPSE, with the speed badge beside it when wide */
+	QStringList quietHeroes;  /* sentences, Regular */
+	QStringList headlines;    /* error headlines, Bold */
+	QString widestSpeed;      /* ×16 */
+	QString stretchLabel;     /* the longest status line, in two parts */
 	QString stretchValues;
 };
 
 /* Zones A and B as one card: the state block above a dashed hairline, the readout below, and a
  * tape band along the bottom whose marks show the speed without a word. */
+class TswMenuButton;
+
 class TswStatusCard : public QWidget {
 	Q_OBJECT
 	Q_PROPERTY(double tswHeroPoints READ heroPoints)         /* for the UI test: the hero's painted size */
@@ -109,6 +113,10 @@ class TswStatusCard : public QWidget {
 
 public:
 	TswStatusCard(QWidget *parent, const TswTheme *theme);
+	/* The dock's menu button, in the card's top corner: at the end of the tally line, or in a row of its
+	 * own above it where the tally line is too full; the same place in every state (UX-002, UX-138). */
+	void setMenuButton(TswMenuButton *button);
+	void placeMenuButton();
 	void setContent(const TswStatusContent &content);
 	void setReserve(const TswStatusReserve &reserve);
 	void setNarrow(bool narrow);
@@ -125,9 +133,13 @@ public:
 
 protected:
 	void paintEvent(QPaintEvent *event) override;
+	void resizeEvent(QResizeEvent *event) override;
 
 private:
 	Layout measure(int width) const;
+	void measureMenu(Layout &layout) const;
+	double widestPill(const Layout &layout, const QStringList &tallies) const;
+	double menuNeeds(const Layout &layout, bool badge) const;
 	void measureStateBlock(Layout &layout) const;
 	void measureReadout(Layout &layout) const;
 	void paintFrame(QPainter &painter, const Layout &layout) const;
@@ -147,6 +159,7 @@ private:
 	const TswTheme *theme;
 	TswStatusContent content;
 	TswStatusReserve reserve;
+	TswMenuButton *menu = nullptr;
 	bool narrow = false;
 };
 
@@ -214,6 +227,7 @@ class TswLink : public QAbstractButton {
 public:
 	TswLink(QWidget *parent, const TswTheme *theme, TswGlyph glyph);
 	void setLabel(const QString &text);
+	void setOnPanel(bool onPanel); /* on the panel (the About dialog), not on a card's surface */
 	void setLinkFont(const QFont &font);
 	QSize sizeHint() const override;
 	QSize minimumSizeHint() const override;
@@ -222,9 +236,12 @@ protected:
 	void paintEvent(QPaintEvent *event) override;
 
 private:
+	QColor under() const;
+
 	const TswTheme *theme;
 	TswGlyph glyph;
 	QFont linkFont;
+	bool panel = false;
 };
 
 class TswRail;

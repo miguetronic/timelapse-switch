@@ -231,6 +231,7 @@ static void load_settings(void)
 		plugin.settings = obs_data_create();
 	obs_data_set_default_int(plugin.settings, "stop_hold_ms", DEFAULT_STOP_HOLD_MS);
 	obs_data_set_default_int(plugin.settings, "timelapse_speed", DEFAULT_TIMELAPSE_SPEED);
+	obs_data_set_default_bool(plugin.settings, "details_open", false); /* closed until opened (UX-135) */
 	const long long hold_ms = obs_data_get_int(plugin.settings, "stop_hold_ms");
 	plugin.stop_hold_ns = (hold_ms > 0 ? (uint64_t)hold_ms : 0) * 1000000;
 
@@ -277,6 +278,9 @@ static void save_settings(void)
 	obs_data_set_obj(plugin.settings, "hotkeys", keys);
 	obs_data_release(keys);
 	obs_data_set_int(plugin.settings, "timelapse_speed", tsw_controller_timelapse_speed(plugin.controller));
+	bool details_open = false;
+	if (tsw_dock_details_open(&details_open)) /* no dock: keep the choice saved before */
+		obs_data_set_bool(plugin.settings, "details_open", details_open);
 
 	char *folder = obs_module_config_path("");
 	char *path = obs_module_config_path("settings.json");
@@ -314,7 +318,7 @@ bool obs_module_load(void)
 		tsw_log(LOG_ERROR, "TSW-E901 error | the controller could not be created");
 		return false;
 	}
-	tsw_dock_create(plugin.controller);
+	tsw_dock_create(plugin.controller, obs_data_get_bool(plugin.settings, "details_open"));
 	obs_frontend_add_event_callback(on_frontend_event, NULL);
 	tsw_log(LOG_INFO, "plugin loaded (version %s)", PLUGIN_VERSION);
 	return true;

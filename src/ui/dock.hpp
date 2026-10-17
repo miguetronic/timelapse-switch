@@ -19,8 +19,10 @@
  *   BELOW    SPEED NOW                             D rails (or the summary or error card)
  *            (( x2 |#x4#| x8 | x16 ))
  *            (  || Pause  ) (  []  Stop and save )  E Pause (Resume while paused) and Stop
- *   CONTEXT  (i) Audio: silence during timelapse   F context line
+ *   CONTEXT  (i) Audio: silence during timelapse   F context line, or the health line when needed
+ *            > DETAILS                             the Details, on request (dock-monitor.hpp)
  *
+ * The status card's top corner holds a small menu button: Help and About (dock-about.hpp).
  * Everything it paints is mixed from the active OBS theme (dock-theme.hpp), read again whenever
  * the theme, the font size or the density changes.
  */
@@ -32,10 +34,13 @@
 #include <QString>
 
 #include "core/dock-view.h"
+#include "ui/dock-about.hpp"
+#include "ui/dock-monitor.hpp"
 #include "ui/dock-theme.hpp"
 
 class QBoxLayout;
 class QLabel;
+class QMenu;
 class QScrollArea;
 class QSpacerItem;
 class QVBoxLayout;
@@ -46,9 +51,6 @@ class TswLink;
 class TswRail;
 class TswReservedLabel;
 class TswStatusCard;
-
-/* Translates a locale key: obs_module_text in OBS, a reader of the .ini files in the UI test. */
-using TswText = const char *(*)(const char *key);
 
 class TswDock : public QFrame {
 	Q_OBJECT
@@ -69,6 +71,15 @@ public:
 	/* The dock as OBS shows it: in a scroll area, which gives wrapped texts the height they need (and
 	 * scrolls, instead of cutting them, when the dock is short). Takes ownership of dock. */
 	static QScrollArea *inScrollArea(TswDock *dock);
+
+	/* What the About dialog shows that only the plugin knows: its version and its symbol (UX-138). */
+	void setAboutInfo(const TswAboutInfo &info);
+	/* The About dialog, not modal: from the menu, and for the UI test. */
+	void showAbout();
+
+	/* The Details section: open or closed as the user left it (UX-135); never opened by the dock. */
+	void setDetailsOpen(bool open);
+	bool detailsOpen() const;
 
 	/* Reduce motion (UX-045): the one animation, the thumb's slide, becomes instant, and one under
 	 * way ends at once (3.12). Off until the Feedback settings exist. */
@@ -96,6 +107,7 @@ public slots:
 signals:
 	void inputRequested(int input, unsigned speed); /* an enum tsw_input, and the speed of a segment */
 	void dismissRequested();                        /* the card's dismiss button, or Esc */
+	void detailsOpenChanged(bool open);             /* the user opened or closed the Details */
 
 protected:
 	bool event(QEvent *event) override;
@@ -110,9 +122,11 @@ private:
 	QString spoken(const QString &words) const;
 	QString spokenDuration(const QString &clock) const;
 	void buildZones();
+	void buildMenu();
 	void buildRails();
 	void buildResumeRail();
 	void buildCard();
+	void buildCardMap();
 	void buildCardActions();
 	void buildContext();
 	void connectInputs();
@@ -135,6 +149,7 @@ private:
 	void updateCardRows();
 	void updateStopRow();
 	void showContext();
+	void showHealth();
 	void announce();
 	void copyErrorDetails();
 
@@ -157,7 +172,12 @@ private:
 	QSpacerItem *gapSpeeds = nullptr;
 	QSpacerItem *gapStop = nullptr;
 	QSpacerItem *gapContext = nullptr;
-	TswStatusCard *status = nullptr; /* zones A and B */
+	QSpacerItem *gapDetails = nullptr;
+	TswStatusCard *status = nullptr;     /* zones A and B */
+	TswMenuButton *menuButton = nullptr; /* in the status card's top corner: Help and About (UX-138) */
+	QMenu *menu = nullptr;
+	TswAbout *about = nullptr; /* made when first asked for */
+	TswAboutInfo aboutInfo;
 	TswButton *mainButton = nullptr; /* zone C */
 	QWidget *speeds = nullptr;       /* zone D */
 	QVBoxLayout *speedsLayout = nullptr;
@@ -181,6 +201,9 @@ private:
 	QWidget *figureBox = nullptr; /* the summary's big figure: the waiting skipped */
 	QLabel *figure = nullptr;
 	QLabel *figureCaption = nullptr;
+	QWidget *cardMapBox = nullptr; /* the summary's speed map (3.13), with its caption */
+	QLabel *cardMapCaption = nullptr;
+	TswSpeedMap *cardMap = nullptr;
 	QLabel *cardTitle = nullptr; /* the file name, or the error's reassurance */
 	QLabel *cardBody = nullptr;
 	QLabel *cardTodo = nullptr;
@@ -190,4 +213,5 @@ private:
 	QWidget *linkRow = nullptr;
 	TswLink *copyDetails = nullptr;
 	TswLink *learnMore = nullptr;
+	TswDetails *details = nullptr; /* below zone F, on request */
 };

@@ -112,7 +112,9 @@ add_library(
   tsw-dock
   STATIC
   src/ui/dock.cpp
+  src/ui/dock-about.cpp
   src/ui/dock-glyph.cpp
+  src/ui/dock-monitor.cpp
   src/ui/dock-paint.cpp
   src/ui/dock-status.cpp
   src/ui/dock-theme.cpp

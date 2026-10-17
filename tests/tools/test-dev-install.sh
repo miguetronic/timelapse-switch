@@ -5,8 +5,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # Tests tools/dev-install.sh against a made-up OBS configuration folder:
-# install, reinstall, uninstall (settings kept), uninstall --purge, and
-# that another plugin next to it is never touched. Needs the plugin built.
+# install (the module and all of data/), reinstall, uninstall (settings
+# kept), uninstall --purge, and that another plugin next to it is never
+# touched. Needs the plugin built.
 #
 #   tests/tools/test-dev-install.sh
 
@@ -38,14 +39,24 @@ main() {
   local tool=(tools/dev-install.sh --config-dir "${config}" --no-build)
   local plugin="${config}/plugins/timelapse-switch"
 
+  # The module, and every file of data/ (texts and pictures).
+  local expected
+  expected="$(($(find data -type f | wc -l) + 1))"
+
   "${tool[@]}" >/dev/null
   check 'install: the module' test -f "${plugin}/bin/64bit/timelapse-switch.so"
   check 'install: both locales' test -f "${plugin}/data/locale/es-ES.ini"
+  check 'install: the symbol for light and dark themes' \
+    test -f "${plugin}/data/images/symbol-512.png" \
+    -a -f "${plugin}/data/images/symbol-dark-512.png"
+  check 'install: all of data' \
+    test "$(find "${plugin}" -type f | wc -l)" -eq "${expected}"
   check 'install: no staging left' \
     test ! -e "${config}/plugins/.timelapse-switch.new"
 
   "${tool[@]}" >/dev/null
-  check 'reinstall: same files' test "$(find "${plugin}" -type f | wc -l)" -eq 3
+  check 'reinstall: same files' \
+    test "$(find "${plugin}" -type f | wc -l)" -eq "${expected}"
 
   "${tool[@]}" --uninstall >/dev/null
   check 'uninstall: plugin gone' test ! -e "${plugin}"
