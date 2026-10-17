@@ -39,10 +39,12 @@ struct TswTheme {
 	double b = 10.0;     /* OBS base font size, points */
 	int L = 18;          /* its line height, pixels */
 	int hC = 28;         /* the theme's control height: Density shows here */
+	double radius = 4.0; /* the theme's button corners, px: 2 in Classic, 4 in the other Yami themes */
 	QFont font;          /* the probe's font: every painted text starts from it */
 	QColor panel;        /* what OBS really paints behind the dock */
 	QColor text;         /* body and title text */
 	QColor face;         /* the theme's button face (for the focus ring) */
+	QColor buttonFace;   /* what the theme really paints on a button: OBS Light's is white */
 	QColor hl;           /* the theme's highlight */
 	QColor hlText;       /* text on it */
 	QColor mutedIn;      /* OBS class text-muted, or the placeholder color */
@@ -60,15 +62,21 @@ struct TswTheme {
 	int s4 = 12;
 	int s5 = 16;
 
+	/* Corners (3.7): a container's corner is its content's plus the space between, so cards and
+	 * the main button get twice the theme's button radius (8 px, or 4 px in Classic). */
+	int corner = 8;
+
 	/* Tokens (3.5). */
 	QColor muted;      /* captions, hints, idle digits */
 	QColor hairline;   /* separators (decorative) */
 	QColor edge;       /* outlines of quiet buttons */
 	QColor surface;    /* cards and tracks */
-	QColor raised;     /* painted button faces */
+	QColor raised;     /* painted button faces: the theme's own in light themes */
 	QColor accent;     /* armed outlines, timelapse frames */
 	QColor accentFill; /* filled timelapse areas, the engaged speed */
 	QColor onAccent;   /* text and glyphs on accentFill */
+	QColor badgeFill;  /* the speed badge on the solid timelapse band: the band's text as a fill */
+	QColor badgeText;  /* its number: the band's color, readable on the badge */
 	QColor accentText; /* accent words on the panel: links */
 	QColor danger;     /* record dot, error frame */
 	QColor success;    /* check glyph */
@@ -76,6 +84,7 @@ struct TswTheme {
 	QColor focus;      /* keyboard focus ring: 3:1 against the panel and the theme's buttons */
 	QColor accentTint; /* the timelapse status card */
 	QColor dangerTint; /* REC pill, error card, Stop hold */
+	QColor frame;      /* the 2 px outline of the real-time status card: a shape, 3:1 */
 
 	/* shape: a glyph, line, frame or marker on under (3:1); ink: a text on under (4.5:1). */
 	QColor shape(const QColor &color, const QColor &under) const;
@@ -83,9 +92,10 @@ struct TswTheme {
 	/* hover: a face under the mouse; pressed: a face being pressed. */
 	QColor hover(const QColor &face) const;
 	QColor pressed(const QColor &face) const;
-	/* The probe's font at factor times b, rounded to 0.5 pt so a restyle does not churn. */
+	/* The probe's font at factor times b, rounded to 0.5 pt so a restyle does not churn, and never
+	 * below 8 pt: at OBS's Font Size 8 a 0.75b caption would be 6 pt, unreadable even up close. */
 	QFont fontAt(double factor, bool bold) const;
-	/* The same size as a point value, for widget style sheets. */
+	/* The same size as a point value, for widget style sheets (same floor). */
 	double pointsAt(double factor) const;
 
 	/* Fills the spacing and the tokens from the inputs. */

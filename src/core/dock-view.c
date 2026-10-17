@@ -153,6 +153,15 @@ static void show_zero_times(struct tsw_dock_view *view)
 	memcpy(view->final_length, ZERO_TIME, sizeof(ZERO_TIME));
 }
 
+/* The current stretch for the status line: live while recording, frozen while saving. */
+static void show_stretch(const struct tsw_status *status, uint32_t speed, struct tsw_dock_view *view)
+{
+	view->section_shown = true;
+	view->section_speed = speed;
+	tsw_format_short_duration(status->section_recorded_ns, view->section_recorded);
+	tsw_format_short_duration(status->section_final_ns, view->section_final);
+}
+
 /* Idle: Record, the starting mode, and the reminder that this is a separate file (UX-021). */
 static void build_idle(const struct tsw_session *session, struct tsw_dock_view *view)
 {
@@ -162,6 +171,10 @@ static void build_idle(const struct tsw_session *session, struct tsw_dock_view *
 	view->hero_quiet = true;
 	view->hero_speed = session->timelapse_speed;
 	show_zero_times(view);
+	/* The status line too, at zero and dimmed like the counters: never an empty hole. */
+	view->section_shown = true;
+	view->section_speed = 1;
+	tsw_format_short_duration(0, view->section_recorded);
 	view->speeds_shown = true;
 	view->speeds_enabled = true;
 	view->speed_label = "Label.Speed";
@@ -201,12 +214,15 @@ static void build_card(const struct tsw_dock_model *model, const struct tsw_stat
 		tsw_format_duration(status->last_recorded_ns, view->recorded);
 		tsw_format_duration(status->last_final_ns, view->final_length);
 	}
+	/* The waiting skipped, as one big figure without empty hours ("52:35"); none if nothing was. */
 	const uint64_t skipped =
 		status->last_recorded_ns > status->last_final_ns ? status->last_recorded_ns - status->last_final_ns : 0;
-	tsw_format_duration(skipped, view->skipped);
+	if (skipped >= SECOND_NS)
+		tsw_format_short_duration(skipped, view->skipped);
 }
 
-/* Saving: the counters freeze, and what cannot act is disabled, not hidden (UX-011). */
+/* Saving: the counters and the last stretch freeze, and what cannot act is disabled, not hidden
+ * (UX-011). */
 static void build_saving(struct tsw_dock_view *view)
 {
 	view->banner = TSW_BANNER_BUSY;
@@ -231,16 +247,13 @@ static void build_recording(const struct tsw_session *session, const struct tsw_
 	view->stop_shown = true;
 	view->stop_enabled = true;
 	view->main_enabled = true;
+	const bool timelapse = status->speed > 1;
+	show_stretch(status, timelapse ? status->speed : 1, view);
 	if (status->phase == TSW_PHASE_SAVING) {
 		build_saving(view);
 		return;
 	}
-	const bool timelapse = status->speed > 1;
 	view->tally_text = "State.Tally.Rec";
-	view->section_shown = true;
-	view->section_speed = timelapse ? status->speed : 1;
-	tsw_format_short_duration(status->section_recorded_ns, view->section_recorded);
-	tsw_format_short_duration(status->section_final_ns, view->section_final);
 	if (timelapse) {
 		view->banner = TSW_BANNER_TIMELAPSE;
 		view->hero_text = "State.Hero.Timelapse";

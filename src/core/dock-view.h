@@ -58,7 +58,7 @@ struct tsw_dock_view {
 	bool counters_dimmed; /* idle: a dimmed 0:00:00 (UX-006) */
 	char recorded[TSW_TIME_TEXT];
 	char final_length[TSW_TIME_TEXT];
-	bool section_shown;                   /* recording: the current stretch, in the status line (UX-007) */
+	bool section_shown; /* the current stretch, in the status line (UX-007): live, frozen while saving, 0 idle */
 	uint32_t section_speed;               /* 1 in real time */
 	char section_recorded[TSW_TIME_TEXT]; /* short: "19:37" */
 	char section_final[TSW_TIME_TEXT];
@@ -67,7 +67,7 @@ struct tsw_dock_view {
 	bool card_shown;
 	uint32_t error_code;         /* TSW-E number; 0 = summary */
 	uint32_t error_texts;        /* the code whose texts the dock shows: 1, 2, 103, or 901 for any other */
-	char skipped[TSW_TIME_TEXT]; /* summary: waiting the timelapse saved */
+	char skipped[TSW_TIME_TEXT]; /* summary: waiting the timelapse saved, "52:35"; empty if none */
 	bool thank_user;             /* summary: the one warm line of the OBS session (UX-072) */
 
 	/* C. Main button: it always sends TSW_INPUT_MAIN */

@@ -44,7 +44,8 @@ const int SPEEDS[] = {2, 4, 8, 16};
 const uint32_t WIDEST_SPEED = 16;
 const int START_REAL_TIME = 0; /* ids of the start-mode segments */
 const int START_TIMELAPSE = 1;
-const double MAIN_ROWS = 2.5;    /* x L: the main button's height (UX-107) */
+const double MAIN_ROWS =
+	2.75; /* x L: the main button's height, above UX-107's 2.5: an easy target with paint on the hands */
 const double CONTROL_ROWS = 1.8; /* x L: Stop and the rails */
 const double SMALL_ROWS = 1.6;   /* x L: card pills and the dismiss button */
 const char ERROR_PAGE[] = "https://miguetronic.github.io/timelapse-switch/errors/TSW-E%1"; /* ADR-010 */
@@ -76,15 +77,6 @@ int rows(const TswTheme &theme, double factor)
 QString sentence(const QString &word)
 {
 	return word.isEmpty() ? word : word.left(1).toUpper() + word.mid(1).toLower();
-}
-
-/* A file name that may wrap after its separators, so a long name never widens the dock. Never
- * after the dot: "tswitch." above "mp4" reads badly. */
-QString breakable(QString name)
-{
-	for (const QString &separator : {QStringLiteral("_"), QStringLiteral("-")})
-		name.replace(separator, separator + QChar(0x200B));
-	return name;
 }
 
 } // namespace
@@ -133,10 +125,12 @@ QString TswDock::spoken(const QString &words) const
 			   ", " + text("A11y.Faster", match.captured(1)));
 }
 
-/* "0:31:40" as "31 minutes 40 seconds", never with the arrow sign (UX-103). */
+/* "0:31:40" or "52:35" as "31 minutes 40 seconds", never with the arrow sign (UX-103). */
 QString TswDock::spokenDuration(const QString &clock) const
 {
-	const QStringList parts = clock.split(':');
+	QStringList parts = clock.split(':');
+	if (parts.size() == 2)
+		parts.prepend("0"); /* m:ss: no hours */
 	if (parts.size() != 3)
 		return clock;
 	const char *const one[] = {"A11y.Hour.One", "A11y.Minute.One", "A11y.Second.One"};
@@ -197,16 +191,20 @@ void TswDock::buildRails()
 	startCaption->setText(text("Label.StartIn").toUpper());
 	startRail = new TswRail(startGroup, &style);
 	startRail->setMode(TswRail::Mode::Start);
-	startRail->addSegment(START_REAL_TIME, TswGlyph::Play, text("Label.RealTime"))
-		->setAccessibleName(text("Label.RealTime"));
-	startRail->addSegment(START_TIMELAPSE, TswGlyph::FastForward, text("Label.Timelapse"))
-		->setAccessibleName(text("Label.Timelapse"));
+	/* Object names let a theme author or the UI test pick one control (UX-015, tests/ui). */
+	TswSegment *realTime = startRail->addSegment(START_REAL_TIME, TswGlyph::Play, text("Label.RealTime"));
+	realTime->setObjectName("tswStartRealTime");
+	realTime->setAccessibleName(text("Label.RealTime"));
+	TswSegment *timelapse = startRail->addSegment(START_TIMELAPSE, TswGlyph::FastForward, text("Label.Timelapse"));
+	timelapse->setObjectName("tswStartTimelapse");
+	timelapse->setAccessibleName(text("Label.Timelapse"));
 	speedGroup = new QWidget(speeds);
 	speedCaption = new TswReservedLabel(speedGroup);
 	speedRail = new TswRail(speedGroup, &style);
 	for (const int speed : SPEEDS) {
 		TswSegment *segment =
 			speedRail->addSegment(speed, TswGlyph::None, speedText(static_cast<uint32_t>(speed)));
+		segment->setObjectName(QString("tswSpeed%1").arg(speed));
 		segment->setAccessibleName(text("A11y.Speed", QString::number(speed)));
 	}
 	for (QWidget *group : {startGroup, speedGroup}) {
@@ -227,23 +225,61 @@ void TswDock::buildCard()
 {
 	card = new TswCard(this, &style);
 	card->setObjectName("tswCard");
-	cardTitle = new QLabel(card);
-	cardTitle->setWordWrap(true);
-	cardTitle->setTextFormat(Qt::PlainText);
+	cardHeader = new QLabel(card);
+	cardHeader->setTextFormat(Qt::PlainText);
+	cardHeader->setWordWrap(true);
 	dismiss = new TswButton(card, &style);
+	dismiss->setObjectName("tswDismiss");
 	dismiss->setShape(TswButton::Shape::Pill);
 	dismiss->setContent(TswGlyph::Close, QString());
 	dismiss->setAccessibleName(text("Button.Close"));
 	dismiss->setToolTip(text("Button.Close"));
+	figureBox = new QWidget(card);
+	figure = new QLabel(figureBox);
+	figure->setTextFormat(Qt::PlainText);
+	figureCaption = new QLabel(figureBox);
+	figureCaption->setTextFormat(Qt::PlainText);
+	figureCaption->setWordWrap(true);
+	figureCaption->setText(text("Summary.Skipped.Caption").toUpper());
+	auto *figureColumn = new QVBoxLayout(figureBox);
+	figureColumn->setContentsMargins(0, 0, 0, 0);
+	figureColumn->setSpacing(0);
+	figureColumn->addWidget(figure);
+	figureColumn->addWidget(figureCaption);
+	cardTitle = new QLabel(card);
+	cardTitle->setWordWrap(true);
+	cardTitle->setTextFormat(Qt::PlainText);
 	cardBody = new QLabel(card);
 	cardBody->setWordWrap(true);
 	cardTodo = new QLabel(card);
 	cardTodo->setWordWrap(true);
+	buildCardActions();
+
+	/* The ticket, top to bottom: a small caption and the dismiss button, the content, the actions. */
+	auto *header = new QHBoxLayout;
+	header->setContentsMargins(0, 0, 0, 0);
+	header->addWidget(cardHeader, 1, Qt::AlignVCenter);
+	header->addWidget(dismiss, 0, Qt::AlignVCenter);
+	cardLayout = new QVBoxLayout(card);
+	cardLayout->addLayout(header);
+	cardLayout->addWidget(figureBox);
+	cardLayout->addWidget(cardTitle);
+	cardLayout->addWidget(cardBody);
+	cardLayout->addWidget(cardTodo);
+	cardLayout->addLayout(cardActions);
+	cardLayout->addWidget(linkRow);
+}
+
+/* Open folder and Play, then the links Copy details and Learn more. */
+void TswDock::buildCardActions()
+{
 	openFolder = new TswButton(card, &style);
+	openFolder->setObjectName("tswOpenFolder");
 	play = new TswButton(card, &style);
+	play->setObjectName("tswPlay");
 	for (TswButton *pill : {openFolder, play}) {
 		pill->setShape(TswButton::Shape::Pill);
-		/* Side by side only when they fit at the visible width (updateNarrow); so they never make
+		/* Side by side only when they fit at the visible width (updateCardRows); so they never make
 		 * the dock wider than what shows (3.10). */
 		QSizePolicy policy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 		policy.setHeightForWidth(true);
@@ -258,28 +294,16 @@ void TswDock::buildCard()
 	cardActions->addWidget(play);
 	linkRow = new QWidget(card);
 	copyDetails = new TswLink(linkRow, &style, TswGlyph::Copy);
+	copyDetails->setObjectName("tswCopyDetails");
 	copyDetails->setLabel(text("Button.CopyDetails"));
 	learnMore = new TswLink(linkRow, &style, TswGlyph::LinkOut);
+	learnMore->setObjectName("tswLearnMore");
 	learnMore->setLabel(text("Button.LearnMore"));
 	auto *links = new QBoxLayout(QBoxLayout::LeftToRight, linkRow);
 	links->setContentsMargins(0, 0, 0, 0);
 	links->addWidget(copyDetails);
 	links->addWidget(learnMore);
 	links->addStretch();
-	codePill = new QLabel(card);
-	codePill->setTextFormat(Qt::PlainText);
-
-	auto *header = new QHBoxLayout;
-	header->setContentsMargins(0, 0, 0, 0);
-	header->addWidget(cardTitle, 1, Qt::AlignTop);
-	header->addWidget(dismiss, 0, Qt::AlignTop);
-	cardLayout = new QVBoxLayout(card);
-	cardLayout->addLayout(header);
-	cardLayout->addWidget(cardBody);
-	cardLayout->addWidget(cardTodo);
-	cardLayout->addLayout(cardActions);
-	cardLayout->addWidget(linkRow);
-	cardLayout->addWidget(codePill, 0, Qt::AlignLeft);
 }
 
 void TswDock::buildContext()
@@ -346,6 +370,10 @@ QScrollArea *TswDock::inScrollArea(TswDock *dock)
 void TswDock::setReduceMotion(bool reduce)
 {
 	reduceMotion = reduce;
+	if (!reduce)
+		return;
+	for (TswRail *rail : {startRail, speedRail})
+		rail->finishMotion(); /* one under way ends at once */
 }
 
 const TswTheme &TswDock::theme() const
@@ -486,6 +514,7 @@ void TswDock::restyle()
 	applyMetrics();
 	if (parentWidget() != nullptr)
 		updateNarrow(parentWidget()->width());
+	updateCardRows(); /* the fonts may have changed */
 	refresh(false);
 	update();
 	restyling = false;
@@ -523,18 +552,16 @@ void TswDock::applyStyleSheets()
 	setSheet(speedCaption, caption);
 	setSheet(context, QString("font-size: %1pt; color: %2;").arg(t.pointsAt(TswType::CONTEXT)).arg(t.muted.name()));
 	const QString onCard = t.ink(t.text, t.surface).name();
-	setSheet(cardTitle,
-		 QString("font-size: %1pt; font-weight: 700; color: %2;").arg(t.pointsAt(TswType::BODY)).arg(onCard));
-	for (QLabel *body : {cardBody, cardTodo})
+	const QString cardCaption = QString("font-size: %1pt; font-weight: 700; color: %2;")
+					    .arg(t.pointsAt(TswType::CAPTION))
+					    .arg(t.ink(t.muted, t.surface).name());
+	setSheet(cardHeader, cardCaption);
+	setSheet(figureCaption, cardCaption);
+	setSheet(figure, QString("font-size: %1pt; font-weight: 700; color: %2;")
+				 .arg(t.pointsAt(TswType::FIGURE))
+				 .arg(t.ink(t.accent, t.surface).name()));
+	for (QLabel *body : {cardTitle, cardBody, cardTodo})
 		setSheet(body, QString("font-size: %1pt; color: %2;").arg(t.pointsAt(TswType::BODY)).arg(onCard));
-	setSheet(codePill, QString("font-size: %1pt; color: %2; border: 1px solid %3; border-radius: %4px;"
-				   " padding: %5px %6px; background: transparent;")
-				   .arg(t.pointsAt(TswType::CODE))
-				   .arg(t.ink(t.muted, t.surface).name())
-				   .arg(t.hairline.name())
-				   .arg((QFontMetrics(t.fontAt(TswType::CODE, false)).height() + 2 * t.s1) / 2)
-				   .arg(t.s1)
-				   .arg(t.s3));
 }
 
 /* Margins, gaps and control sizes from the theme's font and density, wide or narrow (3.7, 4.2). */
@@ -553,6 +580,9 @@ void TswDock::applyMetrics()
 		pill->setLabelFont(t.fontAt(TswType::BODY, false));
 		pill->setMinimumRow(rows(t, SMALL_ROWS));
 	}
+	/* Narrow: tighter sides, so labels keep their words on fewer lines at 220 px. */
+	for (TswButton *button : {mainButton, stopButton, openFolder, play})
+		button->setPadding(narrow ? t.s3 : t.s4);
 	const int circle = static_cast<int>(std::lround(SMALL_ROWS * t.L));
 	dismiss->setLabelFont(t.fontAt(TswType::BODY, false));
 	dismiss->setMinimumRow(circle);
@@ -563,9 +593,10 @@ void TswDock::applyMetrics()
 		static_cast<QVBoxLayout *>(group->layout())->setSpacing(t.s2);
 	speedsLayout->setSpacing(narrow ? t.s3 : t.s4);
 	const int padding = narrow ? t.s3 : t.s4;
-	cardLayout->setContentsMargins(padding, padding, padding - t.s1, padding);
+	cardLayout->setContentsMargins(padding, padding - t.s1, padding - t.s1, padding);
 	cardLayout->setSpacing(t.s3);
 	cardActions->setSpacing(t.s3);
+	figureBox->layout()->setSpacing(t.s1);
 
 	contextRow->layout()->setSpacing(t.s2);
 	const int line = QFontMetrics(t.fontAt(TswType::CONTEXT, false)).height();
@@ -579,20 +610,37 @@ void TswDock::applyMetrics()
 void TswDock::updateNarrow(int viewportWidth)
 {
 	const bool next = narrow ? viewportWidth < LEAVE_NARROW : viewportWidth < ENTER_NARROW;
-	/* Card rows go one under the other when they do not fit side by side at this width. */
-	const int margin = next ? style.s2 : style.s3;
-	const int padding = next ? style.s3 : style.s4;
-	const int room = viewportWidth - 2 * margin - 2 * padding;
-	const int pills = openFolder->sizeHint().width() + style.s3 + play->sizeHint().width();
-	const int links = copyDetails->sizeHint().width() + style.s4 + learnMore->sizeHint().width();
-	cardActions->setDirection(next || pills > room ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
-	auto *linkLayout = static_cast<QBoxLayout *>(linkRow->layout());
-	linkLayout->setDirection(links > room ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
-	linkLayout->setSpacing(links > room ? 0 : style.s4); /* one under the other: a list, not islands */
 	if (next == narrow)
 		return;
 	narrow = next;
 	applyMetrics();
+	updateCardRows();
+}
+
+void TswDock::resizeEvent(QResizeEvent *event)
+{
+	QFrame::resizeEvent(event);
+	updateCardRows();
+}
+
+/*
+ * Card rows go one under the other when they do not fit side by side at the dock's width (some
+ * themes inset the dock inside the visible area: Classic by 8 px). The two pills share the row
+ * equally, so each must fit half of it: a label that would wrap in its half stacks both, full
+ * width, instead (3.10).
+ */
+void TswDock::updateCardRows()
+{
+	const int margin = narrow ? style.s2 : style.s3;
+	const int padding = narrow ? style.s3 : style.s4;
+	const int room = width() - 2 * margin - 2 * padding + style.s1;
+	const int half = (room - style.s3) / 2;
+	const bool pillsFit = !narrow && openFolder->labelLines(half) == 1 && play->labelLines(half) == 1;
+	cardActions->setDirection(pillsFit ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom);
+	const int links = copyDetails->sizeHint().width() + style.s3 + learnMore->sizeHint().width();
+	auto *linkLayout = static_cast<QBoxLayout *>(linkRow->layout());
+	linkLayout->setDirection(links > room ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+	linkLayout->setSpacing(links > room ? 0 : style.s3); /* one under the other: a list, not islands */
 }
 
 void TswDock::updateGaps()
@@ -625,7 +673,7 @@ void TswDock::showView(const tsw_dock_view &next)
 
 void TswDock::refresh(bool animate)
 {
-	showStatus(animate);
+	showStatus();
 	showMain();
 	showRails(animate);
 	showStop();
@@ -634,7 +682,7 @@ void TswDock::refresh(bool animate)
 	updateGaps();
 }
 
-void TswDock::showStatus(bool animate)
+void TswDock::showStatus()
 {
 	TswStatusContent content;
 	content.banner = view.banner;
@@ -642,8 +690,10 @@ void TswDock::showStatus(bool animate)
 	content.hero = text(view.hero_text, QString::number(view.hero_speed));
 	content.quiet = view.hero_quiet;
 	content.boldQuiet = view.banner == TSW_BANNER_ERROR;
-	if (view.banner == TSW_BANNER_TIMELAPSE)
+	if (view.banner == TSW_BANNER_TIMELAPSE) {
 		content.speed = speedText(view.hero_speed);
+		content.speedValue = view.hero_speed;
+	}
 	if (view.banner == TSW_BANNER_READY)
 		content.heroGlyph = view.start_in_timelapse ? TswGlyph::FastForward : TswGlyph::Play;
 	else if (view.banner == TSW_BANNER_REAL_TIME)
@@ -662,9 +712,14 @@ void TswDock::showStatus(bool animate)
 		content.stretchValues = QString::fromUtf8(view.section_recorded);
 		if (sped)
 			content.stretchValues += QString::fromUtf8(ARROW) + QString::fromUtf8(view.section_final);
+	} else if (view.card_shown && !path.isEmpty()) {
+		/* After a take, the status line names its file: the card below acts on it. The words before
+		 * "%1" ("File:") are its label; the name, its value. */
+		const QString hint = text("Hint.File");
+		content.stretchLabel = hint.left(hint.indexOf("%1")).trimmed();
+		content.stretchValues = QFileInfo(path).fileName();
 	}
-	status->setContent(content, animate && view.banner != shownBanner);
-	shownBanner = view.banner;
+	status->setContent(content);
 
 	/* For screen readers: the state block's name is the tally and the hero; its description the
 	 * readout in words, updated without announcing it (3.11). */
@@ -745,46 +800,66 @@ void TswDock::showCard()
 	openFolder->setLook(pill);
 	play->setLook(pill);
 	dismiss->setLook({QColor(), t.surface, QColor(), 0.0, t.ink(t.muted, t.surface), t.text});
-	if (view.error_code != 0) {
+	/* The error's reassurance is Bold (what is safe comes first); the summary's file name is not. */
+	const bool error = view.error_code != 0;
+	setSheet(cardTitle, QString("font-size: %1pt; font-weight: %2; color: %3;")
+				    .arg(t.pointsAt(TswType::BODY))
+				    .arg(error ? 700 : 400)
+				    .arg(t.ink(t.text, t.surface).name()));
+	if (error)
 		showErrorCard();
-		return;
-	}
-	/* The summary: the file, the one warm line of the session (UX-072), and what to do with it. */
-	const QString name = QFileInfo(path).fileName();
-	cardTitle->setText(name.isEmpty() ? text("State.Hero.Saved") : breakable(name));
-	QString body = text("Summary.Skipped", QString::fromUtf8(view.skipped));
-	if (view.thank_user)
-		body += "\n" + text("Summary.Thanks"); /* its own line: the fact, then the warm word */
+	else
+		showSummaryCard();
+}
+
+/*
+ * The summary, as a ticket: the waiting the timelapse skipped as one big figure, the file, the one
+ * warm line of the session (UX-072), and what to do with the file. A recording that never sped up
+ * skipped nothing, so it shows no figure.
+ */
+void TswDock::showSummaryCard()
+{
+	cardHeader->setText(text("Card.Session").toUpper());
+	const QString skipped = QString::fromUtf8(view.skipped);
+	figureBox->setVisible(!skipped.isEmpty());
+	figure->setText(skipped);
+	const QString spokenSkipped = text("Summary.Skipped", spokenDuration(skipped));
+	if (figure->accessibleName() != spokenSkipped)
+		figure->setAccessibleName(spokenSkipped);
+	cardTitle->hide(); /* the file is named in the status line, above */
 	cardBody->setTextFormat(Qt::PlainText);
-	cardBody->setText(body);
+	cardBody->setText(text("Summary.Thanks"));
+	cardBody->setVisible(view.thank_user);
 	cardTodo->hide();
 	openFolder->setVisible(!path.isEmpty());
 	play->setVisible(!path.isEmpty());
 	linkRow->hide();
-	codePill->hide();
 }
 
-/* What is safe first, then why, what to do, one fix, the links and the code, small, last (4.2). */
+/* What is safe first, then why, what to do, one fix and the links; the code is in the header, so it
+ * costs no row of its own (4.2). */
 void TswDock::showErrorCard()
 {
+	cardHeader->setText(text("Card.Error", "TSW-E" + threeDigits(view.error_code)).toUpper());
+	figureBox->hide();
 	const QByteArray prefix = "Error.E" + threeDigits(view.error_texts).toUtf8();
 	const QString saved = text(QByteArray(prefix + ".Saved").constData())
 				      .replace("%1", QString::fromUtf8(view.recorded))
 				      .replace("%2", QString::fromUtf8(view.final_length));
 	cardTitle->setText(saved);
+	cardTitle->show();
 	const auto labelled = [](const QString &label, const QString &words) {
 		return "<b>" + label.toHtmlEscaped() + "</b> " + words.toHtmlEscaped();
 	};
 	cardBody->setTextFormat(Qt::RichText);
 	cardBody->setText(labelled(text("Error.Why"), text(QByteArray(prefix + ".What").constData())));
+	cardBody->show();
 	cardTodo->setTextFormat(Qt::RichText);
 	cardTodo->setText(labelled(text("Error.WhatToDo"), text(QByteArray(prefix + ".Todo").constData())));
 	cardTodo->show();
 	openFolder->setVisible(view.error_texts == 103 && !path.isEmpty()); /* the one fix: see the file */
 	play->hide();
 	linkRow->show();
-	codePill->setText(text("Card.Code", "TSW-E" + threeDigits(view.error_code)));
-	codePill->show();
 }
 
 void TswDock::showContext()

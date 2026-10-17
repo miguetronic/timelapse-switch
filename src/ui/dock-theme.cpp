@@ -31,7 +31,12 @@ const double SHAPE_CONTRAST = 3.0; /* WCAG 1.4.11: frames, fills, markers, glyph
 const double TEXT_CONTRAST = 4.5;  /* WCAG 1.4.3: text */
 const double DARK_LUMINANCE = 0.179;
 const int SAMPLE = 4;        /* px: the background is drawn this big and its center is read */
-const int MAX_CONTROL = 200; /* px: taller than any theme's button; bounds the scan below (P10-2) */
+const int MAX_CONTROL = 200; /* px: taller and wider than any theme's button; bounds the scans (P10-2) */
+const int MAX_CORNER = 16;   /* px: the largest button corner measured; bounds the scan (P10-2) */
+const double QUARTER_CIRCLE = 0.78539816339744831; /* pi / 4: a quarter circle's share of its square */
+const double MIN_TEXT_POINTS = 8.0;                /* no text smaller: 6 pt captions were unreadable even up close */
+const double CORNER_OF_LINE = 0.22;                /* x L: a button's corner when the theme paints none (4 px) */
+const double MIN_LIGHT_FACE = 1.1; /* a light theme's button face must differ this much from the panel */
 
 tsw_color toCore(const QColor &color)
 {
@@ -99,27 +104,71 @@ QColor measurePanel(QWidget *viewport, const QColor &fallback)
 	return fallback;
 }
 
-/*
- * The height a theme's button really shows: its size hint without the transparent margins some
- * themes add around it (Yami: 2 px above and below). Density changes it, so the dock's controls
- * follow OBS's Density setting (3.7).
- */
-int controlHeight(QPushButton *button)
+/* What the theme's own button looks like, measured from a picture of it (3.4, 3.7). */
+struct ButtonShape {
+	int height = 0;      /* px, without the transparent margins some themes add (Yami: 2 px above and below) */
+	double radius = 0.0; /* px: its corners */
+	QColor face;         /* the color in its middle; invalid if it paints nothing there */
+};
+
+/* The first opaque pixel walking from (x, y) by (dx, dy), at most count steps; count if none. */
+int firstOpaque(const QImage &image, int x, int y, int dx, int dy, int count)
 {
+	for (int step = 0; step < count; step++) {
+		if (image.pixelColor(x + dx * step, y + dy * step).alpha() > 0)
+			return step;
+	}
+	return count;
+}
+
+/*
+ * The radius of a corner from how much of its square is see-through: outside a quarter circle of
+ * radius r lies r * r * (1 - pi / 4) of the square. Antialiased edges count by their alpha, so the
+ * measure is finer than one pixel: 2 px in Classic, 4 px in the other Yami themes.
+ */
+double cornerRadius(const QImage &image, int left, int top, int side)
+{
+	double clear = 0.0;
+	for (int y = 0; y < side; y++) {
+		for (int x = 0; x < side; x++)
+			clear += 1.0 - image.pixelColor(left + x, top + y).alphaF();
+	}
+	return std::sqrt(clear / (1.0 - QUARTER_CIRCLE));
+}
+
+/*
+ * The height, corners and face a theme's button really shows. Density changes its height, so the
+ * dock's controls follow OBS's Density setting (3.7); its corners and face let the dock's own
+ * buttons sit next to OBS's without looking foreign.
+ */
+ButtonShape measureButton(QPushButton *button, double fallbackRadius)
+{
+	ButtonShape shape;
+	shape.radius = fallbackRadius;
 	const QSize size = button->sizeHint();
-	if (size.isEmpty() || size.height() > MAX_CONTROL)
-		return size.height();
+	shape.height = size.height();
+	if (size.isEmpty() || size.height() > MAX_CONTROL || size.width() > MAX_CONTROL)
+		return shape;
+	/* At the size the theme asks for, and without the window color behind it: what is left
+	 * see-through is the theme's margin and corners. */
+	button->resize(size);
 	QImage image(size, QImage::Format_ARGB32_Premultiplied);
 	image.fill(Qt::transparent);
-	button->render(&image, QPoint(), QRegion(), QWidget::DrawWindowBackground);
-	const int middle = size.width() / 2;
-	int top = 0;
-	while (top < size.height() && image.pixelColor(middle, top).alpha() == 0)
-		top++;
-	int bottom = size.height() - 1;
-	while (bottom > top && image.pixelColor(middle, bottom).alpha() == 0)
-		bottom--;
-	return bottom >= top ? bottom - top + 1 : size.height();
+	button->render(&image, QPoint(), QRegion(), QWidget::RenderFlags());
+	const int top = firstOpaque(image, size.width() / 2, 0, 0, 1, size.height());
+	const int bottom =
+		size.height() - 1 - firstOpaque(image, size.width() / 2, size.height() - 1, 0, -1, size.height());
+	const int left = firstOpaque(image, 0, size.height() / 2, 1, 0, size.width());
+	if (bottom < top || left >= size.width() / 2)
+		return shape; /* nothing painted: keep the fallbacks */
+	shape.height = bottom - top + 1;
+	const QColor middle = image.pixelColor(size.width() / 2, size.height() / 2);
+	if (middle.alpha() == 255)
+		shape.face = middle;
+	const int side = std::min({MAX_CORNER, shape.height / 2, size.width() / 2 - left});
+	shape.radius =
+		std::round(cornerRadius(image, left, top, side)); /* a 1 px border's antialiasing adds a little */
+	return shape;
 }
 
 /* Of the candidates, the one that reads best on fill. */
@@ -171,7 +220,7 @@ QColor TswTheme::pressed(const QColor &faceColor) const
 
 double TswTheme::pointsAt(double factor) const
 {
-	return std::round(b * factor * 2.0) / 2.0;
+	return std::max(MIN_TEXT_POINTS, std::round(b * factor * 2.0) / 2.0);
 }
 
 QFont TswTheme::fontAt(double factor, bool bold) const
@@ -198,7 +247,15 @@ void TswTheme::derive(const TswThemeHooks &hooks)
 	hairline = tswMix(text, panel, 0.16);
 	edge = tswMix(text, panel, 0.30);
 	surface = hooks.surface.isValid() ? hooks.surface : tswMix(text, panel, 0.06);
-	raised = tswMix(text, panel, 0.12);
+	/* A light theme's buttons are lighter than its panel (OBS Light: white on light grey): the dock's
+	 * buttons take that face, so they match the Controls dock. Dark themes keep a mixed face, because
+	 * some paint their buttons in a loud color (Rachni: cyan). */
+	const bool lightFace = !isDark && buttonFace.isValid() &&
+			       tsw_color_luminance(toCore(buttonFace)) > tsw_color_luminance(toCore(panel)) &&
+			       tswContrast(buttonFace, panel) >= MIN_LIGHT_FACE;
+	raised = lightFace ? buttonFace : tswMix(text, panel, 0.12);
+	frame = shape(edge, panel);
+	corner = std::max(2, static_cast<int>(std::lround(2.0 * radius)));
 
 	/* 3. Accent: the theme's highlight, moved in lightness until it is a visible state. */
 	const QColor highlight = hooks.accent.isValid() ? hooks.accent : hl;
@@ -208,6 +265,16 @@ void TswTheme::derive(const TswThemeHooks &hooks)
 	accentFill = ensure(fill, onAccent, TEXT_CONTRAST, fill);
 	accentText = ink(highlight, panel);
 	accentTint = tswMix(accent, panel, 0.20);
+	/* The badge on the timelapse band: the lightest of the theme's own colors that stands out from
+	 * the band (3:1), its number in the band's color. A light pill in every theme (a dark one on a
+	 * bright band reads as a hole); onAccent always qualifies, so there is always one. */
+	badgeFill = onAccent;
+	for (const QColor &candidate : {text, panel, raised}) {
+		if (tswContrast(candidate, accentFill) >= SHAPE_CONTRAST &&
+		    tsw_color_luminance(toCore(candidate)) > tsw_color_luminance(toCore(badgeFill)))
+			badgeFill = candidate;
+	}
+	badgeText = ensure(accentFill, badgeFill, TEXT_CONTRAST, onAccent);
 
 	/* 4. Status colors: for glyphs, frames and bars only, never for text (UX-111). */
 	danger = shape(hooks.danger.isValid() ? hooks.danger : dangerIn, panel);
@@ -248,7 +315,10 @@ TswTheme TswProbes::read(QWidget *background, const TswThemeHooks &hooks) const
 	theme.font = label->font();
 	theme.b = QFontInfo(theme.font).pointSizeF();
 	theme.L = QFontMetrics(theme.font).lineSpacing();
-	theme.hC = controlHeight(button);
+	const ButtonShape shape = measureButton(button, std::round(CORNER_OF_LINE * theme.L));
+	theme.hC = shape.height;
+	theme.radius = shape.radius;
+	theme.buttonFace = shape.face;
 	theme.text = palette.color(QPalette::WindowText);
 	theme.face = button->palette().color(QPalette::Button);
 	theme.hl = palette.color(QPalette::Highlight);

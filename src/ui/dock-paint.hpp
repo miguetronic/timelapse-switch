@@ -24,19 +24,20 @@ class QWidget;
 /* The type scale of the "Studio cards" direction, in multiples of the OBS base size b (4.2). */
 namespace TswType {
 const double TALLY = 0.75;
-const double HERO = 2.25;
+const double HERO = 2.5; /* 2.25b in the first prototype: raised for the glance at distance */
 const double HERO_FLOOR = 1.5;
 const double QUIET = 1.35;
 const double BADGE = 1.5;
 const double CAPTION = 0.75;
-const double DIGITS = 1.6;
+const double DIGITS = 1.9;       /* 1.6b in the first prototype */
+const double DIGITS_FLOOR = 1.5; /* narrow: digits shrink this far before the columns stack */
 const double STATUS = 0.9;
 const double MAIN = 1.1;
 const double RAIL = 1.1;
 const double STOP = 1.0;
 const double BODY = 1.0;
 const double LINK = 0.95;
-const double CODE = 0.8;
+const double FIGURE = 2.0; /* the summary's big figure: the waiting skipped */
 const double CONTEXT = 0.9;
 } // namespace TswType
 

@@ -8,21 +8,26 @@
  * dock-status.cpp: TswStatusCard, zones A and B of the dock as one painted card
  * (docs/design/visual-design.md, 4.2, "Status card").
  *
- *   .--------------------------------------.
- *   | ( (o) REC )                          |  tally pill: am I recording?
- *   | >> TIMELAPSE                ( x4 )   |  hero and speed badge: at what speed?
- *   | - - - - - - - - - - - - - - - - - -  |  dashed hairline
- *   | RECORDED          FINAL VIDEO        |  captions
- *   | 0:31:40           0:16:58            |  digits
+ *   .======================================.
+ *   |######################################|  timelapse: a solid band in the accent
+ *   |# ( (o) REC )                        #|  tally pill: am I recording?
+ *   |# >> TIMELAPSE               ( x4 )  #|  hero and speed badge: at what speed?
+ *   |######################################|
+ *   | RECORDED          | FINAL VIDEO      |  captions; the bar marks the slower counter
+ *   | 0:31:40           | 0:16:58          |  digits
  *   | This stretch x4   19:37 -> 4:54      |  status line
- *   '--------------------------------------'
+ *   | > > > > > > > > > > > > > > > > > >  |  tape band: denser chevrons, faster
+ *   '======================================'
+ *
+ * Each state has its own shape, so it reads in grayscale and from across the room (UX-003): idle
+ * a soft filled card, real time a hollow card with a 2 px outline, timelapse a tinted card with a
+ * solid band and chevrons, saving a dashed outline, error a dashed danger frame.
  *
  * Its height depends only on the width, the language and the theme, never on the state, so the
  * main button below it never moves (UX-002): every row is as tall as the tallest thing it may
- * ever show (the reserve).
+ * ever show (the reserve). Nothing in it moves: a state changes at once (4.2, motion).
  */
 
-#include <QEasingCurve>
 #include <QFontMetricsF>
 #include <QPainter>
 #include <QPainterPath>
@@ -34,17 +39,18 @@
 
 namespace {
 
-const int FADE_MS = 180;         /* fill and frame cross-fade on a change of state (4.2, motion) */
-const int SWEEP_MS = 1600;       /* one pass of the saving line */
-const int SWEEP_PASSES = 3;      /* 4.8 s in all: a repeating motion ends within 5 s (UX-063) */
-const double SWEEP_SHARE = 0.3;  /* the moving part is this share of the line */
-const double HERO_STEP = 0.5;    /* pt: the hero is fitted in half points */
-const int MAX_FIT_STEPS = 64;    /* from the target down to the floor, at any base size (P10-2) */
-const double CARD_RADIUS = 0.45; /* x L, at least MIN_CARD_RADIUS (4.2, shapes) */
-const int MIN_CARD_RADIUS = 6;
+const double HERO_STEP = 0.5;   /* pt: the hero is fitted in half points */
+const int MAX_FIT_STEPS = 64;   /* from the target down to the floor, at any base size (P10-2) */
 const double PILL_GLYPH = 0.55; /* the tally glyph's share of its pill's height */
 const double DASH = 2.0;        /* the hairline between A and B: dash 2 px, gap 3 px */
 const double DASH_GAP = 3.0;
+const double DIVIDER_INK = 0.3;          /* the dashed hairline: text over the card's fill at this strength */
+const double TAPE = 0.7;                 /* x L: the tape band's height, and the size of each mark */
+const double PLAY_PITCH = 3.0;           /* real time: a play mark every 3 tape heights, sparse and calm */
+const int MAX_MARKS = 512;               /* tape marks: more than any dock is wide, at the densest pitch (P10-2) */
+const double FINAL_BAR = 3.0;            /* px: the accent bar beside FINAL VIDEO in timelapse */
+const double BUSY_LINE = 2.0;            /* px: saving draws one still accent line on the tape */
+const double CHEVRON_INSET = 5.0 / 16.0; /* the chevron glyph starts this far into its box (3.8) */
 
 /* The card's own fill and frame in one state (4.2, status card table). */
 struct CardPaint {
@@ -54,13 +60,22 @@ struct CardPaint {
 	bool dashed;
 };
 
-CardPaint cardPaint(const TswTheme &theme, enum tsw_banner banner)
+CardPaint cardPaint(const TswTheme &t, enum tsw_banner banner)
 {
-	if (banner == TSW_BANNER_TIMELAPSE)
-		return {theme.accentTint, theme.accent, 2.0, false}; /* filled means now */
-	if (banner == TSW_BANNER_ERROR)
-		return {theme.dangerTint, theme.danger, 2.0, true};
-	return {theme.surface, theme.hairline, 1.0, false};
+	switch (banner) {
+	case TSW_BANNER_REAL_TIME: /* hollow: the panel shows through a 2 px outline */
+		return {t.panel, t.frame, 2.0, false};
+	case TSW_BANNER_TIMELAPSE: /* filled means now */
+		return {t.accentTint, t.accent, 2.0, false};
+	case TSW_BANNER_BUSY: /* working: a dashed outline, so it never looks finished */
+		return {t.surface, t.shape(t.edge, t.surface), 1.0, true};
+	case TSW_BANNER_ERROR:
+		return {t.dangerTint, t.danger, 2.0, true};
+	case TSW_BANNER_READY:
+	case TSW_BANNER_SAVED:
+		break;
+	}
+	return {t.surface, t.hairline, 1.0, false};
 }
 
 /* The tally pill in one state: what fills it, what outlines it, its glyph and their colors. */
@@ -77,7 +92,7 @@ PillPaint pillPaint(const TswTheme &t, enum tsw_banner banner, const QColor &und
 	const QColor quiet = t.ink(t.muted, under);
 	switch (banner) {
 	case TSW_BANNER_REAL_TIME:
-	case TSW_BANNER_TIMELAPSE: /* the tally: a red dot on a soft red pill, in both recording states */
+	case TSW_BANNER_TIMELAPSE: /* the tally: a red dot on a soft red pill, the same in both recording states */
 		return {t.dangerTint, QColor(), TswGlyph::Record, t.shape(t.danger, t.dangerTint),
 			t.ink(t.text, t.dangerTint)};
 	case TSW_BANNER_BUSY:
@@ -105,6 +120,18 @@ double cap(const QFont &font)
 	return QFontMetricsF(font).capHeight();
 }
 
+/* Chevron pitch by speed, in tape heights: denser means faster, readable without a word. */
+double chevronPitch(uint32_t speed)
+{
+	if (speed >= 16)
+		return 0.7;
+	if (speed >= 8)
+		return 0.9;
+	if (speed >= 4)
+		return 1.2;
+	return 1.6;
+}
+
 } // namespace
 
 struct TswStatusCard::Layout {
@@ -122,12 +149,15 @@ struct TswStatusCard::Layout {
 	bool badgeOnTally = false; /* narrow: the speed joins the tally line (4.2, narrow) */
 	double tallyTop = 0.0, tallyHeight = 0.0;
 	double heroTop = 0.0, heroHeight = 0.0;
-	double dividerY = 0.0;
+	double dividerY = 0.0; /* the dashed hairline; in timelapse, the bottom edge of the band */
 	double readoutTop = 0.0;
 	double captionHeight = 0.0, digitsHeight = 0.0, statusHeight = 0.0;
-	bool stacked = false; /* the two columns do not fit side by side: one under the other */
-	double column = 0.0;  /* the width of one column */
+	bool stacked = false;    /* the two columns do not fit side by side: one under the other */
+	double gutter = 0.0;     /* between the two columns */
+	double secondLeft = 0.0; /* where the second column starts, from the card's left edge */
+	double statusTop = 0.0;
 	int statusLines = 1;
+	double tapeTop = 0.0, tapeHeight = 0.0;
 	bool clipped = false;
 };
 
@@ -139,43 +169,22 @@ TswStatusCard::TswStatusCard(QWidget *parent, const TswTheme *style) : QWidget(p
 	QSizePolicy policy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 	policy.setHeightForWidth(true);
 	setSizePolicy(policy);
-	fade.setDuration(FADE_MS);
-	fade.setEasingCurve(QEasingCurve::OutCubic);
-	fade.setStartValue(0.0);
-	fade.setEndValue(1.0);
-	sweep.setDuration(SWEEP_MS);
-	sweep.setLoopCount(SWEEP_PASSES);
-	sweep.setStartValue(0.0);
-	sweep.setEndValue(1.0);
-	connect(&fade, &QVariantAnimation::valueChanged, this, [this]() { update(); });
-	connect(&sweep, &QVariantAnimation::valueChanged, this, [this]() { update(); });
-	connect(&sweep, &QVariantAnimation::finished, this, [this]() { update(); });
 }
 
 /* Field by field: the dock shows a view ten times per second, mostly the same one. */
 static bool sameContent(const TswStatusContent &a, const TswStatusContent &b)
 {
 	return a.banner == b.banner && a.tally == b.tally && a.hero == b.hero && a.quiet == b.quiet &&
-	       a.boldQuiet == b.boldQuiet && a.speed == b.speed && a.heroGlyph == b.heroGlyph &&
-	       a.recordedCaption == b.recordedCaption && a.finalCaption == b.finalCaption && a.recorded == b.recorded &&
-	       a.finalLength == b.finalLength && a.dimmed == b.dimmed && a.stretchLabel == b.stretchLabel &&
-	       a.stretchValues == b.stretchValues;
+	       a.boldQuiet == b.boldQuiet && a.speed == b.speed && a.speedValue == b.speedValue &&
+	       a.heroGlyph == b.heroGlyph && a.recordedCaption == b.recordedCaption &&
+	       a.finalCaption == b.finalCaption && a.recorded == b.recorded && a.finalLength == b.finalLength &&
+	       a.dimmed == b.dimmed && a.stretchLabel == b.stretchLabel && a.stretchValues == b.stretchValues;
 }
 
-void TswStatusCard::setContent(const TswStatusContent &next, bool animate)
+void TswStatusCard::setContent(const TswStatusContent &next)
 {
 	if (sameContent(next, content))
 		return; /* nothing to paint again */
-	const bool changed = next.banner != content.banner;
-	if (changed) {
-		previous = content.banner;
-		fade.stop();
-		sweep.stop();
-		if (animate)
-			fade.start();
-		if (animate && next.banner == TSW_BANNER_BUSY)
-			sweep.start(); /* a first view shows the line still: nothing was caused yet */
-	}
 	content = next;
 	update();
 }
@@ -262,18 +271,42 @@ void TswStatusCard::measureStateBlock(Layout &lay) const
 	lay.heroHeight = hero;
 }
 
-/* Step 4 of measure: two columns, unless a caption or the digits do not fit beside each other. */
+/*
+ * Step 4 of measure: two equal columns; or, when one caption is longer than half the card
+ * ("DURACIÓN FINAL" at 220 px), a first column just wide enough for its own text and the rest for
+ * the second; or, when even that does not fit, one under the other.
+ */
 void TswStatusCard::measureReadout(Layout &lay) const
 {
 	const TswTheme &t = *theme;
-	lay.column = (lay.inner - t.s4) / 2.0;
-	const double captions = std::max(tswTextWidth(lay.captionFont, content.recordedCaption),
-					 tswTextWidth(lay.captionFont, content.finalCaption));
-	const double digits = tswTextWidth(lay.digitsFont, QStringLiteral("0:00:00"));
-	lay.stacked = captions > lay.column || digits > lay.column;
+	lay.gutter = t.s4; /* room for the timelapse bar between the columns, with air on both sides */
+	const auto widths = [&](double *first, double *second) {
+		const double digits = tswTextWidth(lay.digitsFont, QStringLiteral("0:00:00"));
+		*first = std::ceil(std::max(tswTextWidth(lay.captionFont, content.recordedCaption), digits));
+		*second = std::ceil(std::max(tswTextWidth(lay.captionFont, content.finalCaption), digits));
+		return *first + lay.gutter + *second <= lay.inner;
+	};
+	/* Side by side, with digits shrunk toward their floor if they must; else one under the other,
+	 * at full size. */
+	double first = 0.0;
+	double second = 0.0;
+	const double target = lay.digitsFont.pointSizeF();
+	const double floor = t.pointsAt(TswType::DIGITS_FLOOR);
+	bool beside = widths(&first, &second);
+	for (int step = 1; step < MAX_FIT_STEPS && !beside && target - step * HERO_STEP >= floor; step++) {
+		lay.digitsFont.setPointSizeF(target - step * HERO_STEP);
+		beside = widths(&first, &second);
+	}
+	if (!beside) {
+		lay.digitsFont.setPointSizeF(target);
+		widths(&first, &second);
+	}
+	const double half = (lay.inner - lay.gutter) / 2.0;
+	lay.stacked = !beside;
+	lay.secondLeft = lay.pad + (std::max(first, second) <= half ? half : first) + lay.gutter;
 	if (lay.stacked)
-		lay.column = lay.inner;
-	lay.clipped = lay.clipped || captions > lay.inner || digits > lay.inner;
+		lay.secondLeft = lay.pad;
+	lay.clipped = lay.clipped || std::max(first, second) > lay.inner;
 	lay.captionHeight = std::round(cap(lay.captionFont)) + 2;
 	lay.digitsHeight = std::round(cap(lay.digitsFont)) + 2;
 	lay.statusHeight = QFontMetricsF(lay.statusFont).height();
@@ -298,14 +331,16 @@ TswStatusCard::Layout TswStatusCard::measure(int width) const
 	measureStateBlock(lay);
 	measureReadout(lay);
 
-	/* 5. Top to bottom. */
-	const int pair = static_cast<int>(lay.captionHeight + t.s2 + lay.digitsHeight);
-	const double readout = (lay.stacked ? 2 * pair + t.s3 : pair) + t.s3 + lay.statusLines * lay.statusHeight;
+	/* 5. Top to bottom: state block, hairline, readout, status line, tape. */
+	const double pair = lay.captionHeight + t.s2 + lay.digitsHeight;
 	lay.tallyTop = lay.pad;
 	lay.heroTop = lay.tallyTop + lay.tallyHeight + t.s3;
-	lay.dividerY = lay.heroTop + lay.heroHeight + t.s3;
+	lay.dividerY = std::round(lay.heroTop + lay.heroHeight + t.s3);
 	lay.readoutTop = lay.dividerY + 1 + t.s3;
-	lay.height = static_cast<int>(std::ceil(lay.readoutTop + readout + lay.pad));
+	lay.statusTop = lay.readoutTop + (lay.stacked ? 2 * pair + t.s3 : pair) + t.s3;
+	lay.tapeHeight = std::round(TAPE * t.L);
+	lay.tapeTop = std::round(lay.statusTop + lay.statusLines * lay.statusHeight + t.s3);
+	lay.height = static_cast<int>(std::ceil(lay.tapeTop + lay.tapeHeight + lay.pad));
 	return lay;
 }
 
@@ -344,6 +379,12 @@ bool TswStatusCard::clipped() const
 	return pillWidth(lay) + (badge ? theme->s3 + lay.badgeWidth : 0.0) > lay.inner;
 }
 
+double TswStatusCard::smallestPoints() const
+{
+	const Layout lay = measure(width());
+	return std::min({lay.tallyFont.pointSizeF(), lay.captionFont.pointSizeF(), lay.statusFont.pointSizeF()});
+}
+
 /* The tally pill: padding, glyph, gap, word, padding. */
 double TswStatusCard::pillWidth(const Layout &lay) const
 {
@@ -354,48 +395,41 @@ double TswStatusCard::pillWidth(const Layout &lay) const
 
 QColor TswStatusCard::fillColor() const
 {
-	const QColor now = cardPaint(*theme, content.banner).fill;
-	if (fade.state() != QAbstractAnimation::Running)
-		return now;
-	return tswMix(now, cardPaint(*theme, previous).fill, fade.currentValue().toDouble());
+	return cardPaint(*theme, content.banner).fill;
 }
 
-void TswStatusCard::paintFrame(QPainter &painter) const
+QColor TswStatusCard::stateColor() const
+{
+	return content.banner == TSW_BANNER_TIMELAPSE ? theme->accentFill : fillColor();
+}
+
+/* The card, and in timelapse the solid band behind the state block: the one filled accent area, so
+ * the state reads by its shape from across the room (4.2). */
+void TswStatusCard::paintFrame(QPainter &painter, const Layout &lay) const
 {
 	const CardPaint now = cardPaint(*theme, content.banner);
-	QColor frame = now.frame;
-	if (fade.state() == QAbstractAnimation::Running)
-		frame = tswMix(now.frame, cardPaint(*theme, previous).frame, fade.currentValue().toDouble());
-	const double radius = std::max(MIN_CARD_RADIUS, static_cast<int>(std::lround(theme->L * CARD_RADIUS)));
-	const QPen pen = now.dashed ? dashedPen(frame, now.width, 2 * DASH, DASH_GAP) : tswBorder(frame, now.width);
+	const double radius = theme->corner;
 	const QRectF box(rect());
-	tswPaintRounded(painter, box, radius, fillColor(), pen);
-	if (content.banner != TSW_BANNER_BUSY)
-		return;
-
-	/* Saving: a 2 px accent line along the bottom inner edge; it sweeps, then stays still. */
-	const double y = box.bottom() - 1.0 - 2.0;
-	const double left = radius;
-	const double length = box.width() - 2 * radius;
-	double from = left;
-	double span = length;
-	if (sweep.state() == QAbstractAnimation::Running) {
-		const double at = sweep.currentValue().toDouble();
-		span = length * SWEEP_SHARE;
-		from = left + (length + span) * at - span;
+	tswPaintRounded(painter, box, radius, now.fill, QPen(Qt::NoPen));
+	if (content.banner == TSW_BANNER_TIMELAPSE) {
+		painter.save();
+		QPainterPath card;
+		card.addRoundedRect(box, radius, radius);
+		painter.setClipPath(card);
+		painter.fillRect(QRectF(0, 0, box.width(), lay.dividerY + 1), theme->accentFill);
+		painter.restore();
 	}
-	painter.save();
-	painter.setClipRect(QRectF(left, y, length, 2.0));
-	painter.fillRect(QRectF(from, y, span, 2.0), theme->accent);
-	painter.restore();
+	const QPen pen = now.dashed ? dashedPen(now.frame, now.width, 2 * DASH, DASH_GAP)
+				    : tswBorder(now.frame, now.width);
+	tswPaintRounded(painter, box, radius, QColor(), pen);
 }
 
 void TswStatusCard::paintBadge(QPainter &painter, const QRectF &box, const Layout &lay) const
 {
-	/* The speed running now: the one filled accent pill (filled means now). */
-	tswPaintRounded(painter, box, box.height() / 2.0, theme->accentFill, tswBorder(theme->accent, 2.0));
+	/* The speed running now, filled: the band's text turned into a pill, the number in the band's color. */
+	tswPaintRounded(painter, box, box.height() / 2.0, theme->badgeFill, QPen(Qt::NoPen));
 	painter.setFont(lay.badgeFont);
-	painter.setPen(theme->onAccent);
+	painter.setPen(theme->badgeText);
 	const double width = tswTextWidth(lay.badgeFont, content.speed);
 	painter.drawText(QPointF(box.center().x() - width / 2.0,
 				 tswCapBaseline(lay.badgeFont, box.top(), box.height())),
@@ -404,8 +438,7 @@ void TswStatusCard::paintBadge(QPainter &painter, const QRectF &box, const Layou
 
 void TswStatusCard::paintTally(QPainter &painter, const Layout &lay) const
 {
-	const QColor under = fillColor();
-	const PillPaint pill = pillPaint(*theme, content.banner, under);
+	const PillPaint pill = pillPaint(*theme, content.banner, stateColor());
 	const int glyph = pill.glyph == TswGlyph::None ? 0 : static_cast<int>(std::round(lay.pillHeight * PILL_GLYPH));
 	const double gap = glyph > 0 ? theme->s2 : 0.0;
 	const double top = lay.tallyTop + (lay.tallyHeight - lay.pillHeight) / 2.0;
@@ -427,7 +460,7 @@ void TswStatusCard::paintTally(QPainter &painter, const Layout &lay) const
 
 void TswStatusCard::paintHero(QPainter &painter, const Layout &lay) const
 {
-	const QColor under = fillColor();
+	const QColor under = stateColor();
 	const QRectF row(lay.pad, lay.heroTop, lay.inner, lay.heroHeight);
 	if (content.quiet) {
 		/* Quiet heroes: sentence case, smaller, Regular (Bold for an error headline), wrapping. */
@@ -447,16 +480,14 @@ void TswStatusCard::paintHero(QPainter &painter, const Layout &lay) const
 		return;
 	}
 	/* Recording heroes: big capitals, a glyph before them, and in timelapse the speed badge. */
-	const bool timelapse = content.banner == TSW_BANNER_TIMELAPSE;
-	const QColor glyphColor = timelapse ? theme->ink(theme->accent, under) : theme->ink(theme->text, under);
+	const QColor ink = content.banner == TSW_BANNER_TIMELAPSE ? theme->onAccent : theme->ink(theme->text, under);
 	const double middle = row.center().y();
 	const double lead = lay.heroGlyphShown ? lay.heroGlyph + theme->s3 : 0.0;
 	if (lay.heroGlyphShown)
 		tswPaintGlyph(painter, content.heroGlyph,
-			      QRectF(row.left(), middle - lay.heroGlyph / 2.0, lay.heroGlyph, lay.heroGlyph),
-			      glyphColor);
+			      QRectF(row.left(), middle - lay.heroGlyph / 2.0, lay.heroGlyph, lay.heroGlyph), ink);
 	painter.setFont(lay.heroFont);
-	painter.setPen(theme->ink(theme->text, under));
+	painter.setPen(ink);
 	painter.drawText(QPointF(row.left() + lead, tswCapBaseline(lay.heroFont, row.top(), row.height())),
 			 content.hero);
 	if (!lay.badgeOnTally && !content.speed.isEmpty()) {
@@ -466,12 +497,13 @@ void TswStatusCard::paintHero(QPainter &painter, const Layout &lay) const
 	}
 }
 
-void TswStatusCard::paintStretch(QPainter &painter, const Layout &lay, double top) const
+void TswStatusCard::paintStretch(QPainter &painter, const Layout &lay) const
 {
 	if (content.stretchLabel.isEmpty())
 		return;
 	const QColor under = fillColor();
 	const QFontMetricsF metrics(lay.statusFont);
+	const double top = lay.statusTop;
 	painter.setFont(lay.statusFont);
 	painter.setPen(theme->ink(theme->muted, under));
 	painter.drawText(QPointF(lay.pad, top + metrics.ascent()), content.stretchLabel);
@@ -480,15 +512,32 @@ void TswStatusCard::paintStretch(QPainter &painter, const Layout &lay, double to
 			     labelWidth + metrics.horizontalAdvance(content.stretchValues) <= lay.inner;
 	const QPointF values = oneLine ? QPointF(lay.pad + labelWidth, top + metrics.ascent())
 				       : QPointF(lay.pad, top + lay.statusHeight + metrics.ascent());
-	painter.setPen(theme->ink(theme->text, under));
-	painter.drawText(values, content.stretchValues);
+	/* Values that are still too long (a file name) are shortened in the middle: the start and the
+	 * extension both stay. */
+	const double room = lay.pad + lay.inner - values.x();
+	painter.setPen(content.dimmed ? theme->ink(theme->muted, under) : theme->ink(theme->text, under));
+	painter.drawText(values, metrics.elidedText(content.stretchValues, Qt::ElideMiddle, room));
+}
+
+/* In timelapse the slower counter is marked by a shape too, not only by its color: a bar in the
+ * gutter beside it, so nothing shifts when it appears. */
+void TswStatusCard::paintFinalBar(QPainter &painter, const Layout &lay, double left, double top) const
+{
+	if (content.banner != TSW_BANNER_TIMELAPSE)
+		return;
+	const double frame = cardPaint(*theme, content.banner).width;
+	const double x = lay.stacked ? std::max(frame + 1.0, lay.pad - theme->s2 - FINAL_BAR)
+				     : std::round(left - (lay.gutter + FINAL_BAR) / 2.0);
+	const double height = lay.captionHeight + theme->s2 + lay.digitsHeight;
+	tswPaintRounded(painter, QRectF(x, top, FINAL_BAR, height), FINAL_BAR / 2.0,
+			theme->shape(theme->accent, fillColor()), QPen(Qt::NoPen));
 }
 
 void TswStatusCard::paintReadout(QPainter &painter, const Layout &lay) const
 {
 	const QColor under = fillColor();
 	const double pair = lay.captionHeight + theme->s2 + lay.digitsHeight;
-	const double secondLeft = lay.stacked ? lay.pad : lay.pad + lay.column + theme->s4;
+	const double secondLeft = lay.secondLeft;
 	const double secondTop = lay.stacked ? lay.readoutTop + pair + theme->s3 : lay.readoutTop;
 	const QColor digits = content.dimmed ? theme->ink(theme->muted, under) : theme->ink(theme->text, under);
 	/* In timelapse the counter that grows slower carries the timelapse color (4.2). */
@@ -512,7 +561,46 @@ void TswStatusCard::paintReadout(QPainter &painter, const Layout &lay) const
 		painter.drawText(QPointF(column.left, tswCapBaseline(lay.digitsFont, digitsTop, lay.digitsHeight)),
 				 column.value);
 	}
-	paintStretch(painter, lay, secondTop + pair + theme->s3);
+	paintFinalBar(painter, lay, secondLeft, secondTop);
+}
+
+/*
+ * The tape band (from the Transport direction): how fast the tape runs, shown without a word.
+ * Timelapse: chevrons, packed tighter the faster it goes. Real time: sparse play marks on a line.
+ * Saving: one still accent line. Otherwise an empty tape: a hairline (the summary's speed map will
+ * live here).
+ */
+void TswStatusCard::paintTape(QPainter &painter, const Layout &lay) const
+{
+	const QRectF band(lay.pad, lay.tapeTop, lay.inner, lay.tapeHeight);
+	const double size = band.height();
+	const double middle = std::round(band.center().y());
+	const QColor under = fillColor();
+	if (content.banner == TSW_BANNER_BUSY) {
+		painter.fillRect(QRectF(band.left(), middle - BUSY_LINE / 2.0, band.width(), BUSY_LINE), theme->accent);
+		return;
+	}
+	const bool timelapse = content.banner == TSW_BANNER_TIMELAPSE;
+	if (!timelapse && content.banner != TSW_BANNER_REAL_TIME) {
+		painter.fillRect(QRectF(band.left(), middle - 0.5, band.width(), 1.0),
+				 tswMix(theme->text, under, DIVIDER_INK / 2.0));
+		return;
+	}
+	const QColor color = timelapse ? theme->shape(theme->accent, under) : theme->frame;
+	const double pitch = size * (timelapse ? chevronPitch(content.speedValue) : PLAY_PITCH);
+	const int marks = std::min(MAX_MARKS, static_cast<int>((band.width() - size) / pitch) + 1);
+	const double left = band.left() - (timelapse ? std::round(CHEVRON_INSET * size) : 0.0);
+	painter.save();
+	painter.setClipRect(band);
+	for (int i = 0; i < marks; i++) {
+		const double x = left + i * pitch;
+		tswPaintGlyph(painter, timelapse ? TswGlyph::Chevron : TswGlyph::Play,
+			      QRectF(x, band.top(), size, size), color);
+		if (!timelapse && i + 1 < marks) /* the tape between two marks */
+			painter.fillRect(QRectF(x + size + theme->s2, middle - 0.5, pitch - size - 2 * theme->s2, 1.0),
+					 color);
+	}
+	painter.restore();
 }
 
 void TswStatusCard::paintEvent(QPaintEvent *event)
@@ -522,10 +610,15 @@ void TswStatusCard::paintEvent(QPaintEvent *event)
 	painter.setRenderHint(QPainter::Antialiasing);
 	painter.setRenderHint(QPainter::TextAntialiasing);
 	const Layout lay = measure(width());
-	paintFrame(painter);
+	paintFrame(painter, lay);
 	paintTally(painter, lay);
 	paintHero(painter, lay);
-	painter.setPen(dashedPen(tswMix(theme->text, fillColor(), 0.22), 1.0, DASH, DASH_GAP));
-	painter.drawLine(QPointF(lay.pad, lay.dividerY + 0.5), QPointF(lay.pad + lay.inner, lay.dividerY + 0.5));
+	if (content.banner != TSW_BANNER_TIMELAPSE) { /* in timelapse the band's edge divides A from B */
+		painter.setPen(dashedPen(tswMix(theme->text, fillColor(), DIVIDER_INK), 1.0, DASH, DASH_GAP));
+		painter.drawLine(QPointF(lay.pad, lay.dividerY + 0.5),
+				 QPointF(lay.pad + lay.inner, lay.dividerY + 0.5));
+	}
 	paintReadout(painter, lay);
+	paintStretch(painter, lay);
+	paintTape(painter, lay);
 }

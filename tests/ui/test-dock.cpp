@@ -17,8 +17,11 @@
  *   - no text is cut: every label and painted block is as tall as its lines need (UX-121), and
  *     the painted hero never falls below its floor size;
  *   - the colors pass the contrast guard, and no label is colored with a status color (UX-111);
+ *   - no text is smaller than 8 pt, whatever OBS's Font Size;
  *   - Tab visits the controls in visual order (UX-102);
- *   - Stop and the card appear only when they should.
+ *   - Stop and the card appear only when they should, and the card's two pills sit side by side
+ *     only when neither label wraps;
+ *   - Reduce motion stops the one animation, the thumb's slide (UX-045).
  * It also saves a picture of each case, for a person to look at.
  *
  *   test-dock <folder with en-US.ini and es-ES.ini> <folder for the pictures> [<OBS theme dumps>]
@@ -26,7 +29,9 @@
  * With a third folder (written by tests/ui/obs-themes.sh, one subfolder per OBS theme), it dresses
  * the dock in each theme exactly as OBS would (obs-theme.hpp), puts it in an OBS-like dock frame,
  * runs the same checks, compares fonts and background with OBS's own dock, and saves the pictures
- * in <pictures>/<theme>/ plus one contact sheet per theme and language in <pictures>/contact-sheets/.
+ * in <pictures>/<theme>/ plus one contact sheet per theme and language in <pictures>/contact-sheets/,
+ * and one more per theme of what a mouse and a keyboard do to the controls: hover, pressed, keyboard
+ * focus (also on an armed and an engaged speed), disabled, and the Stop hold.
  * Without it (as in CTest, where there is no OBS), it draws the plain Qt look, as before.
  */
 
@@ -42,6 +47,7 @@
 #include <QScrollBar>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -52,6 +58,7 @@
 #include "core/dock-view.h"
 #include "obs-theme.hpp"
 #include "ui/dock-theme.hpp"
+#include "ui/dock-widgets.hpp"
 #include "ui/dock.hpp"
 
 namespace {
@@ -68,6 +75,8 @@ const int MAX_FOCUS_STEPS = 200;   /* more than the dock has widgets: the focus 
 const double HERO_FLOOR = 1.5;     /* x b: the smallest the recording hero may get (4.2) */
 const double SHAPE = 3.0;          /* WCAG contrast for shapes and text */
 const double TEXT = 4.5;
+const double TEXT_FLOOR = 7.99; /* pt: no text smaller than 8 pt (rounding aside), even at Font Size 8 */
+const double HOLD = 0.6;        /* how far the Stop hold fill is drawn in its picture */
 
 int failures = 0;
 std::map<std::string, std::string> texts; /* the locale file being tested */
@@ -244,6 +253,10 @@ void checkContrast(const TswDock &dock, const QString &label)
 		{"accent words on accentTint", t.ink(t.accent, t.accentTint), t.accentTint, TEXT},
 		{"the record dot on dangerTint", t.shape(t.danger, t.dangerTint), t.dangerTint, SHAPE},
 		{"the focus ring on the panel", t.focus, t.panel, SHAPE},
+		{"the real-time outline on the panel", t.frame, t.panel, SHAPE},
+		{"the speed badge on the timelapse band", t.badgeFill, t.accentFill, SHAPE},
+		{"the badge's number on the badge", t.badgeText, t.badgeFill, TEXT},
+		{"the chevrons on accentTint", t.shape(t.accent, t.accentTint), t.accentTint, SHAPE},
 	};
 	for (const auto &pair : pairs) {
 		const double contrast = tswContrast(pair.color, pair.under);
@@ -262,6 +275,35 @@ void checkContrast(const TswDock &dock, const QString &label)
 				fail(label + ": the label \"" + text->text() + "\" is colored with a status color");
 		}
 	}
+}
+
+/* No text under 8 pt: at OBS's Font Size 8 a 0.75b caption would be 6 pt, unreadable even up close. */
+void checkTextFloor(const TswDock &dock, const QString &label)
+{
+	for (const QLabel *text : dock.findChildren<QLabel *>()) {
+		const double points = QFontInfo(text->font()).pointSizeF();
+		if (text->isVisible() && !text->text().isEmpty() && points < TEXT_FLOOR)
+			fail(label + QString(": \"%1\" is %2 pt, under 8 pt").arg(text->text()).arg(points));
+	}
+	const double painted = dock.findChild<QWidget *>("tswStatus")->property("tswSmallestPoints").toDouble();
+	if (painted < TEXT_FLOOR)
+		fail(label + QString(": the status card paints a %1 pt text, under 8 pt").arg(painted));
+}
+
+/* The card's pills share a row only while neither label wraps; else they stack, full width (3.10). */
+void checkCardRows(const TswDock &dock, const QString &label)
+{
+	const auto *folder = dock.findChild<TswButton *>("tswOpenFolder");
+	const auto *play = dock.findChild<TswButton *>("tswPlay");
+	if (!folder->isVisible() || !play->isVisible() || folder->y() != play->y())
+		return;
+	if (folder->labelLines(folder->width()) > 1 || play->labelLines(play->width()) > 1)
+		fail(label +
+		     QString(": the card's pills sit side by side, but a label wraps (pill %1 px, card %2 px, dock %3 px, viewport %4 px)")
+			     .arg(folder->width())
+			     .arg(folder->parentWidget()->width())
+			     .arg(dock.width())
+			     .arg(dock.parentWidget()->width()));
 }
 
 /* The main button says what it does, never the state (UX-004); Tab follows the eye (UX-102). */
@@ -326,6 +368,8 @@ void checkLayout(const TswDock &dock, const QWidget &viewport, const Case &c, co
 	checkHeights(dock, label);
 	checkFit(dock, viewport, label);
 	checkContrast(dock, label);
+	checkTextFloor(dock, label);
+	checkCardRows(dock, label);
 	checkWordsAndFocus(dock, label);
 }
 
@@ -403,10 +447,38 @@ void checkThemeHooks()
 	delete area;
 }
 
+/*
+ * Reduce motion (UX-045): a new speed moves the thumb at once, and turning it on ends a slide under
+ * way. The same change without it must slide, or this check would test nothing.
+ */
+void checkReduceMotion()
+{
+	const Case realTime = allCases()[2];
+	for (const bool reduce : {false, true}) {
+		QScrollArea *area = showCase(realTime, WIDTHS[0]);
+		auto *dock = area->findChild<TswDock *>();
+		dock->setReduceMotion(reduce);
+		tsw_dock_view view = viewOf(realTime);
+		view.speed_selected = 8; /* the next speed changes: the thumb goes from x4 to x8 */
+		dock->showView(view);
+		const QWidget *rail = dock->findChild<QWidget *>("tswSpeed8")->parentWidget();
+		const bool moving = rail->property("tswMoving").toBool();
+		if (reduce && moving)
+			fail("Reduce motion is on, but the thumb slides");
+		if (!reduce && !moving)
+			fail("the thumb did not slide, so the Reduce motion check tests nothing");
+		dock->setReduceMotion(true);
+		if (rail->property("tswMoving").toBool())
+			fail("Reduce motion was turned on, but the slide under way goes on");
+		delete area;
+	}
+}
+
 void checkLocale(const QString &locale, const QString &pictures)
 {
 	checkResize(locale);
 	checkThemeHooks();
+	checkReduceMotion();
 	const std::vector<Case> cases = allCases();
 	for (const int width : WIDTHS) {
 		Positions positions;
@@ -501,16 +573,10 @@ void compareWithObs(const QJsonObject &reference, const QString &folder, OBSBasi
 		std::printf("same  %s: pixel for pixel as OBS draws it\n", qPrintable(label));
 }
 
-/*
- * One state in an OBS-like window: the dock in its scroll area, in an OBSDock docked on the right
- * of an OBSBasic, as obs_frontend_add_dock_by_id does once the user docks it. The checks run while
- * the dock is tall; then it is sized to its content plus some spare room, as a dock in OBS usually
- * has, and drawn with OBS's window around its rounded corners.
- */
-QImage renderInObs(const ObsTheme &theme, const QString &locale, const Case &c, int width, const QString &label,
-		   Positions *positions)
+/* The dock in an OBSDock docked on the right of an OBSBasic, as obs_frontend_add_dock_by_id does
+ * once the user docks it, showing a case; the window is shown, tall. */
+TswDock *dockInObs(OBSBasic &window, const Case &c, int width)
 {
-	OBSBasic window;
 	window.setCentralWidget(new QWidget(&window));
 	auto *frame = new OBSDock(&window);
 	frame->setObjectName("timelapse-switch");
@@ -518,14 +584,41 @@ QImage renderInObs(const ObsTheme &theme, const QString &locale, const Case &c, 
 	frame->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable |
 			   QDockWidget::DockWidgetFloatable);
 	auto *dock = new TswDock(lookup);
-	QScrollArea *area = TswDock::inScrollArea(dock);
-	frame->setWidget(area);
+	frame->setWidget(TswDock::inScrollArea(dock));
 	frame->setFixedWidth(width);
 	window.addDockWidget(Qt::RightDockWidgetArea, frame);
 	dock->showView(viewOf(c));
 	window.resize(width + CENTRAL_WIDTH, TALL);
 	window.show();
 	settle();
+	return dock;
+}
+
+/* Sizes the window to the dock's content plus some spare room, as a dock in OBS usually has, and
+ * draws the dock with OBS's window around its rounded corners. */
+QImage grabDock(OBSBasic &window, const QString &label)
+{
+	auto *frame = window.findChild<OBSDock *>();
+	auto *area = qobject_cast<QScrollArea *>(frame->widget());
+	const int chrome = frame->height() - area->viewport()->height();
+	const int content = area->widget()->heightForWidth(area->viewport()->width());
+	window.resize(frame->width() + CENTRAL_WIDTH, chrome + content + SPARE_ROOM);
+	settle();
+	if (area->verticalScrollBar()->isVisible())
+		fail(label + ": the dock scrolls although it is taller than its content");
+	return window.grab(frame->geometry()).toImage();
+}
+
+/*
+ * One state in an OBS-like window (dockInObs). The checks run while the dock is tall; then it is
+ * drawn as OBS shows it (grabDock).
+ */
+QImage renderInObs(const ObsTheme &theme, const QString &locale, const Case &c, int width, const QString &label,
+		   Positions *positions)
+{
+	OBSBasic window;
+	TswDock *dock = dockInObs(window, c, width);
+	auto *area = qobject_cast<QScrollArea *>(dock->parentWidget()->parentWidget());
 	checkLayout(*dock, *area->viewport(), c, label);
 	notePositions(*dock, c, positions);
 	/* In a narrow OBS dock the scroll area can make the dock wider than what shows: cut off. */
@@ -535,14 +628,84 @@ QImage renderInObs(const ObsTheme &theme, const QString &locale, const Case &c, 
 				     .arg(area->viewport()->width()));
 	if (c.status.phase == TSW_PHASE_IDLE && c.status.outcome == 0 && !c.startInTimelapse)
 		compareWithObs(theme.references.value(locale), theme.folder, window, width, *area, label);
+	return grabDock(window, label);
+}
 
-	const int chrome = frame->height() - area->viewport()->height();
-	const int content = dock->heightForWidth(area->viewport()->width());
-	window.resize(width + CENTRAL_WIDTH, chrome + content + SPARE_ROOM);
-	settle();
-	if (area->verticalScrollBar()->isVisible())
-		fail(label + ": the dock scrolls although it is taller than its content");
-	return window.grab(frame->geometry()).toImage();
+/* --- What a mouse and a keyboard do to the controls --- */
+
+enum class Act { Hover, Press, Focus, Hold, None };
+
+struct Interaction {
+	const char *label;
+	size_t state;       /* index in allCases() */
+	const char *widget; /* object name, or nullptr for the state alone */
+	Act act;
+};
+
+/* Every look a control can take that a still picture of a state never shows; focus also where it
+ * meets an outline that means something (the armed thumb, the armed switch). */
+const Interaction INTERACTIONS[] = {
+	{"Record: hover", 0, "tswMain", Act::Hover},
+	{"Record: pressed", 0, "tswMain", Act::Press},
+	{"Record: keyboard focus", 0, "tswMain", Act::Focus},
+	{"start Timelapse: focus", 0, "tswStartTimelapse", Act::Focus},
+	{"armed x4: focus", 0, "tswSpeed4", Act::Focus},
+	{"x8: hover", 0, "tswSpeed8", Act::Hover},
+	{"x8: focus", 0, "tswSpeed8", Act::Focus},
+	{"armed switch: focus", 2, "tswMain", Act::Focus},
+	{"engaged x4: focus", 3, "tswSpeed4", Act::Focus},
+	{"Stop: hover", 3, "tswStop", Act::Hover},
+	{"Stop: held 60 %", 3, "tswStop", Act::Hold},
+	{"saving: disabled", 4, nullptr, Act::None},
+	{"Open folder: focus", 5, "tswOpenFolder", Act::Focus},
+	{"Close: hover", 5, "tswDismiss", Act::Hover},
+	{"Learn more: focus", 6, "tswLearnMore", Act::Focus},
+};
+
+/* Does to widget what a mouse or a keyboard would; returns false if it did not take. */
+bool perform(OBSBasic &window, QWidget *widget, Act act)
+{
+	switch (act) {
+	case Act::Hover: /* what Qt sets when the mouse enters a widget with WA_Hover */
+		widget->setAttribute(Qt::WA_UnderMouse, true);
+		widget->update();
+		return true;
+	case Act::Press:
+		static_cast<QAbstractButton *>(widget)->setDown(true);
+		return true;
+	case Act::Focus:
+		window.activateWindow();
+		settle();
+		widget->setFocus(Qt::TabFocusReason); /* as Tab does: the dock shows its focus ring */
+		settle();
+		return widget->hasFocus();
+	case Act::Hold:
+		static_cast<TswButton *>(widget)->setHoldProgress(HOLD);
+		return true;
+	case Act::None:
+		break;
+	}
+	return true;
+}
+
+/* One row of the interaction sheet: every interaction, in the loaded language, at one width. */
+QList<Shot> renderInteractions(const ObsTheme &theme, const QString &locale, int width)
+{
+	const std::vector<Case> cases = allCases();
+	QList<Shot> row;
+	for (const Interaction &interaction : INTERACTIONS) {
+		const QString label =
+			QString("%1 %2 %3 px %4").arg(theme.name, locale).arg(width).arg(interaction.label);
+		OBSBasic window;
+		TswDock *dock = dockInObs(window, cases[interaction.state], width);
+		QWidget *widget = interaction.widget != nullptr ? dock->findChild<QWidget *>(interaction.widget)
+								: nullptr;
+		if (interaction.widget != nullptr && (widget == nullptr || !perform(window, widget, interaction.act)))
+			fail(label + ": could not do it, so its picture shows nothing");
+		row.append(
+			{QString("%1 (%2, %3 px)").arg(interaction.label, locale).arg(width), grabDock(window, label)});
+	}
+	return row;
 }
 
 /* The look of the contact sheet: OBS's window color, text color and font under the theme. */
@@ -578,8 +741,10 @@ void renderTheme(const ObsTheme &theme, const QString &locale, const QString &pi
 			row.append({QString("OBS itself, idle (%1 px)").arg(width), QImage(theme.folder + "/" + obs)});
 		rows.append(row);
 	}
-	const QString title = QString("%1 (OBS calls it %2), %3. Rows: %4, %5 and %6 px; last column: OBS's own dock")
-				      .arg(theme.id, theme.dark ? "dark" : "light", locale)
+	/* Dark or light as drawn: OBS calls the System theme light even on a dark desktop. */
+	const bool dark = theme.palette.color(QPalette::Window).lightnessF() < 0.5;
+	const QString title = QString("%1 (%2, %3 palette), %4. Rows: %5, %6 and %7 px; last column: OBS's own dock")
+				      .arg(theme.name, theme.id, dark ? "dark" : "light", locale)
 				      .arg(WIDTHS[0])
 				      .arg(WIDTHS[1])
 				      .arg(WIDTHS[2]);
@@ -605,6 +770,7 @@ void renderThemes(const QString &locales, const QString &pictures, const QString
 		if (theme.logicalDpi != dpi)
 			std::printf("NOTE  %s: OBS ran at %g dpi, these pictures at %g dpi\n", qPrintable(theme.name),
 				    theme.logicalDpi, dpi);
+		QList<QList<Shot>> interactions;
 		for (const char *locale : LOCALES) {
 			if (!loadLocale(locales + "/" + locale + ".ini")) {
 				fail(QString("cannot read %1.ini").arg(locale));
@@ -612,9 +778,15 @@ void renderThemes(const QString &locales, const QString &pictures, const QString
 			}
 			missing.clear();
 			renderTheme(theme, locale, pictures);
+			/* English at the widest width, Spanish at the narrowest: the two extremes. */
+			const bool english = QString(locale) == LOCALES[0];
+			interactions.append(renderInteractions(theme, locale, english ? WIDTHS[0] : WIDTHS[2]));
 			for (const std::string &key : missing)
 				fail(QString("%1.ini has no %2").arg(locale, QString::fromStdString(key)));
 		}
+		contactSheet(QString("%1: hover, pressed, keyboard focus, disabled and the Stop hold").arg(theme.name),
+			     interactions, sheetLook())
+			.save(QString("%1/contact-sheets/%2-interaction.png").arg(pictures, theme.name));
 		std::printf("theme %s: pictures in %s/%s\n", qPrintable(theme.name), qPrintable(pictures),
 			    qPrintable(theme.name));
 	}

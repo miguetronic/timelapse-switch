@@ -114,7 +114,7 @@ static void idle_offers_record_and_the_starting_mode(void)
 	EXPECT_TEXT(view.speed_label, "Label.Speed");
 	TSW_EXPECT_EQ(view.speed_selected, 4);
 	TSW_EXPECT_TRUE(!view.stop_shown);
-	TSW_EXPECT_TRUE(!view.card_shown && !view.section_shown);
+	TSW_EXPECT_TRUE(!view.card_shown);
 	EXPECT_TEXT(view.context_text, "Hint.Separate");
 	TSW_EXPECT_TRUE(view.announce_text == NULL);
 
@@ -123,6 +123,20 @@ static void idle_offers_record_and_the_starting_mode(void)
 	EXPECT_TEXT(view.hero_text, "State.Hero.StartsTimelapse");
 	TSW_EXPECT_EQ(view.hero_speed, 4);
 	TSW_EXPECT_TRUE(view.start_in_timelapse);
+}
+
+/* The status line is never an empty hole: idle shows the stretch at zero, dimmed like the counters. */
+static void idle_shows_the_stretch_at_zero(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = {0};
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.section_shown);
+	TSW_EXPECT_EQ(view.section_speed, 1);
+	EXPECT_TEXT(view.section_recorded, "0:00");
+	TSW_EXPECT_TRUE(view.counters_dimmed);
 }
 
 static void real_time_offers_the_switch(void)
@@ -194,13 +208,28 @@ static void saving_disables_what_cannot_act(void)
 	EXPECT_TEXT(view.tally_text, "State.Tally.Saving");
 	EXPECT_TEXT(view.hero_text, "State.Hero.Saving");
 	TSW_EXPECT_TRUE(view.hero_quiet);
-	TSW_EXPECT_TRUE(!view.section_shown); /* counters frozen, no stretch */
 	EXPECT_TEXT(view.context_text, "Hint.Saving");
 	EXPECT_TEXT(view.main_text, "Action.Record");
 	TSW_EXPECT_TRUE(!view.main_enabled);
 	TSW_EXPECT_TRUE(view.speeds_shown && !view.speeds_enabled);
 	TSW_EXPECT_TRUE(view.stop_shown && !view.stop_enabled);
 	EXPECT_TEXT(view.recorded, "0:12:34");
+}
+
+/* While saving, the counters stay where Stop was pressed, and so does the last stretch. */
+static void saving_keeps_the_last_stretch_frozen(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = recording(8);
+	status.phase = TSW_PHASE_SAVING;
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.section_shown);
+	TSW_EXPECT_EQ(view.section_speed, 8);
+	EXPECT_TEXT(view.section_recorded, "2:00");
+	EXPECT_TEXT(view.section_final, "0:30");
+	TSW_EXPECT_TRUE(!view.counters_dimmed);
 }
 
 static void a_saved_recording_opens_the_summary(void)
@@ -218,7 +247,7 @@ static void a_saved_recording_opens_the_summary(void)
 	TSW_EXPECT_TRUE(!view.counters_dimmed);
 	EXPECT_TEXT(view.recorded, "1:23:45");
 	EXPECT_TEXT(view.final_length, "0:31:10");
-	EXPECT_TEXT(view.skipped, "0:52:35");
+	EXPECT_TEXT(view.skipped, "52:35"); /* one big figure: no empty hours (UX-070) */
 	TSW_EXPECT_TRUE(view.thank_user);
 	EXPECT_TEXT(view.main_text, "Action.Record");
 	TSW_EXPECT_TRUE(view.main_enabled && !view.speeds_shown && !view.stop_shown);
@@ -234,6 +263,19 @@ static void a_saved_recording_opens_the_summary(void)
 	TSW_EXPECT_EQ(view.banner, TSW_BANNER_READY);
 	view = build(&model, &session, ended(2, 0));
 	TSW_EXPECT_TRUE(view.card_shown && !view.thank_user);
+}
+
+/* A recording that never sped up skipped no waiting: the summary shows no figure for it. */
+static void a_recording_that_never_sped_up_skips_nothing(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = ended(1, 0);
+	status.last_final_ns = status.last_recorded_ns;
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.card_shown);
+	EXPECT_TEXT(view.skipped, "");
 }
 
 static void a_failure_opens_the_error_card(void)
@@ -335,11 +377,14 @@ int main(void)
 	durations_read_as_hours_minutes_seconds();
 	short_durations_drop_the_hours_under_an_hour();
 	idle_offers_record_and_the_starting_mode();
+	idle_shows_the_stretch_at_zero();
 	real_time_offers_the_switch();
 	real_time_shows_the_current_stretch();
 	timelapse_offers_the_way_back_and_shows_the_section();
 	saving_disables_what_cannot_act();
+	saving_keeps_the_last_stretch_frozen();
 	a_saved_recording_opens_the_summary();
+	a_recording_that_never_sped_up_skips_nothing();
 	a_failure_opens_the_error_card();
 	a_failed_start_shows_no_times();
 	an_unknown_error_uses_the_unexpected_error_texts();

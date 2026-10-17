@@ -25,13 +25,14 @@
 
 namespace {
 
-const int THUMB_INSET = 2;       /* px between the track and its thumb (4.2) */
-const int SLIDE_MS = 160;        /* the thumb's slide (4.2, motion) */
-const double MAIN_RADIUS = 0.6;  /* x L: the main button's corners, a rounded rectangle */
-const double DISABLED_INK = 0.6; /* disabled content is muted at 60 % (4.2, main button) */
-const double CARD_RADIUS = 0.45; /* x L, at least MIN_CARD_RADIUS */
-const int MIN_CARD_RADIUS = 6;
-const double RING_GAP = 2.0; /* px between a button's frame and its focus ring */
+const int THUMB_INSET = 2;        /* px between the track and its thumb (4.2) */
+const int SLIDE_MS = 160;         /* the thumb's slide (4.2, motion) */
+const double DISABLED_INK = 0.6;  /* disabled content is muted at 60 % (4.2, main button) */
+const double RING_GAP = 2.0;      /* px between a frame and the focus ring inside it */
+const double THUMB_FRAME = 2.0;   /* px: the outline of an armed or engaged thumb */
+const double POINT_STEP = 0.5;    /* pt: rail labels shrink in half points */
+const int MAX_FIT_STEPS = 16;     /* from 1.1b down to the floor at any base size (P10-2) */
+const double STACKED_FLOOR = 0.8; /* x b: a stacked rail label shrinks this far before it wraps */
 
 } // namespace
 
@@ -143,6 +144,20 @@ void TswButton::setMinimumRow(int height)
 	updateGeometry();
 }
 
+void TswButton::setPadding(int pixels)
+{
+	if (padding == pixels)
+		return;
+	padding = pixels;
+	updateGeometry();
+	update();
+}
+
+int TswButton::sidePadding() const
+{
+	return padding >= 0 ? padding : theme->s4;
+}
+
 void TswButton::setHoldProgress(double progress)
 {
 	hold = std::clamp(progress, 0.0, 1.0);
@@ -171,6 +186,12 @@ int TswButton::lineCount(const QString &text, int width) const
 	return std::max(lines, 1);
 }
 
+int TswButton::labelLines(int width) const
+{
+	const int gap = glyphSize() > 0 && !label.isEmpty() ? theme->s3 : 0;
+	return lineCount(label, labelWidth(width, sidePadding(), glyphSize(), gap));
+}
+
 bool TswButton::hasHeightForWidth() const
 {
 	return true;
@@ -179,7 +200,7 @@ bool TswButton::hasHeightForWidth() const
 int TswButton::heightForWidth(int width) const
 {
 	/* The tallest of the labels it may show, so swapping them moves nothing below (UX-002). */
-	const int textWidth = labelWidth(width, theme->s4, glyphSize(), theme->s3);
+	const int textWidth = labelWidth(width, sidePadding(), glyphSize(), theme->s3);
 	int lines = lineCount(label, textWidth);
 	for (const QString &text : reserve)
 		lines = std::max(lines, lineCount(text, textWidth));
@@ -190,7 +211,7 @@ int TswButton::heightForWidth(int width) const
 QSize TswButton::sizeHint() const
 {
 	const int glyphWidth = glyphSize() > 0 ? glyphSize() + theme->s3 : 0;
-	const int width = static_cast<int>(tswTextWidth(labelFont, label)) + glyphWidth + 2 * theme->s4;
+	const int width = static_cast<int>(std::ceil(tswTextWidth(labelFont, label))) + glyphWidth + 2 * sidePadding();
 	return {width, heightForWidth(width)};
 }
 
@@ -205,7 +226,7 @@ QSize TswButton::minimumSizeHint() const
 			word = std::max(word, static_cast<int>(std::ceil(tswTextWidth(labelFont, part))));
 	}
 	const int glyphWidth = glyphSize() > 0 ? glyphSize() + theme->s3 : 0;
-	const int width = shape == Shape::Pill && label.isEmpty() ? minimumRow : word + glyphWidth + 2 * theme->s4;
+	const int width = shape == Shape::Pill && label.isEmpty() ? minimumRow : word + glyphWidth + 2 * sidePadding();
 	return {width, minimumRow};
 }
 
@@ -213,7 +234,7 @@ double TswButton::radius() const
 {
 	if (shape == Shape::Pill)
 		return height() / 2.0;
-	return std::round(theme->L * MAIN_RADIUS);
+	return theme->corner; /* from the theme's own buttons: 8 px, 4 px in Classic (3.7) */
 }
 
 void TswButton::paintFace(QPainter &painter, const QRectF &box) const
@@ -244,7 +265,7 @@ void TswButton::paintContent(QPainter &painter, QRectF box) const
 {
 	const int glyph_px = glyphSize();
 	const int gap = glyph_px > 0 && !label.isEmpty() ? theme->s3 : 0;
-	const int room = labelWidth(static_cast<int>(box.width()), theme->s4, glyph_px, gap);
+	const int room = labelWidth(static_cast<int>(box.width()), sidePadding(), glyph_px, gap);
 	const int textWidth = tswBalancedWidth(labelFont, label, room);
 	const QRect bounds = QFontMetrics(labelFont).boundingRect(
 		QRect(0, 0, textWidth, static_cast<int>(box.height())), Qt::TextWordWrap, label);
@@ -277,9 +298,11 @@ void TswButton::paintEvent(QPaintEvent *event)
 	/* Pressed: the content moves 1 px down, like a key that travels. */
 	paintContent(painter, isDown() ? box.translated(0, 1) : box);
 	if (tswHasKeyFocus(this)) {
-		/* Inside a frame, with a gap, so the ring never merges with an accent outline. */
+		/* Inside a frame, with a gap, so the ring never merges with an accent outline; 3:1 against
+		 * the face it is drawn on, whatever that face is (UX-110). */
 		const double inset = look.frameWidth >= 2.0 ? look.frameWidth + RING_GAP : 1.0;
-		tswPaintFocusRing(painter, box, radius(), theme->focus, inset, TswRing::Solid);
+		const QColor face = look.face.isValid() ? look.face : look.under;
+		tswPaintFocusRing(painter, box, radius(), theme->shape(theme->focus, face), inset, TswRing::Solid);
 	}
 }
 
@@ -342,7 +365,8 @@ void TswLink::paintEvent(QPaintEvent *event)
 	const double left = theme->s1 + glyph_px + theme->s2;
 	painter.drawText(QPointF(left, tswCapBaseline(font, 0, height())), text());
 	if (tswHasKeyFocus(this))
-		tswPaintFocusRing(painter, QRectF(rect()), theme->s2, theme->focus, 1.0, TswRing::Solid);
+		tswPaintFocusRing(painter, QRectF(rect()), theme->s2, theme->shape(theme->focus, theme->surface), 1.0,
+				  TswRing::Solid);
 }
 
 /* --- TswSegment --- */
@@ -366,7 +390,14 @@ void TswSegment::setLabel(const QString &text)
 
 QFont TswSegment::labelFont() const
 {
-	return rail->theme()->fontAt(TswType::RAIL, isChecked());
+	QFont font = rail->theme()->fontAt(TswType::RAIL, isChecked());
+	font.setPointSizeF(rail->fitAt(rail->width()).points);
+	return font;
+}
+
+QColor TswSegment::under() const
+{
+	return isChecked() ? rail->thumbFill() : rail->theme()->surface;
 }
 
 QColor TswSegment::labelColor() const
@@ -376,38 +407,41 @@ QColor TswSegment::labelColor() const
 		return theme->ink(theme->muted, theme->surface);
 	if (isChecked() && rail->mode() == TswRail::Mode::Engaged)
 		return theme->onAccent;
-	return theme->text;
+	return theme->ink(theme->text, under());
 }
 
-bool TswSegment::stacksAt(int width) const
-{
-	if (glyph == TswGlyph::None)
-		return false;
-	const QFont bold = rail->theme()->fontAt(TswType::RAIL, true); /* the widest it gets */
-	const double need = tswGlyphSize(bold) + 3 * rail->theme()->s2 + tswTextWidth(bold, label);
-	return need > width;
-}
-
-int TswSegment::stackedHeight(int width) const
+bool TswSegment::fitsBeside(int width, const QFont &font) const
 {
 	const TswTheme *theme = rail->theme();
-	const QFont bold = theme->fontAt(TswType::RAIL, true);
-	const int words = tswWrappedHeight(bold, label, width - 2 * theme->s1); /* may wrap at the largest font */
-	return tswGlyphSize(bold) + theme->s1 + words + 2 * theme->s2;
+	const double glyphWidth = glyph == TswGlyph::None ? 0.0 : tswGlyphSize(font) + theme->s2;
+	/* Air on both sides inside the thumb, so a Bold label never touches its outline. */
+	return glyphWidth + 2 * (theme->s2 + theme->s1) + tswTextWidth(font, label) <= width;
 }
 
-/* Too narrow for glyph and word side by side: the word goes under its glyph, and wraps if it must
- * (3.10). */
+bool TswSegment::fitsUnder(int width, const QFont &font) const
+{
+	return tswTextWidth(font, label) <= width - 2 * rail->theme()->s2;
+}
+
+int TswSegment::stackedHeight(int width, const QFont &font) const
+{
+	const TswTheme *theme = rail->theme();
+	const int words = tswWrappedHeight(font, label, width - 2 * theme->s2); /* may wrap at the largest font */
+	return tswGlyphSize(font) + theme->s1 + words + 2 * theme->s2;
+}
+
+/* Too narrow for glyph and word side by side: the word goes under its glyph, smaller if it must,
+ * and wraps only when even that is too wide (3.10). */
 void TswSegment::paintStacked(QPainter &painter, const QRectF &box, int glyphSize) const
 {
 	const TswTheme *theme = rail->theme();
 	const QFont font = painter.font();
-	const int room = static_cast<int>(box.width()) - 2 * theme->s1;
+	const int room = static_cast<int>(box.width()) - 2 * theme->s2;
 	const int words = tswWrappedHeight(font, label, room);
 	const double top = std::round((box.height() - (glyphSize + theme->s1 + words)) / 2.0);
 	tswPaintGlyph(painter, glyph, QRectF(box.center().x() - glyphSize / 2.0, top, glyphSize, glyphSize),
 		      painter.pen().color());
-	const QRectF text(theme->s1, top + glyphSize + theme->s1, room, words);
+	const QRectF text(theme->s2, top + glyphSize + theme->s1, room, words);
 	painter.drawText(text, Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, label);
 }
 
@@ -428,9 +462,10 @@ void TswSegment::paintEvent(QPaintEvent *event)
 	QPainter painter(this);
 	painter.setRenderHint(QPainter::Antialiasing);
 	const QRectF box(rect());
-	const double radius = std::min(box.height(), box.width()) / 2.0;
+	const double radius = std::min(box.height() / 2.0, double(theme->corner));
+	const double round = rail->isStacked() ? radius : box.height() / 2.0;
 	if (!isChecked() && underMouse() && isEnabled())
-		tswPaintRounded(painter, box, radius, theme->hover(theme->surface), QPen(Qt::NoPen));
+		tswPaintRounded(painter, box, round, theme->hover(theme->surface), QPen(Qt::NoPen));
 	const QFont font = labelFont();
 	const QColor color = labelColor();
 	const int glyph_px = glyph == TswGlyph::None ? 0 : tswGlyphSize(font);
@@ -447,8 +482,10 @@ void TswSegment::paintEvent(QPaintEvent *event)
 		painter.drawText(QPointF(left + glyph_px + gap, tswCapBaseline(font, 0, box.height())), label);
 	}
 	if (tswHasKeyFocus(this)) {
-		/* Dashed: a solid outline on a segment means "the next speed" (outlined means next). */
-		tswPaintFocusRing(painter, box, radius, theme->focus, 1.0, TswRing::Dashed);
+		/* Dashed: a solid outline on a segment means "the next speed" (outlined means next). On the
+		 * thumb it sits inside the thumb's outline, with a gap, so the two never merge. */
+		const double inset = isChecked() ? THUMB_FRAME + RING_GAP : 1.0;
+		tswPaintFocusRing(painter, box, round, theme->shape(theme->focus, under()), inset, TswRing::Dashed);
 	}
 }
 
@@ -545,6 +582,19 @@ void TswRail::select(int id, bool animate)
 	update();
 }
 
+bool TswRail::isMoving() const
+{
+	return slide.state() == QAbstractAnimation::Running;
+}
+
+void TswRail::finishMotion()
+{
+	if (!isMoving())
+		return;
+	slide.stop();
+	update();
+}
+
 /* One tab stop for the whole rail: the selected segment; arrows reach the others (UX-102). */
 void TswRail::updateFocusPolicies()
 {
@@ -565,33 +615,52 @@ bool TswRail::hasHeightForWidth() const
 	return true;
 }
 
-/* When one label does not fit beside its glyph, all go under theirs: one rhythm per rail. */
-bool TswRail::stacksAt(int width) const
+TswRail::Fit TswRail::fitAt(int width) const
 {
+	const double largest = style->pointsAt(TswType::RAIL);
 	if (segments.isEmpty())
-		return false;
-	const int segmentWidth = (width - 2 * THUMB_INSET) / static_cast<int>(segments.size());
-	for (const TswSegment *segment : segments) {
-		if (segment->stacksAt(segmentWidth))
-			return true;
+		return {largest, false};
+	const int each = (width - 2 * THUMB_INSET) / static_cast<int>(segments.size());
+	QFont font = style->fontAt(TswType::RAIL, true); /* Bold: the widest a label gets */
+	const auto all = [&](bool beside) {
+		for (const TswSegment *segment : segments) {
+			if (beside ? !segment->fitsBeside(each, font) : !segment->fitsUnder(each, font))
+				return false;
+		}
+		return true;
+	};
+	/* 1. Beside the glyphs, from 1.1b down to 1.0b; 2. under them, down to the stacked floor. */
+	const double floors[] = {style->pointsAt(TswType::BODY), style->pointsAt(STACKED_FLOOR)};
+	for (int pass = 0; pass < 2; pass++) {
+		for (int step = 0; step < MAX_FIT_STEPS; step++) {
+			const double points = largest - step * POINT_STEP;
+			if (points < floors[pass])
+				break;
+			font.setPointSizeF(points);
+			if (all(pass == 0))
+				return {points, pass == 1};
+		}
 	}
-	return false;
+	return {floors[1], true}; /* the narrowest dock at the largest font: the words wrap */
 }
 
 bool TswRail::isStacked() const
 {
-	return stacksAt(width());
+	return fitAt(width()).stacked;
 }
 
 int TswRail::heightForWidth(int width) const
 {
 	const int height = std::max(static_cast<int>(std::lround(1.8 * style->L)), style->hC); /* UX-107 */
-	if (!stacksAt(width))
+	const Fit fit = fitAt(width);
+	if (!fit.stacked)
 		return height;
 	const int segmentWidth = (width - 2 * THUMB_INSET) / static_cast<int>(segments.size());
+	QFont font = style->fontAt(TswType::RAIL, true);
+	font.setPointSizeF(fit.points);
 	int stacked = 0;
 	for (const TswSegment *segment : segments)
-		stacked = std::max(stacked, segment->stackedHeight(segmentWidth));
+		stacked = std::max(stacked, segment->stackedHeight(segmentWidth, font));
 	return std::max(height, stacked + 2 * THUMB_INSET);
 }
 
@@ -614,6 +683,12 @@ QRectF TswRail::segmentBox(int index) const
 	return {THUMB_INSET + each * index, double(THUMB_INSET), each, height() - 2.0 * THUMB_INSET};
 }
 
+/* A pill on one row; a rounded rectangle when the labels stack, never a tall stadium. */
+double TswRail::thumbRadius(const QRectF &thumb) const
+{
+	return isStacked() ? std::min(thumb.height() / 2.0, double(style->corner)) : thumb.height() / 2.0;
+}
+
 void TswRail::layoutSegments()
 {
 	for (int i = 0; i < segments.size(); i++)
@@ -634,13 +709,26 @@ void TswRail::changeEvent(QEvent *event)
 		update();
 }
 
+QColor TswRail::thumbFill() const
+{
+	if (!isEnabled())
+		return style->panel;
+	if (current == Mode::Engaged)
+		return style->accentFill;
+	if (current == Mode::Start && selected == 0)
+		return style->raised;
+	return style->panel;
+}
+
 void TswRail::paintEvent(QPaintEvent *event)
 {
 	(void)event;
 	QPainter painter(this);
 	painter.setRenderHint(QPainter::Antialiasing);
 	const QRectF track(rect());
-	tswPaintRounded(painter, track, track.height() / 2.0, style->surface, tswBorder(style->hairline, 1.0));
+	const double trackRadius = isStacked() ? std::min(track.height() / 2.0, style->corner + double(THUMB_INSET))
+					       : track.height() / 2.0;
+	tswPaintRounded(painter, track, trackRadius, style->surface, tswBorder(style->hairline, 1.0));
 	if (selected < 0)
 		return;
 
@@ -648,17 +736,16 @@ void TswRail::paintEvent(QPaintEvent *event)
 	QRectF thumb = segmentBox(selected);
 	if (slide.state() == QAbstractAnimation::Running)
 		thumb.moveLeft(slide.currentValue().toDouble());
-	const double radius = thumb.height() / 2.0;
+	const double radius = thumbRadius(thumb);
 	const bool startRealTime = current == Mode::Start && selected == 0;
+	QPen frame = tswBorder(style->shape(style->accent, style->surface), THUMB_FRAME);
 	if (!isEnabled())
-		tswPaintRounded(painter, thumb, radius, style->panel, tswBorder(style->edge, 2.0));
+		frame = tswBorder(style->edge, THUMB_FRAME);
 	else if (current == Mode::Engaged)
-		tswPaintRounded(painter, thumb, radius, style->accentFill, tswBorder(style->accent, 2.0));
+		frame = tswBorder(style->accent, THUMB_FRAME);
 	else if (startRealTime)
-		tswPaintRounded(painter, thumb, radius, style->raised, tswBorder(style->edge, 1.0));
-	else
-		tswPaintRounded(painter, thumb, radius, style->panel,
-				tswBorder(style->shape(style->accent, style->surface), 2.0));
+		frame = tswBorder(style->edge, 1.0);
+	tswPaintRounded(painter, thumb, radius, thumbFill(), frame);
 }
 
 /* --- TswCard --- */
@@ -669,6 +756,5 @@ void TswCard::paintEvent(QPaintEvent *event)
 {
 	(void)event;
 	QPainter painter(this);
-	const double radius = std::max(MIN_CARD_RADIUS, static_cast<int>(std::lround(theme->L * CARD_RADIUS)));
-	tswPaintRounded(painter, QRectF(rect()), radius, theme->surface, tswBorder(theme->hairline, 1.0));
+	tswPaintRounded(painter, QRectF(rect()), theme->corner, theme->surface, tswBorder(theme->hairline, 1.0));
 }

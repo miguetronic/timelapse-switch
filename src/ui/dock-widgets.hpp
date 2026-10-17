@@ -71,11 +71,12 @@ private:
 /* What zones A and B show now; the dock fills it from the view and the locale. */
 struct TswStatusContent {
 	enum tsw_banner banner = TSW_BANNER_READY;
-	QString tally;          /* READY, REC, ... */
-	QString hero;           /* REAL TIME, or a quiet sentence */
-	bool quiet = true;      /* quiet heroes are smaller and Regular */
-	bool boldQuiet = false; /* the error headline */
-	QString speed;          /* the badge in timelapse: "×4"; else empty */
+	QString tally;           /* READY, REC, ... */
+	QString hero;            /* REAL TIME, or a quiet sentence */
+	bool quiet = true;       /* quiet heroes are smaller and Regular */
+	bool boldQuiet = false;  /* the error headline */
+	QString speed;           /* the badge in timelapse: "×4"; else empty */
+	uint32_t speedValue = 1; /* the speed as a number: the tape's chevrons pack tighter as it grows */
 	TswGlyph heroGlyph = TswGlyph::None;
 	QString recordedCaption; /* RECORDED */
 	QString finalCaption;    /* FINAL VIDEO */
@@ -97,15 +98,17 @@ struct TswStatusReserve {
 	QString stretchValues;
 };
 
-/* Zones A and B as one card: the state block above a dashed hairline, the readout below. */
+/* Zones A and B as one card: the state block above a dashed hairline, the readout below, and a
+ * tape band along the bottom whose marks show the speed without a word. */
 class TswStatusCard : public QWidget {
 	Q_OBJECT
-	Q_PROPERTY(double tswHeroPoints READ heroPoints) /* for the UI test: the hero's painted size */
-	Q_PROPERTY(bool tswClipped READ clipped)         /* for the UI test: a painted text did not fit */
+	Q_PROPERTY(double tswHeroPoints READ heroPoints)         /* for the UI test: the hero's painted size */
+	Q_PROPERTY(bool tswClipped READ clipped)                 /* for the UI test: a painted text did not fit */
+	Q_PROPERTY(double tswSmallestPoints READ smallestPoints) /* for the UI test: its smallest text */
 
 public:
 	TswStatusCard(QWidget *parent, const TswTheme *theme);
-	void setContent(const TswStatusContent &content, bool animate);
+	void setContent(const TswStatusContent &content);
 	void setReserve(const TswStatusReserve &reserve);
 	void setNarrow(bool narrow);
 	bool hasHeightForWidth() const override;
@@ -114,8 +117,9 @@ public:
 	QSize minimumSizeHint() const override;
 	double heroPoints() const;
 	bool clipped() const;
+	double smallestPoints() const;
 
-	struct Layout; /* fonts and rows for one width (dock-widgets.cpp) */
+	struct Layout; /* fonts and rows for one width (dock-status.cpp) */
 
 protected:
 	void paintEvent(QPaintEvent *event) override;
@@ -124,22 +128,22 @@ private:
 	Layout measure(int width) const;
 	void measureStateBlock(Layout &layout) const;
 	void measureReadout(Layout &layout) const;
-	void paintFrame(QPainter &painter) const;
+	void paintFrame(QPainter &painter, const Layout &layout) const;
 	void paintTally(QPainter &painter, const Layout &layout) const;
 	void paintHero(QPainter &painter, const Layout &layout) const;
 	void paintBadge(QPainter &painter, const QRectF &box, const Layout &layout) const;
 	double pillWidth(const Layout &layout) const;
 	void paintReadout(QPainter &painter, const Layout &layout) const;
-	void paintStretch(QPainter &painter, const Layout &layout, double top) const;
+	void paintFinalBar(QPainter &painter, const Layout &layout, double left, double top) const;
+	void paintStretch(QPainter &painter, const Layout &layout) const;
+	void paintTape(QPainter &painter, const Layout &layout) const;
 	QColor fillColor() const;
+	QColor stateColor() const; /* what the state block sits on: the band in timelapse */
 
 	const TswTheme *theme;
 	TswStatusContent content;
 	TswStatusReserve reserve;
 	bool narrow = false;
-	enum tsw_banner previous = TSW_BANNER_READY; /* for the cross-fade */
-	QVariantAnimation fade;                      /* 0 = previous state's colors, 1 = this one's */
-	QVariantAnimation sweep;                     /* saving: the line that sweeps for at most 5 s */
 };
 
 /* How a TswButton is painted; the dock picks one per action (4.2, main button table). */
@@ -166,7 +170,9 @@ public:
 	void setShape(Shape shape);
 	void setLabelFont(const QFont &font);
 	void setMinimumRow(int height);
+	void setPadding(int pixels);           /* left and right of the content: s4, or s3 in a narrow dock */
 	void setHoldProgress(double progress); /* Stop's hold fill (UX-052), 0 to 1 */
+	int labelLines(int width) const;       /* the lines its label takes in a button this wide */
 	bool hasHeightForWidth() const override;
 	int heightForWidth(int width) const override;
 	QSize sizeHint() const override;
@@ -177,6 +183,7 @@ protected:
 
 private:
 	int glyphSize() const;
+	int sidePadding() const;
 	int lineCount(const QString &text, int width) const;
 	double radius() const;
 	void paintFace(QPainter &painter, const QRectF &box) const;
@@ -190,6 +197,7 @@ private:
 	Shape shape = Shape::Rounded;
 	QFont labelFont;
 	int minimumRow = 0;
+	int padding = -1; /* -1: the theme's s4 */
 	double hold = 0.0;
 };
 
@@ -223,8 +231,9 @@ class TswSegment : public QToolButton {
 public:
 	TswSegment(TswRail *rail, TswGlyph glyph, const QString &label);
 	void setLabel(const QString &label);
-	bool stacksAt(int width) const;     /* the label does not fit beside its glyph at this width */
-	int stackedHeight(int width) const; /* glyph above its word, at this segment width */
+	bool fitsBeside(int width, const QFont &font) const;   /* glyph and label side by side in this width */
+	bool fitsUnder(int width, const QFont &font) const;    /* the label on one line under its glyph */
+	int stackedHeight(int width, const QFont &font) const; /* glyph above its words */
 	QSize sizeHint() const override;
 	QSize minimumSizeHint() const override;
 
@@ -235,6 +244,7 @@ protected:
 private:
 	QColor labelColor() const;
 	QFont labelFont() const;
+	QColor under() const; /* what the segment's label sits on: the thumb, or the track */
 	void paintStacked(QPainter &painter, const QRectF &box, int glyphSize) const;
 
 	TswRail *rail;
@@ -245,6 +255,7 @@ private:
 /* A pill track with a thumb under the selected segment; the thumb slides when it changes. */
 class TswRail : public QWidget {
 	Q_OBJECT
+	Q_PROPERTY(bool tswMoving READ isMoving) /* for the UI test: the thumb is sliding */
 
 public:
 	enum class Mode { Armed, Engaged, Start }; /* outlined next, filled now, or the start mode */
@@ -256,8 +267,18 @@ public:
 	void select(int id, bool animate);
 	void moveFocus(TswSegment *from, int step);
 	const TswTheme *theme() const;
-	bool stacksAt(int width) const; /* labels go under their glyphs at this width */
+	/* The labels' size and place at this width, one for all segments (one rhythm per rail): beside
+	 * their glyphs, shrinking from 1.1b to 1.0b first; else under them, shrinking so a label stays
+	 * on one line (3.10). */
+	struct Fit {
+		double points;
+		bool stacked;
+	};
+	Fit fitAt(int width) const;
 	bool isStacked() const;
+	QColor thumbFill() const; /* the selected segment's fill, for what is painted on it */
+	bool isMoving() const;    /* the thumb is sliding */
+	void finishMotion();      /* Reduce motion: the thumb jumps to where it goes (UX-045) */
 	bool hasHeightForWidth() const override;
 	int heightForWidth(int width) const override;
 	QSize sizeHint() const override;
@@ -270,6 +291,7 @@ protected:
 
 private:
 	QRectF segmentBox(int index) const;
+	double thumbRadius(const QRectF &thumb) const;
 	void layoutSegments();
 	void updateFocusPolicies();
 

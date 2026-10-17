@@ -70,7 +70,8 @@ public:
 	 * scrolls, instead of cutting them, when the dock is short). Takes ownership of dock. */
 	static QScrollArea *inScrollArea(TswDock *dock);
 
-	/* Reduce motion: every transition becomes instant (3.12). Off until the Feedback settings exist. */
+	/* Reduce motion (UX-045): the one animation, the thumb's slide, becomes instant, and one under
+	 * way ends at once (3.12). Off until the Feedback settings exist. */
 	void setReduceMotion(bool reduce);
 
 	/* The colors and sizes in use, for the UI test's contrast checks. */
@@ -100,6 +101,7 @@ protected:
 	bool event(QEvent *event) override;
 	void changeEvent(QEvent *event) override;
 	bool eventFilter(QObject *watched, QEvent *event) override;
+	void resizeEvent(QResizeEvent *event) override;
 
 private:
 	QString text(const char *key) const;
@@ -110,6 +112,7 @@ private:
 	void buildZones();
 	void buildRails();
 	void buildCard();
+	void buildCardActions();
 	void buildContext();
 	void connectInputs();
 	void watchKeyFocus();
@@ -120,12 +123,14 @@ private:
 	void updateNarrow(int viewportWidth);
 	void updateGaps();
 	void refresh(bool animate);
-	void showStatus(bool animate);
+	void showStatus();
 	void showMain();
 	void showRails(bool animate);
 	void showStop();
 	void showCard();
+	void showSummaryCard();
 	void showErrorCard();
+	void updateCardRows();
 	void showContext();
 	void announce();
 	void copyErrorDetails();
@@ -142,7 +147,6 @@ private:
 	bool restylePending = false;
 	bool viewShown = false; /* a first view was shown: later changes may animate */
 	bool reduceMotion = false;
-	enum tsw_banner shownBanner = TSW_BANNER_READY;
 
 	QVBoxLayout *zones = nullptr;
 	QSpacerItem *gapMain = nullptr; /* the gaps between the zones, set by state and width */
@@ -166,8 +170,12 @@ private:
 	QLabel *context = nullptr;
 	TswCard *card = nullptr; /* the summary or error card, below C */
 	QBoxLayout *cardLayout = nullptr;
-	QLabel *cardTitle = nullptr;
+	QLabel *cardHeader = nullptr; /* SESSION, or ERROR TSW-E103: the ticket's small caption */
 	TswButton *dismiss = nullptr;
+	QWidget *figureBox = nullptr; /* the summary's big figure: the waiting skipped */
+	QLabel *figure = nullptr;
+	QLabel *figureCaption = nullptr;
+	QLabel *cardTitle = nullptr; /* the file name, or the error's reassurance */
 	QLabel *cardBody = nullptr;
 	QLabel *cardTodo = nullptr;
 	QBoxLayout *cardActions = nullptr; /* side by side, or one under the other when narrow */
@@ -176,5 +184,4 @@ private:
 	QWidget *linkRow = nullptr;
 	TswLink *copyDetails = nullptr;
 	TswLink *learnMore = nullptr;
-	QLabel *codePill = nullptr;
 };

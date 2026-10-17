@@ -17,12 +17,16 @@
 #    the theme and a picture of OBS's own dock into
 #    build_x86_64/obs-themes/<theme>/ once OBS has loaded; then OBS is
 #    closed. Nothing is recorded.
+#    The System theme takes its colors from the desktop, so it is written
+#    down twice: with this desktop's colors, and with a light palette
+#    (System-light-palette).
 # 2. test-dock dresses the dock in each theme and draws every state, in
-#    English and Spanish, 300 and 220 px wide, into
+#    English and Spanish, 300, 260 and 220 px wide, into
 #    build_x86_64/ui-screenshots/<theme>/, plus one contact sheet per theme
-#    and language in build_x86_64/ui-screenshots/contact-sheets/.
+#    and language, and one of hover, pressed, focus, disabled and the Stop
+#    hold per theme, in build_x86_64/ui-screenshots/contact-sheets/.
 #
-# 3. With --matrix, Default, Light and System are written down again at Font
+# 3. With --matrix, Default, Light and Classic are written down again at Font
 #    Size 8 with Classic density, 10 with Normal and 12 with Comfortable
 #    (Settings > Appearance), into build_x86_64/obs-themes-matrix/, and drawn
 #    into build_x86_64/ui-screenshots-matrix/.
@@ -58,14 +62,23 @@ readonly -a THEMES=(
 readonly -a LANGUAGES=(en-US es-ES)
 # The matrix (docs/design/visual-design.md, 3.13): themes, and Font Size with
 # OBS's density id (-2 Classic, -3 Compact, -4 Normal, -5 Comfortable).
+# Not System: OBS's Font Size and Density do not reach it, so its matrix
+# pictures came out identical to the plain ones. Classic instead: its own
+# corners, paddings and scroll-area inset.
 readonly -a MATRIX_THEMES=(
   com.obsproject.Yami.Original
   com.obsproject.Yami.Light
-  com.obsproject.System
+  com.obsproject.Yami.Classic
 )
 readonly -a MATRIX_SIZES=('8 -2 classic' '10 -4 normal' '12 -5 comfortable')
 # Half seconds to wait for the probe: OBS usually loads in 2 to 10 s.
 readonly WAIT_STEPS=120
+# The desktop's colors for the System theme: this desktop's (KDE), and a
+# light palette for the second System run. Without KDE's file nothing is
+# copied, and Qt's own palette, which is light, is used.
+readonly DESKTOP_COLORS="${XDG_CONFIG_HOME:-${HOME}/.config}/kdeglobals"
+readonly LIGHT_COLORS='/usr/share/color-schemes/BreezeLight.colors'
+readonly SYSTEM_LIGHT='System-light-palette'
 
 # Prints a message to stderr.
 err() {
@@ -100,14 +113,16 @@ wait_for_dump() {
 # of OBS's own dock are per language.
 # Arguments:
 #   Theme id, such as com.obsproject.Yami.Light; language, such as es-ES;
-#   the dump folder; optionally a Font Size and a density id.
+#   the dump folder; a Font Size and a density id, or two empty strings for
+#   OBS's defaults; the desktop colors to copy (a kdeglobals file), or an
+#   empty string for none.
 # Outputs:
 #   One line saying where the dump is, or why it failed.
 # Returns:
 #   0 when the dump is complete and OBS used the theme asked for.
 #######################################
 dump_theme() {
-  local theme="$1" language="$2" out="$3" font="${4:-}" density="${5:-}"
+  local theme="$1" language="$2" out="$3" font="$4" density="$5" colors="$6"
   local sandbox
   sandbox="$(mktemp -d "${TMPDIR:-/tmp}/timelapse-switch-theme.XXXXXX")"
   make_sandbox "${sandbox}" '' 1080 obs_x264 0
@@ -119,9 +134,8 @@ dump_theme() {
   fi
   set_language "${sandbox}" "${language}"
   install_module "${sandbox}" "${PROBE}"
-  local desktop="${XDG_CONFIG_HOME:-${HOME}/.config}/kdeglobals"
-  if [[ -f "${desktop}" ]]; then
-    cp "${desktop}" "${sandbox}/config/"
+  if [[ -n "${colors}" && -f "${colors}" ]]; then
+    cp "${colors}" "${sandbox}/config/kdeglobals"
   fi
   mkdir -p "${out}"
   rm -f "${out}/theme.json"
@@ -159,8 +173,15 @@ dump_all() {
     out="${PWD}/${DUMPS}/${theme#com.obsproject.}"
     rm -rf "${out}"
     for language in "${LANGUAGES[@]}"; do
-      dump_theme "${theme}" "${language}" "${out}" || status=1
+      dump_theme "${theme}" "${language}" "${out}" '' '' "${DESKTOP_COLORS}" \
+        || status=1
     done
+  done
+  out="${PWD}/${DUMPS}/${SYSTEM_LIGHT}"
+  rm -rf "${out}"
+  for language in "${LANGUAGES[@]}"; do
+    dump_theme com.obsproject.System "${language}" "${out}" '' '' \
+      "${LIGHT_COLORS}" || status=1
   done
   return "${status}"
 }
@@ -179,7 +200,7 @@ dump_matrix() {
       rm -rf "${out}"
       for language in "${LANGUAGES[@]}"; do
         dump_theme "${theme}" "${language}" "${out}" "${font}" "${density}" \
-          || status=1
+          "${DESKTOP_COLORS}" || status=1
       done
     done
   done
