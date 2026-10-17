@@ -27,6 +27,7 @@
 #include "gpu-road.h"
 #include "plugin-support.h"
 #include "recorder-internal.h"
+#include "road-check.h"
 
 enum {
 	VIDEO_CACHE_FRAMES = 16, /* frames our video feed holds while the encoder catches up */
@@ -224,10 +225,14 @@ static void stop_capture(struct tsw_recorder *recorder)
 	const bool was_capturing = os_atomic_set_bool(&recorder->capturing, false);
 	if (was_capturing && recorder->gpu_road == NULL)
 		obs_remove_raw_video_callback(tsw_recorder_receive_frame, recorder);
+	if (was_capturing && recorder->road_check != NULL)
+		obs_remove_raw_video_callback(tsw_road_check_receive_b, recorder->road_check);
 	if (was_capturing)
 		obs_remove_raw_audio_callback(recorder->mix, tsw_recorder_receive_audio, recorder);
 	tsw_gpu_road_destroy(recorder->gpu_road); /* also when it was prepared but never began */
 	recorder->gpu_road = NULL;
+	tsw_road_check_finish(recorder->road_check, was_capturing); /* neither road hands over frames now */
+	recorder->road_check = NULL;
 }
 
 /* Releases everything start created, in reverse order. Safe on a half-started recorder. */
@@ -407,7 +412,8 @@ static enum tsw_result reset_timeline(struct tsw_recorder *recorder, const struc
 	return TSW_OK;
 }
 
-/* Road C (ADR-012) is experimental: used only when TIMELAPSE_SWITCH_ROAD=C, until its checks pass. */
+/* Road C (ADR-012) is experimental: used only when TIMELAPSE_SWITCH_ROAD=C, until its checks pass;
+ * TIMELAPSE_SWITCH_ROAD=verify records on road C and checks it against road B frame by frame. */
 static const bool ROAD_C_BY_DEFAULT = false;
 
 /* How frames will reach us: road C when it is wanted and supported, road B otherwise. Prepared before the
@@ -415,14 +421,25 @@ static const bool ROAD_C_BY_DEFAULT = false;
 static void choose_road(struct tsw_recorder *recorder, const struct obs_video_info *ovi)
 {
 	const char *asked = getenv("TIMELAPSE_SWITCH_ROAD");
-	const bool wanted = asked != NULL ? strcmp(asked, "C") == 0 : ROAD_C_BY_DEFAULT;
+	const bool verify = asked != NULL && strcmp(asked, "verify") == 0;
+	const bool wanted = asked != NULL ? (strcmp(asked, "C") == 0 || verify) : ROAD_C_BY_DEFAULT;
 	const char *reason = wanted ? tsw_gpu_road_unsupported(ovi) : "road C not enabled (experimental, ADR-012)";
+	if (reason == NULL && verify)
+		recorder->road_check = tsw_road_check_create(ovi, tsw_recorder_receive_frame, recorder);
 	if (reason == NULL) {
-		recorder->gpu_road = tsw_gpu_road_create(ovi, tsw_recorder_receive_frame, recorder);
+		if (recorder->road_check != NULL)
+			recorder->gpu_road = tsw_gpu_road_create(ovi, tsw_road_check_receive_c, recorder->road_check);
+		else
+			recorder->gpu_road = tsw_gpu_road_create(ovi, tsw_recorder_receive_frame, recorder);
 		reason = "road C could not be prepared";
 	}
+	if (recorder->gpu_road == NULL) {
+		tsw_road_check_finish(recorder->road_check, false);
+		recorder->road_check = NULL;
+	}
 	if (recorder->gpu_road != NULL)
-		tsw_log(LOG_INFO, "frames | road C: the plugin copies them, off OBS's graphics thread (ADR-012)");
+		tsw_log(LOG_INFO, "frames | road C: the plugin copies them, off OBS's graphics thread (ADR-012)%s",
+			recorder->road_check != NULL ? ", checked against road B frame by frame" : "");
 	else
 		tsw_log(LOG_INFO, "frames | road B: OBS copies them | reason=\"%s\"", reason);
 }
@@ -473,6 +490,8 @@ enum tsw_result tsw_recorder_start(struct tsw_recorder *recorder, uint32_t speed
 		tsw_gpu_road_begin(recorder->gpu_road);
 	else
 		obs_add_raw_video_callback(&frames, tsw_recorder_receive_frame, recorder);
+	if (recorder->road_check != NULL)
+		obs_add_raw_video_callback(&frames, tsw_road_check_receive_b, recorder->road_check);
 	obs_add_raw_audio_callback(recorder->mix, NULL, tsw_recorder_receive_audio, recorder);
 	os_atomic_set_bool(&recorder->capturing, true);
 	tsw_log(LOG_INFO, "recording started, speed x%u | file=\"%s\" | %ux%u at %u/%u fps", speed, recorder->path,

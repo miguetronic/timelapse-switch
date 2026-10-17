@@ -64,5 +64,11 @@ struct tsw_gpu_road {
 	bool registered;    /* the rendered callback is registered: UI thread only */
 };
 
+/* How many planes to walk: the format's, never more than the arrays hold. */
+static inline size_t tsw_gpu_road_planes(const struct tsw_gpu_road *road)
+{
+	return road->planes < TSW_GPU_PLANES ? road->planes : TSW_GPU_PLANES;
+}
+
 /* The rendered callback (gpu-road-rt.c): OBS calls it on its graphics thread after each canvas is rendered. */
 void tsw_gpu_road_rendered(void *param);

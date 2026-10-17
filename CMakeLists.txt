@@ -46,6 +46,8 @@ target_sources(
     src/plugin-main.c
     src/recorder.c
     src/recorder-rt.c
+    src/road-check.c
+    src/road-check-rt.c
     src/ui/dock-obs.cpp
 )
 
@@ -88,6 +90,7 @@ add_library(
   src/core/fingerprint.c
   src/core/gate.c
   src/core/health.c
+  src/core/road-compare.c
   src/core/session.c
   src/core/stage-ring.c
   src/core/timeline.c

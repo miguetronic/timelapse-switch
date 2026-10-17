@@ -10,7 +10,11 @@
 #   tests/integration/run.sh [--resolution 1080|2160]
 #                            [--scenario standard|long|real|pause|pauses]
 #                            [--encoder <OBS encoder id>] [--keep]
+#                            [--road B|C|verify]
 #
+# --road chooses how frames reach the plugin (ADR-012): B, OBS copies them
+# (the default); C, the plugin copies them; verify, road C checked against
+# road B frame by frame.
 # Linux only. It starts a separate OBS with its own temporary configuration
 # (sandbox.sh), so the user's OBS settings, scenes and plugins are never
 # touched.
@@ -23,9 +27,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/sandbox.sh"
 
 main() {
   local height=1080 scenario='standard' encoder='hevc_ffmpeg_vaapi_tex'
-  local keep=0
+  local keep=0 road='B'
   while (($# > 0)); do
     case "$1" in
+      --road) road="$2" && shift ;;
       --resolution) height="$2" && shift ;;
       --scenario) scenario="$2" && shift ;;
       --encoder) encoder="$2" && shift ;;
@@ -44,6 +49,10 @@ main() {
   local sandbox
   sandbox="$(mktemp -d "${TMPDIR:-/tmp}/timelapse-switch-it.XXXXXX")"
   make_sandbox "${sandbox}" "${media}" "${height}" "${encoder}" 1
+  # OBS passes its environment on to the plugin, which reads the road there.
+  if [[ "${road}" != 'B' ]]; then
+    export TIMELAPSE_SWITCH_ROAD="${road}"
+  fi
   start_obs "${sandbox}" || return 1
   local pid="${OBS_PID}" log="${OBS_LOG}"
   trap 'close_obs '"${pid}" EXIT
@@ -64,7 +73,7 @@ main() {
     recording="$(newest "${sandbox}/recordings" '*tswitch*')"
     echo "recording: ${recording}"
     .venv/bin/python tests/integration/analyze.py --recording "${recording}" \
-      --log "${log}" || status=$?
+      --log "${log}" --road "${road}" || status=$?
   fi
   echo "OBS log: ${log}"
   if ((keep == 0 && status == 0)); then

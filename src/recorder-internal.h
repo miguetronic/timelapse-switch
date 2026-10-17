@@ -53,7 +53,8 @@ struct tsw_recorder {
 	obs_encoder_t *video_encoder;
 	obs_encoder_t *audio_encoder;
 	obs_output_t *output;
-	struct tsw_gpu_road *gpu_road; /* road C (ADR-012), or NULL: road B */
+	struct tsw_gpu_road *gpu_road;     /* road C (ADR-012), or NULL: road B */
+	struct tsw_road_check *road_check; /* road C checked against road B (verification mode), or NULL */
 	char *path;
 	size_t mix; /* OBS audio track that is recorded */
 
@@ -91,6 +92,7 @@ struct tsw_recorder {
 };
 
 struct tsw_gpu_road;
+struct tsw_road_check;
 
 /* The real-time callbacks (recorder-rt.c); recorder.c hands them to OBS, or the frames one to road C. */
 void tsw_recorder_receive_frame(void *param, struct video_data *frame);

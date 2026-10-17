@@ -30,7 +30,7 @@ static void reclaim_slots(struct tsw_gpu_road *road)
 	while (tsw_stage_ring_reclaim(&road->ring, &slot, &mapped)) {
 		if (!mapped)
 			continue;
-		for (size_t plane = 0; plane < road->planes; plane++)
+		for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++)
 			gs_stagesurface_unmap(road->surface[slot][plane]);
 	}
 }
@@ -102,7 +102,7 @@ static void stage(const struct tsw_gpu_road *road, gs_texture_t *frame, size_t s
 	gs_load_indexbuffer(NULL);
 
 	convert(road, frame);
-	for (size_t plane = 0; plane < road->planes; plane++)
+	for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++)
 		gs_stage_texture(road->surface[slot][plane], road->texture[plane]);
 
 	gs_blend_state_pop();
@@ -115,10 +115,11 @@ static void stage(const struct tsw_gpu_road *road, gs_texture_t *frame, size_t s
 static void hand_over(struct tsw_gpu_road *road, size_t slot)
 {
 	size_t mapped = 0;
-	while (mapped < road->planes && gs_stagesurface_map(road->surface[slot][mapped], &road->data[slot][mapped],
-							    &road->linesize[slot][mapped]))
+	while (mapped < tsw_gpu_road_planes(road) &&
+	       gs_stagesurface_map(road->surface[slot][mapped], &road->data[slot][mapped],
+				   &road->linesize[slot][mapped]))
 		mapped++;
-	const bool complete = mapped == road->planes;
+	const bool complete = mapped == tsw_gpu_road_planes(road);
 	while (!complete && mapped > 0) {
 		mapped--;
 		gs_stagesurface_unmap(road->surface[slot][mapped]);

@@ -109,7 +109,7 @@ static bool find_effect(struct tsw_gpu_road *road)
 	bool found = road->image != NULL && road->color_vec0 != NULL && road->color_vec1 != NULL &&
 		     road->color_vec2 != NULL && road->width_i_param != NULL && road->height_i_param != NULL &&
 		     road->sdr_white_nits_over_maximum != NULL && road->hdr_lw != NULL;
-	for (size_t plane = 0; plane < road->planes; plane++)
+	for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++)
 		found = found && gs_effect_get_technique(road->effect, road->plane[plane].technique) != NULL;
 	return found;
 }
@@ -118,7 +118,7 @@ static bool find_effect(struct tsw_gpu_road *road)
 static bool create_surfaces(struct tsw_gpu_road *road)
 {
 	bool created = true;
-	for (size_t plane = 0; plane < road->planes; plane++) {
+	for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++) {
 		const struct tsw_gpu_plane *p = &road->plane[plane];
 		road->texture[plane] = gs_texture_create(p->width, p->height, p->format, 1, NULL, GS_RENDER_TARGET);
 		created = created && road->texture[plane] != NULL;
@@ -139,7 +139,7 @@ static void copy_slot(const struct tsw_gpu_road *road, size_t slot)
 		return;
 	struct video_data frame;
 	memset(&frame, 0, sizeof(frame));
-	for (size_t plane = 0; plane < road->planes; plane++) {
+	for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++) {
 		frame.data[plane] = road->data[slot][plane];
 		frame.linesize[plane] = road->linesize[slot][plane];
 	}
@@ -241,13 +241,13 @@ void tsw_gpu_road_destroy(struct tsw_gpu_road *road)
 	obs_enter_graphics();
 	for (size_t slot = 0; slot < TSW_STAGE_SLOTS; slot++) {
 		const bool mapped = tsw_stage_ring_still_mapped(&road->ring, slot);
-		for (size_t plane = 0; plane < road->planes; plane++) {
+		for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++) {
 			if (mapped)
 				gs_stagesurface_unmap(road->surface[slot][plane]);
 			gs_stagesurface_destroy(road->surface[slot][plane]);
 		}
 	}
-	for (size_t plane = 0; plane < road->planes; plane++)
+	for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++)
 		gs_texture_destroy(road->texture[plane]);
 	obs_leave_graphics(); /* the effect is OBS's own (cached by OBS): not destroyed here */
 	bfree(road);
