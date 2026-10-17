@@ -192,7 +192,7 @@ tsw_status status(enum tsw_phase phase, uint32_t speed, uint32_t outcome, uint32
 	return s;
 }
 
-/* Recording in timelapse with one health issue (UX-134). */
+/* Recording with one health issue (UX-134). */
 tsw_status unwell(uint32_t speed, uint32_t issue)
 {
 	tsw_status s = status(TSW_PHASE_RECORDING, speed, 0, 0);
@@ -200,6 +200,8 @@ tsw_status unwell(uint32_t speed, uint32_t issue)
 		s.disk_free_bytes = 330 * MIB; /* 8 minutes at 38 MB per minute */
 	else if (issue == TSW_HEALTH_LOST_FRAMES)
 		s.frames_lost = 37;
+	else if (issue == TSW_HEALTH_BOTH_RECORDING)
+		s.obs_recording_active = true;
 	else
 		s.feed_waiting = 12;
 	return s;
@@ -298,7 +300,8 @@ void checkZones(const TswDock &dock, const Case &c, const QString &label)
 	const auto *context = dock.findChild<QWidget *>("tswContext")->findChild<QLabel *>();
 	const bool unwell =
 		c.status.phase != TSW_PHASE_SAVING &&
-		(c.status.frames_lost > 0 || c.status.feed_waiting * 2 >= std::max(1u, c.status.feed_size) ||
+		(c.status.frames_lost > 0 || c.status.obs_recording_active ||
+		 c.status.feed_waiting * 2 >= std::max(1u, c.status.feed_size) ||
 		 (c.status.disk_free_bytes > 0 && c.status.disk_free_bytes < 600 * c.status.bytes_per_second));
 	static const QRegularExpression code("TSW-(&#8288;)?E\\d{3}"); /* the code, kept whole by a word joiner */
 	if (recording && unwell != context->text().contains(code))
@@ -594,6 +597,15 @@ void checkMenu(const TswDock &dock, const QString &label)
 		fail(label + ": the menu holds " + entries.join(", ") + ", not Help and About");
 	if (button->width() < 24 || button->height() < 24)
 		fail(label + ": the menu button is smaller than 24 px (WCAG 2.5.8)");
+	/* It paints its dots: a button with no glyph is there for a screen reader but not for the eye. */
+	const QImage picture = const_cast<QToolButton *>(button)->grab().toImage();
+	int painted = 0;
+	for (int y = 0; y < picture.height(); y++) {
+		for (int x = 0; x < picture.width(); x++)
+			painted += picture.pixelColor(x, y) != picture.pixelColor(0, 0) ? 1 : 0;
+	}
+	if (painted == 0)
+		fail(label + ": the menu button paints nothing");
 }
 
 void checkLayout(const TswDock &dock, const QWidget &viewport, const Case &c, const QString &label)
@@ -630,6 +642,7 @@ std::vector<Case> allCases()
 		{"details", status(TSW_PHASE_RECORDING, 4, 0, 0), false, -1, 0, true},
 		{"details-paused", pausedAt(4), false, -1, 0, true},
 		{"health-disk", unwell(4, TSW_HEALTH_DISK_LOW), false},
+		{"health-both", unwell(4, TSW_HEALTH_BOTH_RECORDING), false},
 		{"health-frames", unwell(1, TSW_HEALTH_LOST_FRAMES), false},
 		{"health-encoder", unwell(4, TSW_HEALTH_ENCODER_BEHIND), false},
 	};

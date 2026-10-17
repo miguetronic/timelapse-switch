@@ -9,7 +9,7 @@ The dock drawn without OBS, in every state, so a person can look at it and a pro
 | Look | Qt's own Fusion look | exactly as OBS draws the dock, in each of its 7 themes |
 | Pictures | `build_x86_64/ui-screenshots/*.png` | `build_x86_64/ui-screenshots/<theme>/` and `.../contact-sheets/` |
 
-Both draw the same 16 cases, in English and Spanish, 300, 260 and 220 px wide: 11 states (idle, idle starting in timelapse, real time, timelapse, paused from real time, paused from timelapse, paused after choosing timelapse x16 with a speed key, saving, summary with its speed map, two errors) and 5 monitoring cases (`docs/design/ux-spec.md`, 3.17: the Details open while recording and while paused, and each health issue: disk low, frames lost, encoder behind). Both also open the About dialog. They run the same checks (`docs/design/visual-design.md`, 3.13, and the top of `test-dock.cpp`):
+Both draw the same 17 cases, in English and Spanish, 300, 260 and 220 px wide: 11 states (idle, idle starting in timelapse, real time, timelapse, paused from real time, paused from timelapse, paused after choosing timelapse x16 with a speed key, saving, summary with its speed map, two errors) and 6 monitoring cases (`docs/design/ux-spec.md`, 3.17: the Details open while recording and while paused, and each health issue: disk low, both recordings running, frames lost, encoder behind). Both also open the About dialog. They run the same checks (`docs/design/visual-design.md`, 3.13, and the top of `test-dock.cpp`):
 
 | Check | Fails when |
 |---|---|
