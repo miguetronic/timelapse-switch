@@ -127,6 +127,8 @@ void TswButton::setLook(const TswButtonLook &paint)
 
 void TswButton::setShape(Shape kind)
 {
+	if (shape == kind)
+		return; /* zone E sets it on every refresh */
 	shape = kind;
 	update();
 }
@@ -190,6 +192,25 @@ int TswButton::labelLines(int width) const
 {
 	const int gap = glyphSize() > 0 && !label.isEmpty() ? theme->s3 : 0;
 	return lineCount(label, labelWidth(width, sidePadding(), glyphSize(), gap));
+}
+
+int TswButton::mostLines(int width) const
+{
+	const int gap = glyphSize() > 0 ? theme->s3 : 0;
+	const int textWidth = labelWidth(width, sidePadding(), glyphSize(), gap);
+	int lines = lineCount(label, textWidth);
+	for (const QString &text : reserve)
+		lines = std::max(lines, lineCount(text, textWidth));
+	return lines;
+}
+
+int TswButton::oneLineWidth() const
+{
+	double widest = tswTextWidth(labelFont, label);
+	for (const QString &text : reserve)
+		widest = std::max(widest, tswTextWidth(labelFont, text));
+	const int glyphWidth = glyphSize() > 0 ? glyphSize() + theme->s3 : 0;
+	return static_cast<int>(std::ceil(widest)) + 1 + glyphWidth + 2 * sidePadding();
 }
 
 bool TswButton::hasHeightForWidth() const

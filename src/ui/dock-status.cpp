@@ -21,7 +21,8 @@
  *
  * Each state has its own shape, so it reads in grayscale and from across the room (UX-003): idle
  * a soft filled card, real time a hollow card with a 2 px outline, timelapse a tinted card with a
- * solid band and chevrons, saving a dashed outline, error a dashed danger frame.
+ * solid band and chevrons, paused a hollow card held between two thick side bars with a solid
+ * pause sign at the end of the tally line, saving a dashed outline, error a dashed danger frame.
  *
  * Its height depends only on the width, the language and the theme, never on the state, so the
  * main button below it never moves (UX-002): every row is as tall as the tallest thing it may
@@ -51,6 +52,7 @@ const int MAX_MARKS = 512;               /* tape marks: more than any dock is wi
 const double FINAL_BAR = 3.0;            /* px: the accent bar beside FINAL VIDEO in timelapse */
 const double BUSY_LINE = 2.0;            /* px: saving draws one still accent line on the tape */
 const double CHEVRON_INSET = 5.0 / 16.0; /* the chevron glyph starts this far into its box (3.8) */
+const double PAUSE_BAR = 0.3;            /* x L: the paused card's two side bars, the pause sign's bars */
 
 /* The card's own fill and frame in one state (4.2, status card table). */
 struct CardPaint {
@@ -67,12 +69,13 @@ CardPaint cardPaint(const TswTheme &t, enum tsw_banner banner)
 		return {t.panel, t.frame, 2.0, false};
 	case TSW_BANNER_TIMELAPSE: /* filled means now */
 		return {t.accentTint, t.accent, 2.0, false};
+	case TSW_BANNER_PAUSED: /* hollow and thin: its two side bars, painted on top, are its shape */
+		return {t.panel, t.frame, 1.0, false};
 	case TSW_BANNER_BUSY: /* working: a dashed outline, so it never looks finished */
 		return {t.surface, t.shape(t.edge, t.surface), 1.0, true};
 	case TSW_BANNER_ERROR:
 		return {t.dangerTint, t.danger, 2.0, true};
 	case TSW_BANNER_READY:
-	case TSW_BANNER_PAUSED:
 	case TSW_BANNER_SAVED:
 		break;
 	}
@@ -96,6 +99,9 @@ PillPaint pillPaint(const TswTheme &t, enum tsw_banner banner, const QColor &und
 	case TSW_BANNER_TIMELAPSE: /* the tally: a red dot on a soft red pill, the same in both recording states */
 		return {t.dangerTint, QColor(), TswGlyph::Record, t.shape(t.danger, t.dangerTint),
 			t.ink(t.text, t.dangerTint)};
+	case TSW_BANNER_PAUSED: /* the REC pill's place and shape, with two bars and its own word: no dot */
+		return {t.warningTint, QColor(), TswGlyph::Pause, t.shape(t.warning, t.warningTint),
+			t.ink(t.text, t.warningTint)};
 	case TSW_BANNER_BUSY:
 		return {QColor(), t.shape(t.muted, under), TswGlyph::Busy, quiet, quiet};
 	case TSW_BANNER_SAVED:
@@ -103,7 +109,6 @@ PillPaint pillPaint(const TswTheme &t, enum tsw_banner banner, const QColor &und
 	case TSW_BANNER_ERROR:
 		return {t.surface, QColor(), TswGlyph::Error, t.shape(t.danger, t.surface), t.text};
 	case TSW_BANNER_READY:
-	case TSW_BANNER_PAUSED:
 		break;
 	}
 	return {QColor(), t.shape(t.muted, under), TswGlyph::None, quiet, quiet};
@@ -378,8 +383,8 @@ bool TswStatusCard::clipped() const
 	const Layout lay = measure(width());
 	if (lay.clipped)
 		return true;
-	/* What shows now must fit too: the tally pill, and the badge beside it when narrow. */
-	const bool badge = lay.badgeOnTally && !content.speed.isEmpty();
+	/* What shows now must fit too: the tally pill, and a badge beside it. */
+	const bool badge = hasBadge();
 	return pillWidth(lay) + (badge ? theme->s3 + lay.badgeWidth : 0.0) > lay.inner;
 }
 
@@ -392,6 +397,11 @@ double TswStatusCard::smallestPoints() const
 QString TswStatusCard::statusLine() const
 {
 	return (content.stretchLabel + " " + content.stretchValues).trimmed();
+}
+
+bool TswStatusCard::hasBadge() const
+{
+	return content.banner == TSW_BANNER_PAUSED || (narrow && !content.speed.isEmpty());
 }
 
 /* The tally pill: padding, glyph, gap, word, padding. */
@@ -431,6 +441,20 @@ void TswStatusCard::paintFrame(QPainter &painter, const Layout &lay) const
 	const QPen pen = now.dashed ? dashedPen(now.frame, now.width, 2 * DASH, DASH_GAP)
 				    : tswBorder(now.frame, now.width);
 	tswPaintRounded(painter, box, radius, QColor(), pen);
+	if (content.banner == TSW_BANNER_PAUSED) {
+		/* The card held between two thick bars: a pause sign as big as the card, read from across the
+		 * room without color, never confused with an outline (UX-129). They follow the corners. */
+		const double bar =
+			std::min(std::round(PAUSE_BAR * theme->L), std::floor(lay.pad / 2.0)); /* air beside */
+		painter.save();
+		QPainterPath card;
+		card.addRoundedRect(box, radius, radius);
+		painter.setClipPath(card);
+		const QColor color = theme->shape(theme->warning, theme->panel);
+		painter.fillRect(QRectF(0, 0, bar, box.height()), color);
+		painter.fillRect(QRectF(box.width() - bar, 0, bar, box.height()), color);
+		painter.restore();
+	}
 }
 
 void TswStatusCard::paintBadge(QPainter &painter, const QRectF &box, const Layout &lay) const
@@ -443,6 +467,18 @@ void TswStatusCard::paintBadge(QPainter &painter, const QRectF &box, const Layou
 	painter.drawText(QPointF(box.center().x() - width / 2.0,
 				 tswCapBaseline(lay.badgeFont, box.top(), box.height())),
 			 content.speed);
+}
+
+/* Paused: a solid pause sign at the end of the tally line, as big as the speed badge, the loudest
+ * thing in the card, so the pause reads from across the room by its shape (UX-129). It is a tally
+ * ("am I recording?"), so it never takes the hero's room. */
+void TswStatusCard::paintPauseBadge(QPainter &painter, const QRectF &box) const
+{
+	tswPaintRounded(painter, box, box.height() / 2.0, theme->shape(theme->warning, theme->panel), QPen(Qt::NoPen));
+	const double glyph = std::round(box.height() * PILL_GLYPH);
+	tswPaintGlyph(painter, TswGlyph::Pause,
+		      QRectF(box.center().x() - glyph / 2.0, box.center().y() - glyph / 2.0, glyph, glyph),
+		      theme->onWarning);
 }
 
 void TswStatusCard::paintTally(QPainter &painter, const Layout &lay) const
@@ -459,11 +495,15 @@ void TswStatusCard::paintTally(QPainter &painter, const Layout &lay) const
 	painter.setPen(pill.textColor);
 	painter.drawText(QPointF(glyphBox.right() + gap, tswCapBaseline(lay.tallyFont, box.top(), box.height())),
 			 content.tally);
-	if (lay.badgeOnTally && !content.speed.isEmpty()) {
-		const double badgeTop = lay.tallyTop + (lay.tallyHeight - lay.badgeHeight) / 2.0;
-		paintBadge(painter,
-			   QRectF(lay.pad + lay.inner - lay.badgeWidth, badgeTop, lay.badgeWidth, lay.badgeHeight),
-			   lay);
+	if (hasBadge()) {
+		/* Centered on the tally line; when wide it overhangs the gaps above and below the line (the pad
+		 * and s3 are both larger than the overhang), so no state's card grows for it. */
+		const double badgeTop = std::round(lay.tallyTop + (lay.tallyHeight - lay.badgeHeight) / 2.0);
+		const QRectF badge(lay.pad + lay.inner - lay.badgeWidth, badgeTop, lay.badgeWidth, lay.badgeHeight);
+		if (content.banner == TSW_BANNER_PAUSED)
+			paintPauseBadge(painter, badge);
+		else
+			paintBadge(painter, badge, lay);
 	}
 }
 
@@ -577,8 +617,8 @@ void TswStatusCard::paintReadout(QPainter &painter, const Layout &lay) const
 /*
  * The tape band (from the Transport direction): how fast the tape runs, shown without a word.
  * Timelapse: chevrons, packed tighter the faster it goes. Real time: sparse play marks on a line.
- * Saving: one still accent line. Otherwise an empty tape: a hairline (the summary's speed map will
- * live here).
+ * Paused: the same sparse marks, as pause signs. Saving: one still accent line. Otherwise an empty
+ * tape: a hairline (the summary's speed map will live here).
  */
 void TswStatusCard::paintTape(QPainter &painter, const Layout &lay) const
 {
@@ -591,7 +631,8 @@ void TswStatusCard::paintTape(QPainter &painter, const Layout &lay) const
 		return;
 	}
 	const bool timelapse = content.banner == TSW_BANNER_TIMELAPSE;
-	if (!timelapse && content.banner != TSW_BANNER_REAL_TIME) {
+	const bool paused = content.banner == TSW_BANNER_PAUSED;
+	if (!timelapse && !paused && content.banner != TSW_BANNER_REAL_TIME) {
 		painter.fillRect(QRectF(band.left(), middle - 0.5, band.width(), 1.0),
 				 tswMix(theme->text, under, DIVIDER_INK / 2.0));
 		return;
@@ -604,8 +645,8 @@ void TswStatusCard::paintTape(QPainter &painter, const Layout &lay) const
 	painter.setClipRect(band);
 	for (int i = 0; i < marks; i++) {
 		const double x = left + i * pitch;
-		tswPaintGlyph(painter, timelapse ? TswGlyph::Chevron : TswGlyph::Play,
-			      QRectF(x, band.top(), size, size), color);
+		const TswGlyph mark = paused ? TswGlyph::Pause : TswGlyph::Play;
+		tswPaintGlyph(painter, timelapse ? TswGlyph::Chevron : mark, QRectF(x, band.top(), size, size), color);
 		if (!timelapse && i + 1 < marks) /* the tape between two marks */
 			painter.fillRect(QRectF(x + size + theme->s2, middle - 0.5, pitch - size - 2 * theme->s2, 1.0),
 					 color);

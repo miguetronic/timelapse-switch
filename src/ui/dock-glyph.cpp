@@ -59,6 +59,14 @@ void paintFilled(QPainter &p, TswGlyph glyph)
 		p.fillPath(square, color);
 		break;
 	}
+	case TswGlyph::Pause: {
+		/* Two bars in the stop square's box, a third of it wide each, a third apart. */
+		QPainterPath bars;
+		bars.addRoundedRect(QRectF(3.5, 3, 3, 10), 1, 1);
+		bars.addRoundedRect(QRectF(9.5, 3, 3, 10), 1, 1);
+		p.fillPath(bars, color);
+		break;
+	}
 	case TswGlyph::Busy:
 		p.setPen(Qt::NoPen);
 		p.setBrush(color);

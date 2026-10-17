@@ -10,7 +10,8 @@
  * support (docs/design/visual-design.md, 3.13). It checks:
  *   - every text the dock asks for exists in the locale file, so no raw key ever shows (UX-120);
  *   - the zones keep their order from top to bottom (UX-002), and the main button keeps its y in
- *     every state, Stop in every recording state (fixed positions);
+ *     every state, Pause and Stop theirs in every recording state, paused included (fixed
+ *     positions), side by side in one row;
  *   - nothing is wider than what is visible, even at 220 px (UX-012), and the dock can shrink to
  *     200 px;
  *   - the main button is at least 2.5 lines tall (UX-107), and its words are a verb, never a state;
@@ -19,8 +20,10 @@
  *   - the colors pass the contrast guard, and no label is colored with a status color (UX-111);
  *   - no text is smaller than 8 pt, whatever OBS's Font Size;
  *   - Tab visits the controls in visual order (UX-102);
- *   - Stop and the card appear only when they should, and the card's two pills sit side by side
- *     only when neither label wraps;
+ *   - Pause, Stop and the card appear only when they should, and the card's two pills sit side by
+ *     side only when neither label wraps;
+ *   - Pause and Resume pressed quickly, many times, always show the state the core is in, and
+ *     nothing moves (UX-133);
  *   - Reduce motion stops the one animation, the thumb's slide (UX-045).
  * It also saves a picture of each case, for a person to look at.
  *
@@ -47,6 +50,7 @@
 #include <QScrollBar>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <map>
 #include <set>
@@ -56,6 +60,7 @@
 #include "contact-sheet.hpp"
 #include "core/check.h"
 #include "core/dock-view.h"
+#include "core/session.h"
 #include "obs-theme.hpp"
 #include "ui/dock-theme.hpp"
 #include "ui/dock-widgets.hpp"
@@ -75,8 +80,10 @@ const int MAX_FOCUS_STEPS = 200;   /* more than the dock has widgets: the focus 
 const double HERO_FLOOR = 1.5;     /* x b: the smallest the recording hero may get (4.2) */
 const double SHAPE = 3.0;          /* WCAG contrast for shapes and text */
 const double TEXT = 4.5;
-const double TEXT_FLOOR = 7.99; /* pt: no text smaller than 8 pt (rounding aside), even at Font Size 8 */
-const double HOLD = 0.6;        /* how far the Stop hold fill is drawn in its picture */
+const double TEXT_FLOOR = 7.99;         /* pt: no text smaller than 8 pt (rounding aside), even at Font Size 8 */
+const double HOLD = 0.6;                /* how far the Stop hold fill is drawn in its picture */
+const uint64_t DEBOUNCE_NS = 400000000; /* a second Pause within 400 ms is a double press (UX-133) */
+const int QUICK_PRESSES = 60;           /* Pause and Resume pressed this many times in a row */
 
 int failures = 0;
 std::map<std::string, std::string> texts; /* the locale file being tested */
@@ -123,6 +130,8 @@ struct Case {
 	const char *name;
 	tsw_status status;
 	bool startInTimelapse;
+	int choice = -1;          /* an input made before the picture (a tsw_input), or -1 */
+	uint32_t choiceSpeed = 0; /* its speed */
 };
 
 tsw_status status(enum tsw_phase phase, uint32_t speed, uint32_t outcome, uint32_t error)
@@ -142,6 +151,15 @@ tsw_status status(enum tsw_phase phase, uint32_t speed, uint32_t outcome, uint32
 	return s;
 }
 
+/* Paused for 0:01:12 after recording at speed. */
+tsw_status pausedAt(uint32_t speed)
+{
+	tsw_status s = status(TSW_PHASE_PAUSED, speed, 0, 0);
+	s.section_recorded_ns = 72 * SECOND_NS;
+	s.section_final_ns = 0;
+	return s;
+}
+
 /* A start that failed: nothing recorded, no file. */
 tsw_status startFailed()
 {
@@ -158,6 +176,10 @@ tsw_dock_view viewOf(const Case &c)
 	if (tsw_session_init(&session, 4, 0) != TSW_OK)
 		fail("session init");
 	session.start_in_timelapse = c.startInTimelapse;
+	if (c.status.phase == TSW_PHASE_PAUSED && c.status.speed > 1)
+		session.timelapse_speed = c.status.speed; /* as recording at that speed leaves it */
+	if (c.choice >= 0)
+		(void)tsw_session_input(&session, &c.status, static_cast<tsw_input>(c.choice), c.choiceSpeed, 0);
 	tsw_dock_model model{};
 	tsw_dock_model_init(&model);
 	tsw_dock_view view{};
@@ -184,8 +206,29 @@ void checkZones(const TswDock &dock, const Case &c, const QString &label)
 		bottom = zone->geometry().bottom();
 	}
 	const bool recording = c.status.phase != TSW_PHASE_IDLE;
-	if (dock.findChild<QWidget *>("tswStop")->isVisible() != recording)
+	const auto *pause = dock.findChild<QWidget *>("tswPause");
+	const auto *stop = dock.findChild<QWidget *>("tswStop");
+	if (stop->isVisible() != recording)
 		fail(label + ": Stop shown when it should not be, or the other way round");
+	if (pause->isVisible() != recording)
+		fail(label + ": Pause shown when it should not be, or the other way round");
+	/* Zone E is one row, Pause on the left and Stop on the right, as tall as each other; or, only when
+	 * a word would not fit, Pause above Stop, as wide as each other. Never touching. */
+	const bool row = pause->y() == stop->y() && pause->height() == stop->height() &&
+			 pause->geometry().right() < stop->x() && pause->x() >= 0;
+	const bool stacked = pause->x() == stop->x() && pause->width() == stop->width() &&
+			     pause->geometry().bottom() < stop->y();
+	if (recording && !row && !stacked)
+		fail(label +
+		     QString(": Pause (%1, %2, %3 x %4) and Stop (%5, %6, %7 x %8) are neither a row nor stacked")
+			     .arg(pause->x())
+			     .arg(pause->y())
+			     .arg(pause->width())
+			     .arg(pause->height())
+			     .arg(stop->x())
+			     .arg(stop->y())
+			     .arg(stop->width())
+			     .arg(stop->height()));
 	if (dock.findChild<QWidget *>("tswCard")->isVisible() != (c.status.outcome != 0))
 		fail(label + ": card shown when it should not be, or the other way round");
 }
@@ -217,6 +260,15 @@ void checkHeights(const TswDock &dock, const QString &label)
 	/* The status row is reserved in every state; left empty it looks like a hole (UX-007). */
 	if (status->property("tswStatusLine").toString().isEmpty())
 		fail(label + ": the status line is empty, a hole in the status card");
+	/* A word cannot wrap: every painted button must be at least as wide as its longest word, its
+	 * glyph and its padding, or that word runs past its edge. */
+	for (const TswButton *button : dock.findChildren<TswButton *>()) {
+		if (button->isVisible() && button->width() < button->minimumSizeHint().width())
+			fail(label + QString(": a word is cut in %1 \"%2\" (%3 px wide, its longest word needs %4 px)")
+					     .arg(button->objectName(), button->accessibleName())
+					     .arg(button->width())
+					     .arg(button->minimumSizeHint().width()));
+	}
 	const auto *main = dock.findChild<QWidget *>("tswMain");
 	if (main->height() < dock.theme().L * 5 / 2)
 		fail(label + ": the main button is shorter than 2.5 lines");
@@ -264,6 +316,9 @@ void checkContrast(const TswDock &dock, const QString &label)
 		{"the speed badge on the timelapse band", t.badgeFill, t.accentFill, SHAPE},
 		{"the badge's number on the badge", t.badgeText, t.badgeFill, TEXT},
 		{"the chevrons on accentTint", t.shape(t.accent, t.accentTint), t.accentTint, SHAPE},
+		{"the paused frame and bars on the panel", t.shape(t.warning, t.panel), t.panel, SHAPE},
+		{"the pause glyph on warningTint", t.shape(t.warning, t.warningTint), t.warningTint, SHAPE},
+		{"text on warningTint", t.ink(t.text, t.warningTint), t.warningTint, TEXT},
 	};
 	for (const auto &pair : pairs) {
 		const double contrast = tswContrast(pair.color, pair.under);
@@ -317,8 +372,8 @@ void checkCardRows(const TswDock &dock, const QString &label)
 void checkWordsAndFocus(const TswDock &dock, const QString &label)
 {
 	const auto *main = dock.findChild<QAbstractButton *>("tswMain");
-	for (const char *key :
-	     {"State.Hero.RealTime", "State.Hero.Timelapse", "State.Tally.Rec", "State.Tally.Ready"}) {
+	for (const char *key : {"State.Hero.RealTime", "State.Hero.Timelapse", "State.Tally.Rec", "State.Tally.Ready",
+				"State.Tally.Paused"}) {
 		if (main->accessibleName().compare(QString::fromUtf8(lookup(key)), Qt::CaseInsensitive) == 0)
 			fail(label + ": the main button is named like a state: " + main->accessibleName());
 	}
@@ -339,17 +394,20 @@ void checkWordsAndFocus(const TswDock &dock, const QString &label)
 	}
 }
 
-/* Where the main button and Stop are in one state, to compare across states (UX-002). */
+/* Where the main button, Pause and Stop are in one state, to compare across states (UX-002). */
 struct Positions {
 	std::map<std::string, int> main;
+	std::map<std::string, int> pause;
 	std::map<std::string, int> stop;
 };
 
 void notePositions(const TswDock &dock, const Case &c, Positions *positions)
 {
 	positions->main[c.name] = dock.findChild<QWidget *>("tswMain")->y();
-	if (c.status.phase != TSW_PHASE_IDLE)
+	if (c.status.phase != TSW_PHASE_IDLE) {
+		positions->pause[c.name] = dock.findChild<QWidget *>("tswPause")->x();
 		positions->stop[c.name] = dock.findChild<QWidget *>("tswStop")->y();
+	}
 }
 
 void checkPositions(const Positions &positions, const QString &label)
@@ -366,7 +424,8 @@ void checkPositions(const Positions &positions, const QString &label)
 		}
 	};
 	same(positions.main, "the main button");
-	same(positions.stop, "Stop");
+	same(positions.pause, "Pause (its x)");
+	same(positions.stop, "Stop, and Pause beside it,");
 }
 
 void checkLayout(const TswDock &dock, const QWidget &viewport, const Case &c, const QString &label)
@@ -380,7 +439,8 @@ void checkLayout(const TswDock &dock, const QWidget &viewport, const Case &c, co
 	checkWordsAndFocus(dock, label);
 }
 
-/* The eight states every picture set shows, in this order. */
+/* The eleven states every picture set shows, in this order: the paused ones right after the
+ * recording ones they come from, so the two read side by side. */
 std::vector<Case> allCases()
 {
 	return {
@@ -388,11 +448,26 @@ std::vector<Case> allCases()
 		{"idle-timelapse", status(TSW_PHASE_IDLE, 1, 0, 0), true},
 		{"real-time", status(TSW_PHASE_RECORDING, 1, 0, 0), false},
 		{"timelapse", status(TSW_PHASE_RECORDING, 4, 0, 0), false},
+		{"paused", pausedAt(1), false},
+		{"paused-timelapse", pausedAt(4), false},
+		/* Paused in real time, then the x16 key: it will resume in timelapse x16, the longest label. */
+		{"paused-choice", pausedAt(1), false, TSW_INPUT_SPEED_KEY, 16},
 		{"saving", status(TSW_PHASE_SAVING, 1, 0, 0), false},
 		{"summary", status(TSW_PHASE_IDLE, 1, 1, 0), false},
 		{"error-103", status(TSW_PHASE_IDLE, 1, 1, 103), false},
 		{"error-001", startFailed(), false},
 	};
+}
+
+/* The case of that name. */
+Case caseNamed(const char *name)
+{
+	for (const Case &c : allCases()) {
+		if (std::strcmp(c.name, name) == 0)
+			return c;
+	}
+	fail(QString("no case named %1").arg(name));
+	return allCases().front();
 }
 
 /* Lets Qt lay the widgets out; a narrow dock relays itself out once more. */
@@ -444,7 +519,7 @@ void checkResize(const QString &locale)
 void checkThemeHooks()
 {
 	const QColor green(0, 160, 0);
-	QScrollArea *area = showCase(allCases()[3], WIDTHS[0]);
+	QScrollArea *area = showCase(caseNamed("timelapse"), WIDTHS[0]);
 	auto *dock = area->findChild<TswDock *>();
 	dock->setProperty("accentColor", green);
 	settle();
@@ -460,7 +535,7 @@ void checkThemeHooks()
  */
 void checkReduceMotion()
 {
-	const Case realTime = allCases()[2];
+	const Case realTime = caseNamed("real-time");
 	for (const bool reduce : {false, true}) {
 		QScrollArea *area = showCase(realTime, WIDTHS[0]);
 		auto *dock = area->findChild<TswDock *>();
@@ -481,11 +556,80 @@ void checkReduceMotion()
 	}
 }
 
+/* A recorder as the dock sees it: the core session acts on each press at the time given, and the
+ * status follows its commands, as tsw_controller_input does. */
+struct QuickRecorder {
+	tsw_session session{};
+	tsw_dock_model model{};
+	tsw_status status = caseNamed("timelapse").status;
+	uint64_t now = 0;
+
+	tsw_dock_view press(int input, unsigned speed)
+	{
+		const tsw_command command =
+			tsw_session_input(&session, &status, static_cast<tsw_input>(input), speed, now);
+		if (command.kind == TSW_COMMAND_PAUSE) {
+			status.phase = TSW_PHASE_PAUSED;
+			status.section_recorded_ns = 0;
+		} else if (command.kind == TSW_COMMAND_RESUME) {
+			status.phase = TSW_PHASE_RECORDING;
+			status.speed = command.speed;
+		}
+		tsw_dock_view view{};
+		tsw_dock_view_build(&model, &session, &status, &view);
+		return view;
+	}
+};
+
+/*
+ * UX-133: Pause and Resume pressed quickly and many times. Each press the core takes shows at once
+ * (the dock draws the new view right after the click, as dock-obs.cpp does); a second press within
+ * 400 ms changes nothing; Pause, Stop and the main button never move, and no word is left behind.
+ */
+void checkQuickPauses(const QString &locale)
+{
+	QuickRecorder recorder;
+	if (tsw_session_init(&recorder.session, 4, DEBOUNCE_NS) != TSW_OK)
+		fail("session init");
+	tsw_dock_model_init(&recorder.model);
+	QScrollArea *area = showCase(caseNamed("timelapse"), WIDTHS[2]);
+	auto *dock = area->findChild<TswDock *>();
+	QObject::connect(dock, &TswDock::inputRequested, dock, [&recorder, dock](int input, unsigned speed) {
+		dock->showView(recorder.press(input, speed));
+	});
+	auto *pause = dock->findChild<QAbstractButton *>("tswPause");
+	const QWidget *main = dock->findChild<QWidget *>("tswMain");
+	const QPoint where[] = {pause->pos(), dock->findChild<QWidget *>("tswStop")->pos(), main->pos()};
+	for (int i = 0; i < QUICK_PRESSES; i++) {
+		const bool doublePress = i % 4 == 3;
+		recorder.now += doublePress ? DEBOUNCE_NS / 4 : DEBOUNCE_NS + 1;
+		const bool wasPaused = recorder.status.phase == TSW_PHASE_PAUSED;
+		pause->click();
+		settle();
+		const bool paused = recorder.status.phase == TSW_PHASE_PAUSED;
+		const QString label = QString("%1 quick press %2").arg(locale).arg(i + 1);
+		if (paused != (doublePress ? wasPaused : !wasPaused))
+			fail(label + (doublePress ? ": a double press changed the state" : ": the press did nothing"));
+		const QString expected = QString::fromUtf8(lookup(paused ? "A11y.Resume" : "A11y.Pause"));
+		if (pause->accessibleName() != expected)
+			fail(label + ": the button says \"" + pause->accessibleName() + "\", not \"" + expected + "\"");
+		const QString tally = QString::fromUtf8(lookup(paused ? "State.Tally.Paused" : "A11y.Recording"));
+		const QString state = dock->findChild<QWidget *>("tswStatus")->accessibleName();
+		if (!state.startsWith(tally, Qt::CaseInsensitive))
+			fail(label + ": the state block says \"" + state + "\"");
+		const QPoint now[] = {pause->pos(), dock->findChild<QWidget *>("tswStop")->pos(), main->pos()};
+		if (now[0] != where[0] || now[1] != where[1] || now[2] != where[2])
+			fail(label + ": Pause, Stop or the main button moved");
+	}
+	delete area;
+}
+
 void checkLocale(const QString &locale, const QString &pictures)
 {
 	checkResize(locale);
 	checkThemeHooks();
 	checkReduceMotion();
+	checkQuickPauses(locale);
 	const std::vector<Case> cases = allCases();
 	for (const int width : WIDTHS) {
 		Positions positions;
@@ -644,7 +788,7 @@ enum class Act { Hover, Press, Focus, Hold, None };
 
 struct Interaction {
 	const char *label;
-	size_t state;       /* index in allCases() */
+	const char *state;  /* a case of allCases() */
 	const char *widget; /* object name, or nullptr for the state alone */
 	Act act;
 };
@@ -652,21 +796,26 @@ struct Interaction {
 /* Every look a control can take that a still picture of a state never shows; focus also where it
  * meets an outline that means something (the armed thumb, the armed switch). */
 const Interaction INTERACTIONS[] = {
-	{"Record: hover", 0, "tswMain", Act::Hover},
-	{"Record: pressed", 0, "tswMain", Act::Press},
-	{"Record: keyboard focus", 0, "tswMain", Act::Focus},
-	{"start Timelapse: focus", 0, "tswStartTimelapse", Act::Focus},
-	{"armed x4: focus", 0, "tswSpeed4", Act::Focus},
-	{"x8: hover", 0, "tswSpeed8", Act::Hover},
-	{"x8: focus", 0, "tswSpeed8", Act::Focus},
-	{"armed switch: focus", 2, "tswMain", Act::Focus},
-	{"engaged x4: focus", 3, "tswSpeed4", Act::Focus},
-	{"Stop: hover", 3, "tswStop", Act::Hover},
-	{"Stop: held 60 %", 3, "tswStop", Act::Hold},
-	{"saving: disabled", 4, nullptr, Act::None},
-	{"Open folder: focus", 5, "tswOpenFolder", Act::Focus},
-	{"Close: hover", 5, "tswDismiss", Act::Hover},
-	{"Learn more: focus", 6, "tswLearnMore", Act::Focus},
+	{"Record: hover", "idle", "tswMain", Act::Hover},
+	{"Record: pressed", "idle", "tswMain", Act::Press},
+	{"Record: keyboard focus", "idle", "tswMain", Act::Focus},
+	{"start Timelapse: focus", "idle", "tswStartTimelapse", Act::Focus},
+	{"armed x4: focus", "idle", "tswSpeed4", Act::Focus},
+	{"x8: hover", "idle", "tswSpeed8", Act::Hover},
+	{"x8: focus", "idle", "tswSpeed8", Act::Focus},
+	{"armed switch: focus", "real-time", "tswMain", Act::Focus},
+	{"engaged x4: focus", "timelapse", "tswSpeed4", Act::Focus},
+	{"Pause: hover", "timelapse", "tswPause", Act::Hover},
+	{"Pause: focus", "real-time", "tswPause", Act::Focus},
+	{"Stop: hover", "timelapse", "tswStop", Act::Hover},
+	{"Stop: held 60 %", "timelapse", "tswStop", Act::Hold},
+	{"Resume: pressed", "paused", "tswPause", Act::Press},
+	{"resume Timelapse: focus", "paused", "tswStartTimelapse", Act::Focus},
+	{"armed resume: focus", "paused-timelapse", "tswMain", Act::Focus},
+	{"saving: disabled", "saving", nullptr, Act::None},
+	{"Open folder: focus", "summary", "tswOpenFolder", Act::Focus},
+	{"Close: hover", "summary", "tswDismiss", Act::Hover},
+	{"Learn more: focus", "error-103", "tswLearnMore", Act::Focus},
 };
 
 /* Does to widget what a mouse or a keyboard would; returns false if it did not take. */
@@ -698,13 +847,12 @@ bool perform(OBSBasic &window, QWidget *widget, Act act)
 /* One row of the interaction sheet: every interaction, in the loaded language, at one width. */
 QList<Shot> renderInteractions(const ObsTheme &theme, const QString &locale, int width)
 {
-	const std::vector<Case> cases = allCases();
 	QList<Shot> row;
 	for (const Interaction &interaction : INTERACTIONS) {
 		const QString label =
 			QString("%1 %2 %3 px %4").arg(theme.name, locale).arg(width).arg(interaction.label);
 		OBSBasic window;
-		TswDock *dock = dockInObs(window, cases[interaction.state], width);
+		TswDock *dock = dockInObs(window, caseNamed(interaction.state), width);
 		QWidget *widget = interaction.widget != nullptr ? dock->findChild<QWidget *>(interaction.widget)
 								: nullptr;
 		if (interaction.widget != nullptr && (widget == nullptr || !perform(window, widget, interaction.act)))

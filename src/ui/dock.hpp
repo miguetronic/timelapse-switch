@@ -18,7 +18,7 @@
  *   ACTION   (  >  Back to real time            )  C main button
  *   BELOW    SPEED NOW                             D rails (or the summary or error card)
  *            (( x2 |#x4#| x8 | x16 ))
- *            (  []  Stop and save               )  E Stop, one row apart
+ *            (  || Pause  ) (  []  Stop and save )  E Pause (Resume while paused) and Stop
  *   CONTEXT  (i) Audio: silence during timelapse   F context line
  *
  * Everything it paints is mixed from the active OBS theme (dock-theme.hpp), read again whenever
@@ -127,10 +127,14 @@ private:
 	void showMain();
 	void showRails(bool animate);
 	void showStop();
+	void showPause();
+	void arrangeRails(bool startFirst);
+	void updateTabOrder(bool startFirst);
 	void showCard();
 	void showSummaryCard();
 	void showErrorCard();
 	void updateCardRows();
+	void updateStopRow();
 	void showContext();
 	void announce();
 	void copyErrorDetails();
@@ -164,8 +168,10 @@ private:
 	QWidget *speedGroup = nullptr;
 	TswReservedLabel *speedCaption = nullptr;
 	TswRail *speedRail = nullptr;
-	TswButton *stopButton = nullptr; /* zone E */
-	QWidget *contextRow = nullptr;   /* zone F */
+	QBoxLayout *stopRow = nullptr;    /* zone E: Pause and Stop side by side (updateStopRow) */
+	TswButton *pauseButton = nullptr; /* Pause, or Resume while paused, in the same place (UX-128) */
+	TswButton *stopButton = nullptr;
+	QWidget *contextRow = nullptr; /* zone F */
 	TswGlyphIcon *contextIcon = nullptr;
 	QLabel *context = nullptr;
 	TswCard *card = nullptr; /* the summary or error card, below C */

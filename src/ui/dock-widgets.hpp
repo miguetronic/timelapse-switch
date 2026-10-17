@@ -134,6 +134,8 @@ private:
 	void paintTally(QPainter &painter, const Layout &layout) const;
 	void paintHero(QPainter &painter, const Layout &layout) const;
 	void paintBadge(QPainter &painter, const QRectF &box, const Layout &layout) const;
+	void paintPauseBadge(QPainter &painter, const QRectF &box) const;
+	bool hasBadge() const; /* a badge on the tally line: the speed when narrow, or the pause sign */
 	double pillWidth(const Layout &layout) const;
 	void paintReadout(QPainter &painter, const Layout &layout) const;
 	void paintFinalBar(QPainter &painter, const Layout &layout, double left, double top) const;
@@ -175,6 +177,8 @@ public:
 	void setPadding(int pixels);           /* left and right of the content: s4, or s3 in a narrow dock */
 	void setHoldProgress(double progress); /* Stop's hold fill (UX-052), 0 to 1 */
 	int labelLines(int width) const;       /* the lines its label takes in a button this wide */
+	int mostLines(int width) const;        /* the lines the longest of its labels, reserved ones too, takes */
+	int oneLineWidth() const;              /* the width at which every label it may show takes one line */
 	bool hasHeightForWidth() const override;
 	int heightForWidth(int width) const override;
 	QSize sizeHint() const override;

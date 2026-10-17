@@ -67,24 +67,26 @@ struct TswTheme {
 	int corner = 8;
 
 	/* Tokens (3.5). */
-	QColor muted;      /* captions, hints, idle digits */
-	QColor hairline;   /* separators (decorative) */
-	QColor edge;       /* outlines of quiet buttons */
-	QColor surface;    /* cards and tracks */
-	QColor raised;     /* painted button faces: the theme's own in light themes */
-	QColor accent;     /* armed outlines, timelapse frames */
-	QColor accentFill; /* filled timelapse areas, the engaged speed */
-	QColor onAccent;   /* text and glyphs on accentFill */
-	QColor badgeFill;  /* the speed badge on the solid timelapse band: the band's text as a fill */
-	QColor badgeText;  /* its number: the band's color, readable on the badge */
-	QColor accentText; /* accent words on the panel: links */
-	QColor danger;     /* record dot, error frame */
-	QColor success;    /* check glyph */
-	QColor warning;    /* warning glyph */
-	QColor focus;      /* keyboard focus ring: 3:1 against the panel and the theme's buttons */
-	QColor accentTint; /* the timelapse status card */
-	QColor dangerTint; /* REC pill, error card, Stop hold */
-	QColor frame;      /* the 2 px outline of the real-time status card: a shape, 3:1 */
+	QColor muted;       /* captions, hints, idle digits */
+	QColor hairline;    /* separators (decorative) */
+	QColor edge;        /* outlines of quiet buttons */
+	QColor surface;     /* cards and tracks */
+	QColor raised;      /* painted button faces: the theme's own in light themes */
+	QColor accent;      /* armed outlines, timelapse frames */
+	QColor accentFill;  /* filled timelapse areas, the engaged speed */
+	QColor onAccent;    /* text and glyphs on accentFill */
+	QColor badgeFill;   /* the speed badge on the solid timelapse band: the band's text as a fill */
+	QColor badgeText;   /* its number: the band's color, readable on the badge */
+	QColor accentText;  /* accent words on the panel: links */
+	QColor danger;      /* record dot, error frame */
+	QColor success;     /* check glyph */
+	QColor warning;     /* warning glyph */
+	QColor focus;       /* keyboard focus ring: 3:1 against the panel and the theme's buttons */
+	QColor accentTint;  /* the timelapse status card */
+	QColor dangerTint;  /* REC pill, error card, Stop hold */
+	QColor warningTint; /* PAUSED pill */
+	QColor onWarning;   /* the pause badge's bars on a warning fill */
+	QColor frame;       /* the 2 px outline of the real-time status card: a shape, 3:1 */
 
 	/* shape: a glyph, line, frame or marker on under (3:1); ink: a text on under (4.5:1). */
 	QColor shape(const QColor &color, const QColor &under) const;

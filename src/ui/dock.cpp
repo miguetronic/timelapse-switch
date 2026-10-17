@@ -150,9 +150,20 @@ void TswDock::buildZones()
 	mainButton = new TswButton(this, &style);
 	mainButton->setObjectName("tswMain");
 	buildRails();
+	pauseButton = new TswButton(this, &style);
+	pauseButton->setObjectName("tswPause");
 	stopButton = new TswButton(this, &style);
 	stopButton->setObjectName("tswStop");
-	stopButton->setShape(TswButton::Shape::Pill);
+	/* Pause and Stop share zone E, side by side; how wide each is depends only on the width, the
+	 * language and the theme (updateStopRow), so Resume appears exactly where Pause was (UX-128). */
+	stopRow = new QBoxLayout(QBoxLayout::LeftToRight);
+	for (TswButton *button : {pauseButton, stopButton}) {
+		button->setShape(TswButton::Shape::Pill);
+		QSizePolicy policy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+		policy.setHeightForWidth(true);
+		button->setSizePolicy(policy);
+		stopRow->addWidget(button, 1);
+	}
 	buildCard();
 	buildContext();
 
@@ -176,7 +187,7 @@ void TswDock::buildZones()
 	zones->addSpacerItem(gapSpeeds);
 	zones->addWidget(speeds);
 	zones->addSpacerItem(gapStop);
-	zones->addWidget(stopButton);
+	zones->addLayout(stopRow);
 	zones->addSpacerItem(gapContext);
 	zones->addWidget(contextRow);
 	zones->addStretch();
@@ -188,7 +199,6 @@ void TswDock::buildRails()
 	speeds->setObjectName("tswSpeeds");
 	startGroup = new QWidget(speeds);
 	startCaption = new TswReservedLabel(startGroup);
-	startCaption->setText(text("Label.StartIn").toUpper());
 	startRail = new TswRail(startGroup, &style);
 	startRail->setMode(TswRail::Mode::Start);
 	/* Object names let a theme author or the UI test pick one control (UX-015, tests/ui). */
@@ -215,6 +225,12 @@ void TswDock::buildRails()
 	startGroup->layout()->addWidget(startRail);
 	speedGroup->layout()->addWidget(speedCaption);
 	speedGroup->layout()->addWidget(speedRail);
+	/* While recording the start mode is hidden but keeps its room (below the speeds, arrangeRails), so
+	 * zone D is as tall as while paused, when it shows "Resume in": Pause and Stop never move (UX-002,
+	 * UX-128). */
+	QSizePolicy keep = startGroup->sizePolicy();
+	keep.setRetainSizeWhenHidden(true);
+	startGroup->setSizePolicy(keep);
 	speedsLayout = new QVBoxLayout(speeds);
 	speedsLayout->setContentsMargins(0, 0, 0, 0);
 	speedsLayout->addWidget(startGroup);
@@ -324,6 +340,7 @@ void TswDock::buildContext()
 void TswDock::connectInputs()
 {
 	connect(mainButton, &QAbstractButton::clicked, this, [this]() { emit inputRequested(TSW_INPUT_MAIN, 0); });
+	connect(pauseButton, &QAbstractButton::clicked, this, [this]() { emit inputRequested(TSW_INPUT_PAUSE, 0); });
 	connect(stopButton, &QAbstractButton::clicked, this, [this]() { emit inputRequested(TSW_INPUT_STOP, 0); });
 	connect(speedRail->group(), &QButtonGroup::idClicked, this,
 		[this](int speed) { emit inputRequested(TSW_INPUT_SPEED_CHIP, static_cast<unsigned>(speed)); });
@@ -340,20 +357,31 @@ void TswDock::connectInputs()
 		[this]() { QDesktopServices::openUrl(QUrl(QString(ERROR_PAGE).arg(threeDigits(view.error_texts)))); });
 }
 
-/* The keyboard focus ring shows only for keyboard focus (UX-110); Tab follows the eye (UX-102). */
+/* The keyboard focus ring shows only for keyboard focus (UX-110). */
 void TswDock::watchKeyFocus()
 {
-	QList<QWidget *> order{mainButton, dismiss, openFolder, play, copyDetails, learnMore};
-	for (QAbstractButton *segment : startRail->group()->buttons())
-		order << segment;
-	for (QAbstractButton *segment : speedRail->group()->buttons())
-		order << segment;
-	order << stopButton;
-	for (int i = 0; i < order.size(); i++) {
-		order[i]->installEventFilter(this);
-		if (i > 0)
-			setTabOrder(order[i - 1], order[i]);
+	QList<QWidget *> watched{mainButton,  dismiss,   openFolder,  play,
+				 copyDetails, learnMore, pauseButton, stopButton};
+	for (TswRail *rail : {startRail, speedRail}) {
+		for (QAbstractButton *segment : rail->group()->buttons())
+			watched << segment;
 	}
+	for (QWidget *widget : watched)
+		widget->installEventFilter(this);
+	updateTabOrder(true);
+}
+
+/* Tab follows the eye (UX-102): the rails in the order they show (arrangeRails). */
+void TswDock::updateTabOrder(bool startFirst)
+{
+	QList<QWidget *> order{mainButton, dismiss, openFolder, play, copyDetails, learnMore};
+	for (TswRail *rail : {startFirst ? startRail : speedRail, startFirst ? speedRail : startRail}) {
+		for (QAbstractButton *segment : rail->group()->buttons())
+			order << segment;
+	}
+	order << pauseButton << stopButton;
+	for (int i = 1; i < order.size(); i++)
+		setTabOrder(order[i - 1], order[i]);
 }
 
 QScrollArea *TswDock::inScrollArea(TswDock *dock)
@@ -516,6 +544,7 @@ void TswDock::restyle()
 	if (parentWidget() != nullptr)
 		updateNarrow(parentWidget()->width());
 	updateCardRows(); /* the fonts may have changed */
+	updateStopRow();
 	refresh(false);
 	update();
 	restyling = false;
@@ -528,15 +557,24 @@ void TswDock::applyReserves()
 	TswStatusReserve reserve;
 	reserve.realTimeHero = text("State.Hero.RealTime");
 	reserve.timelapseHero = text("State.Hero.Timelapse");
-	reserve.quietHeroes = {text("State.Hero.StartsRealTime"), text("State.Hero.StartsTimelapse", widest),
-			       text("State.Hero.Starting"), text("State.Hero.Saving"), text("State.Hero.Saved")};
+	reserve.quietHeroes = {text("State.Hero.StartsRealTime"),
+			       text("State.Hero.StartsTimelapse", widest),
+			       text("State.Hero.ResumesRealTime"),
+			       text("State.Hero.ResumesTimelapse", widest),
+			       text("State.Hero.Starting"),
+			       text("State.Hero.Saving"),
+			       text("State.Hero.Saved")};
 	reserve.headlines = {text("Error.E001.Headline"), text("Error.E002.Headline"), text("Error.E103.Headline"),
 			     text("Error.E901.Headline")};
 	reserve.widestSpeed = speedText(WIDEST_SPEED);
 	reserve.stretchLabel = text("Counter.Stretch") + " " + speedText(WIDEST_SPEED);
 	reserve.stretchValues = QString("0:00:00") + QString::fromUtf8(ARROW) + "0:00:00";
 	status->setReserve(reserve);
-	mainButton->setReserve({text("Action.Record"), text("Action.ToTimelapse", widest), text("Action.ToRealTime")});
+	mainButton->setReserve({text("Action.Record"), text("Action.ToTimelapse", widest), text("Action.ToRealTime"),
+				text("Action.ResumeRealTime"), text("Action.ResumeTimelapse", widest)});
+	pauseButton->setReserve({text("Action.Pause"), text("Action.Resume")});
+	stopButton->setReserve({text("Action.Stop")});
+	startCaption->setReserve({text("Label.StartIn").toUpper(), text("Label.ResumeIn").toUpper()});
 	speedCaption->setReserve(
 		{text("Label.Speed").toUpper(), text("Label.NextSpeed").toUpper(), text("Label.SpeedNow").toUpper()});
 }
@@ -575,14 +613,17 @@ void TswDock::applyMetrics()
 	status->updateGeometry();
 	mainButton->setLabelFont(t.fontAt(TswType::MAIN, true));
 	mainButton->setMinimumRow(static_cast<int>(std::lround(MAIN_ROWS * t.L)));
-	stopButton->setLabelFont(t.fontAt(TswType::STOP, false));
-	stopButton->setMinimumRow(rows(t, CONTROL_ROWS));
+	for (TswButton *button : {pauseButton, stopButton}) {
+		button->setLabelFont(t.fontAt(TswType::STOP, false));
+		button->setMinimumRow(rows(t, CONTROL_ROWS));
+	}
+	stopRow->setSpacing(t.s3);
 	for (TswButton *pill : {openFolder, play}) {
 		pill->setLabelFont(t.fontAt(TswType::BODY, false));
 		pill->setMinimumRow(rows(t, SMALL_ROWS));
 	}
 	/* Narrow: tighter sides, so labels keep their words on fewer lines at 220 px. */
-	for (TswButton *button : {mainButton, stopButton, openFolder, play})
+	for (TswButton *button : {mainButton, pauseButton, stopButton, openFolder, play})
 		button->setPadding(narrow ? t.s3 : t.s4);
 	const int circle = static_cast<int>(std::lround(SMALL_ROWS * t.L));
 	dismiss->setLabelFont(t.fontAt(TswType::BODY, false));
@@ -616,6 +657,7 @@ void TswDock::updateNarrow(int viewportWidth)
 	narrow = next;
 	applyMetrics();
 	updateCardRows();
+	updateStopRow();
 }
 
 /*
@@ -629,6 +671,7 @@ void TswDock::resizeEvent(QResizeEvent *event)
 {
 	QFrame::resizeEvent(event);
 	updateCardRows();
+	updateStopRow();
 	const int needed = heightForWidth(width());
 	if (needed > 0 && minimumHeight() != needed)
 		setMinimumHeight(needed);
@@ -652,6 +695,46 @@ void TswDock::updateCardRows()
 	auto *linkLayout = static_cast<QBoxLayout *>(linkRow->layout());
 	linkLayout->setDirection(links > room ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
 	linkLayout->setSpacing(links > room ? 0 : style.s3); /* one under the other: a list, not islands */
+}
+
+/*
+ * Zone E: Pause and Stop in equal halves while every label they may show fits its half on one line.
+ * Otherwise Pause takes what its longer word needs (Pause or Resume) and Stop the rest, so "Stop and
+ * save" keeps one line wherever it can. Only when even that would cut a word (the narrowest dock at
+ * the largest font) do they stack, full width, as the card's pills do (3.10). A label that still
+ * wraps turns both into rounded rectangles: a two-line pill would be a tall stadium (4.2, shapes).
+ * The arrangement depends only on the width, the language and the theme, so Resume is exactly where
+ * Pause was (UX-128).
+ */
+void TswDock::updateStopRow()
+{
+	const int margin = narrow ? style.s2 : style.s3;
+	const int room = width() - 2 * margin - style.s3;
+	const int half = room / 2;
+	const int pauseNeeds = pauseButton->oneLineWidth() + style.s2; /* a pill's round ends eat into its padding */
+	const bool halves = pauseButton->oneLineWidth() <= half && stopButton->oneLineWidth() <= room - half;
+	const bool beside = halves ||
+			    (pauseNeeds <= half && stopButton->minimumSizeHint().width() <= room - pauseNeeds);
+	const bool fixedPause = beside && !halves;
+	/* Ignored: neither widens the dock (3.10). Fixed when Pause takes its own width: the layout would
+	 * give an Ignored button no width at all. */
+	QSizePolicy policy = pauseButton->sizePolicy();
+	policy.setHorizontalPolicy(fixedPause ? QSizePolicy::Fixed : QSizePolicy::Ignored);
+	pauseButton->setSizePolicy(policy);
+	pauseButton->setMinimumWidth(fixedPause ? pauseNeeds : 0);
+	pauseButton->setMaximumWidth(fixedPause ? pauseNeeds : QWIDGETSIZE_MAX);
+	/* Stretch shares the width beside each other; stacked it would share out the dock's spare height. */
+	stopRow->setStretch(0, beside && !fixedPause ? 1 : 0);
+	stopRow->setStretch(1, beside ? 1 : 0);
+	stopRow->setDirection(beside ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom);
+	const int full = room + style.s3; /* stacked, each takes the whole row */
+	int pauseWidth = full;
+	if (beside)
+		pauseWidth = fixedPause ? pauseNeeds : half;
+	const int stopWidth = beside ? room - pauseWidth : full;
+	const bool wraps = pauseButton->mostLines(pauseWidth) > 1 || stopButton->mostLines(stopWidth) > 1;
+	for (TswButton *button : {pauseButton, stopButton})
+		button->setShape(wraps ? TswButton::Shape::Rounded : TswButton::Shape::Pill);
 }
 
 void TswDock::updateGaps()
@@ -688,6 +771,7 @@ void TswDock::refresh(bool animate)
 	showMain();
 	showRails(animate);
 	showStop();
+	showPause();
 	showCard();
 	showContext();
 	updateGaps();
@@ -705,7 +789,7 @@ void TswDock::showStatus()
 		content.speed = speedText(view.hero_speed);
 		content.speedValue = view.hero_speed;
 	}
-	if (view.banner == TSW_BANNER_READY)
+	if (view.banner == TSW_BANNER_READY || view.banner == TSW_BANNER_PAUSED) /* how it starts, or resumes */
 		content.heroGlyph = view.start_in_timelapse ? TswGlyph::FastForward : TswGlyph::Play;
 	else if (view.banner == TSW_BANNER_REAL_TIME)
 		content.heroGlyph = TswGlyph::Play;
@@ -719,7 +803,7 @@ void TswDock::showStatus()
 	if (view.section_shown) {
 		const bool sped = view.section_speed > 1;
 		content.stretchLabel =
-			text("Counter.Stretch") + (sped ? " " + speedText(view.section_speed) : QString());
+			text(view.section_label) + (sped ? " " + speedText(view.section_speed) : QString());
 		content.stretchValues = QString::fromUtf8(view.section_recorded);
 		if (sped)
 			content.stretchValues += QString::fromUtf8(ARROW) + QString::fromUtf8(view.section_final);
@@ -755,11 +839,12 @@ void TswDock::showMain()
 	const QString words = text(view.main_text, QString::number(view.main_speed));
 	TswButtonLook look{t.raised, t.panel, QColor(), 0.0, t.text, t.ink(t.text, t.raised)};
 	TswGlyph glyph = TswGlyph::Record;
-	if (isKey(view.main_text, "Action.ToTimelapse")) {
-		/* Outlined means next: the switch is drawn like the armed speed (4.2). */
+	if (isKey(view.main_text, "Action.ToTimelapse") || isKey(view.main_text, "Action.ResumeTimelapse")) {
+		/* Outlined means next: the switch is drawn like the armed speed (4.2), and so is a resume that
+		 * will run in timelapse. */
 		look = {t.panel, t.panel, t.accent, 2.0, t.ink(t.accent, t.panel), t.accentText};
 		glyph = TswGlyph::FastForward;
-	} else if (isKey(view.main_text, "Action.ToRealTime")) {
+	} else if (isKey(view.main_text, "Action.ToRealTime") || isKey(view.main_text, "Action.ResumeRealTime")) {
 		glyph = TswGlyph::Play;
 	} else {
 		look.glyph = t.shape(t.danger, t.raised);
@@ -771,16 +856,32 @@ void TswDock::showMain()
 		mainButton->setAccessibleName(spoken(words));
 }
 
+/* Idle: the start mode first, then the speeds. Recording, paused and saving: the speeds first, under
+ * the main button as always, and below them the room of the mode to resume in, filled while paused,
+ * right above the Resume button it qualifies. */
+void TswDock::arrangeRails(bool startFirst)
+{
+	if ((speedsLayout->indexOf(startGroup) == 0) == startFirst)
+		return;
+	speedsLayout->removeWidget(startGroup);
+	speedsLayout->insertWidget(startFirst ? 0 : 1, startGroup);
+	updateTabOrder(startFirst);
+}
+
 void TswDock::showRails(bool animate)
 {
 	speeds->setVisible(view.speeds_shown);
+	/* A rail that just appeared shows its choice at once; only one already shown slides to it. */
+	const bool startWasShown = !startGroup->isHidden();
+	arrangeRails(!view.stop_shown);
 	startGroup->setVisible(view.start_mode_shown);
+	startCaption->setText(text(view.start_label).toUpper());
 	speedCaption->setText(text(view.speed_label).toUpper());
 	const bool engaged = view.banner == TSW_BANNER_TIMELAPSE;
 	speedRail->setEnabled(view.speeds_enabled);
 	speedRail->setMode(engaged ? TswRail::Mode::Engaged : TswRail::Mode::Armed);
 	speedRail->select(static_cast<int>(view.speed_selected), animate);
-	startRail->select(view.start_in_timelapse ? START_TIMELAPSE : START_REAL_TIME, animate);
+	startRail->select(view.start_in_timelapse ? START_TIMELAPSE : START_REAL_TIME, animate && startWasShown);
 	/* The selected speed says whether it is the next one or the one running now (UX-103). */
 	const QString role = text(engaged ? "A11y.Engaged" : "A11y.Armed");
 	for (QAbstractButton *segment : speedRail->group()->buttons()) {
@@ -799,6 +900,24 @@ void TswDock::showStop()
 		stopButton->setAccessibleName(text("Action.Stop"));
 	stopButton->setVisible(view.stop_shown);
 	stopButton->setEnabled(view.stop_enabled);
+}
+
+/* Pause while recording; while paused, Resume in the same place, with the glyph of the mode it will
+ * resume in, as on the main button (UX-128, UX-130). */
+void TswDock::showPause()
+{
+	const TswTheme &t = style;
+	const bool resume = isKey(view.pause_text, "Action.Resume");
+	TswGlyph glyph = TswGlyph::Pause;
+	if (resume)
+		glyph = view.start_in_timelapse ? TswGlyph::FastForward : TswGlyph::Play;
+	pauseButton->setLook({QColor(), t.panel, t.edge, 1.0, t.text, t.text});
+	pauseButton->setContent(glyph, text(view.pause_text));
+	const QString name = text(resume ? "A11y.Resume" : "A11y.Pause");
+	if (pauseButton->accessibleName() != name)
+		pauseButton->setAccessibleName(name);
+	pauseButton->setVisible(view.pause_shown);
+	pauseButton->setEnabled(view.pause_enabled);
 }
 
 void TswDock::showCard()
@@ -889,6 +1008,8 @@ void TswDock::announce()
 	QString mode = text("Label.RealTime");
 	if (view.banner == TSW_BANNER_TIMELAPSE)
 		mode = text("Label.Timelapse") + ", " + text("A11y.Faster", QString::number(view.hero_speed));
+	if (view.banner == TSW_BANNER_PAUSED && view.start_in_timelapse) /* the mode it will resume in */
+		mode = text("Label.Timelapse") + ", " + text("A11y.Faster", QString::number(view.main_speed));
 	QString words = text(view.announce_text, mode.left(1).toLower() + mode.mid(1));
 	if (view.banner == TSW_BANNER_SAVED)
 		words = text(view.announce_text, spokenDuration(QString::fromUtf8(view.final_length)));

@@ -26,6 +26,7 @@ enum class TswGlyph {
 	Play,        /* real time, Back to real time, Play */
 	FastForward, /* timelapse, Switch to timelapse */
 	Stop,        /* Stop and save */
+	Pause,       /* two bars: paused, Pause */
 	Check,       /* saved */
 	Error,       /* circle with a cross */
 	Warning,     /* triangle with a bar and a dot */

@@ -281,6 +281,8 @@ void TswTheme::derive(const TswThemeHooks &hooks)
 	success = shape(hooks.success.isValid() ? hooks.success : successIn, panel);
 	warning = shape(hooks.warning.isValid() ? hooks.warning : warningIn, panel);
 	dangerTint = tswMix(danger, panel, 0.18);
+	warningTint = tswMix(warning, panel, 0.18);
+	onWarning = shape(bestOn(warning, {panel, text}), warning);
 
 	/* 5. Focus: the accent, visible against the panel and against the theme's buttons. */
 	focus = shape(accent, panel);
