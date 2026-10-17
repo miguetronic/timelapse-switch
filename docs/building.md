@@ -103,7 +103,7 @@ PATH="$PWD/.venv/bin:$PATH" ./build-aux/run-gersemi
 
 ### 6. Try it in OBS
 
-Planned: `tools/dev-install.sh` will copy the build into OBS's per-user plugin folder (`~/.config/obs-studio/plugins/timelapse-switch/`) and remove it again. It arrives with the first feature that can be tried.
+To try the build in your own OBS, close OBS and run `tools/dev-install.sh`: it copies the build into OBS's per-user plugin folder (`~/.config/obs-studio/plugins/timelapse-switch/`), and `tools/dev-install.sh --uninstall` removes it again. Everything about installing and uninstalling, and what it never touches, is in `docs/install.md`.
 
 ## Windows and macOS
 

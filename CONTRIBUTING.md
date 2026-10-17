@@ -26,6 +26,7 @@ And three habits that keep the code small:
 | Know what the plugin costs your computer | `README.md`, then `docs/performance.md` |
 | Answer a user's question | `docs/faq.md` |
 | Build it and run the checks | `docs/building.md` |
+| Install it in OBS, or remove it | `docs/install.md` |
 | Write code | `docs/coding-rules.md` (includes "The Power of Ten", adapted) |
 | Know why something is the way it is | `docs/decisions.md` |
 | Know what it must do | `docs/requirements.md` and `docs/design/ux-spec.md` |

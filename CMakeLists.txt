@@ -122,6 +122,7 @@ if(ENABLE_UNIT_TESTS)
   enable_testing()
   add_subdirectory(tests/unit)
   add_subdirectory(tests/ui)
+  add_subdirectory(tests/tools)
 endif()
 
 option(ENABLE_INTEGRATION_TESTS "Build the test-only OBS module used by tests/integration/run.sh" ON)
