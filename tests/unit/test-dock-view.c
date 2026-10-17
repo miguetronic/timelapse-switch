@@ -588,6 +588,336 @@ static void a_new_recording_closes_the_card(void)
 	TSW_EXPECT_TRUE(!view.card_shown);
 }
 
+/* --- Monitoring: the details, the speed map and the health line (ux-spec 3.17) --- */
+
+static const uint64_t MIB = 1048576;
+
+static void expect_amount(const struct tsw_amount *amount, const char *unit, const char *number, const char *second,
+			  int line)
+{
+	expect_text(amount->unit, unit, line);
+	expect_text(amount->number, number, line);
+	expect_text(amount->second, second, line);
+}
+#define EXPECT_AMOUNT(amount, unit, number, second) expect_amount(&(amount), unit, number, second, __LINE__)
+
+/* A recording 0:31:40 long (0:16:58 of final video), with everything the details show. */
+static struct tsw_status monitored(uint32_t speed)
+{
+	struct tsw_status status = recording(speed);
+	status.recorded_ns = 1900 * SECOND_NS;
+	status.final_ns = 1018 * SECOND_NS;
+	status.totals.real_time_ns = 723 * SECOND_NS;  /* 12:03 */
+	status.totals.timelapse_ns = 1177 * SECOND_NS; /* 19:37 */
+	status.totals.paused_ns = 72 * SECOND_NS;      /* 1:12 */
+	status.totals.switches = 3;
+	status.totals.pauses = 1;
+	for (size_t i = 0; i < TSW_MAP_BUCKETS; i++)
+		status.map[i] = (uint8_t)(i < 16 ? 1 : (i < 40 ? 4 : 1));
+	status.feed_waiting = 1;
+	status.feed_size = 16;
+	status.file_bytes = 1288490189;            /* 1.2 GB */
+	status.disk_free_bytes = 100 * 1024 * MIB; /* 100 GB */
+	status.bytes_per_second = 664064;          /* 38 MB per minute */
+	return status;
+}
+
+/* Break caught: sizes in the wrong unit, a number of four digits, or a decimal where it is noise. */
+static void sizes_read_in_megabytes_gigabytes_and_terabytes(void)
+{
+	struct tsw_amount amount;
+	tsw_format_size(0, &amount);
+	EXPECT_AMOUNT(amount, "Unit.MB", "0", "");
+	tsw_format_size(307200, &amount); /* 0.29 MB */
+	EXPECT_AMOUNT(amount, "Unit.MB", "0.3", "");
+	tsw_format_size(9 * MIB + MIB / 2, &amount);
+	EXPECT_AMOUNT(amount, "Unit.MB", "9.5", "");
+	tsw_format_size(10 * MIB - MIB / 50, &amount); /* 9.98: one decimal would read 10.0 */
+	EXPECT_AMOUNT(amount, "Unit.MB", "10", "");
+	tsw_format_size(38 * MIB, &amount);
+	EXPECT_AMOUNT(amount, "Unit.MB", "38", "");
+	tsw_format_size(999 * MIB + MIB * 6 / 10, &amount); /* 999.6 MB would round to 1000 */
+	EXPECT_AMOUNT(amount, "Unit.GB", "1.0", "");
+	tsw_format_size(1288490189, &amount);
+	EXPECT_AMOUNT(amount, "Unit.GB", "1.2", "");
+	tsw_format_size(212 * 1024 * MIB, &amount);
+	EXPECT_AMOUNT(amount, "Unit.GB", "212", "");
+	tsw_format_size(1843 * 1024 * MIB, &amount); /* 1843 GB */
+	EXPECT_AMOUNT(amount, "Unit.TB", "1.8", "");
+	tsw_format_size(UINT64_MAX, &amount); /* 16 million TB: whole, and it still fits */
+	EXPECT_AMOUNT(amount, "Unit.TB", "9999999", "");
+}
+
+/* Break caught: more time promised than the disk holds (rounded up), or hours written as minutes. */
+static void time_left_reads_in_minutes_and_hours_rounded_down(void)
+{
+	struct tsw_amount amount;
+	tsw_format_time_left(UINT64_MAX, &amount);
+	TSW_EXPECT_TRUE(amount.unit == NULL);
+	tsw_format_time_left(0, &amount);
+	EXPECT_AMOUNT(amount, "Unit.UnderMinute", "", "");
+	tsw_format_time_left(59, &amount);
+	EXPECT_AMOUNT(amount, "Unit.UnderMinute", "", "");
+	tsw_format_time_left(60, &amount);
+	EXPECT_AMOUNT(amount, "Unit.Minutes", "1", "");
+	tsw_format_time_left(599, &amount);
+	EXPECT_AMOUNT(amount, "Unit.Minutes", "9", "");
+	tsw_format_time_left(3599, &amount);
+	EXPECT_AMOUNT(amount, "Unit.Minutes", "59", "");
+	tsw_format_time_left(3600 + 59, &amount);
+	EXPECT_AMOUNT(amount, "Unit.Hours", "1", "");
+	tsw_format_time_left(3600 + 33 * 60 + 59, &amount);
+	EXPECT_AMOUNT(amount, "Unit.HoursMinutes", "1", "33");
+	tsw_format_time_left(10 * 3600 - 1, &amount);
+	EXPECT_AMOUNT(amount, "Unit.HoursMinutes", "9", "59");
+	tsw_format_time_left(161692, &amount); /* 44 h 54 min */
+	EXPECT_AMOUNT(amount, "Unit.Hours", "44", "");
+	tsw_format_time_left(UINT64_MAX - 1, &amount);
+	EXPECT_AMOUNT(amount, "Unit.Hours", "9999999", "");
+}
+
+/* Break caught: the ratio upside down, a division by an empty final video, or noise in the decimals. */
+static void compression_reads_as_times_shorter(void)
+{
+	struct tsw_amount amount;
+	tsw_format_compression(1900 * SECOND_NS, 1018 * SECOND_NS, &amount); /* 1.87 */
+	EXPECT_AMOUNT(amount, "Unit.Times", "1.9", "");
+	tsw_format_compression(754 * SECOND_NS, 754 * SECOND_NS, &amount);
+	EXPECT_AMOUNT(amount, "Unit.Times", "1.0", "");
+	tsw_format_compression(1600 * SECOND_NS, 100 * SECOND_NS, &amount);
+	EXPECT_AMOUNT(amount, "Unit.Times", "16", "");
+	tsw_format_compression(996 * SECOND_NS, 100 * SECOND_NS, &amount); /* 9.96 */
+	EXPECT_AMOUNT(amount, "Unit.Times", "10", "");
+	tsw_format_compression(5 * SECOND_NS, 0, &amount);
+	TSW_EXPECT_TRUE(amount.unit == NULL);
+}
+
+/* UX-135: everything the details show while recording, from the recorder's counters. */
+static void details_show_where_the_time_went(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	const struct tsw_status status = monitored(4);
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.details_shown);
+	EXPECT_TEXT(view.waiting_skipped, "14:42");
+	EXPECT_AMOUNT(view.compression, "Unit.Times", "1.9", "");
+	EXPECT_TEXT(view.real_time, "12:03");
+	EXPECT_TEXT(view.timelapse, "19:37");
+	EXPECT_TEXT(view.paused, "1:12");
+	TSW_EXPECT_EQ(view.switches, 3);
+	TSW_EXPECT_EQ(view.pauses, 1);
+	TSW_EXPECT_EQ(view.chapters, 4);
+	EXPECT_AMOUNT(view.file_size, "Unit.GB", "1.2", "");
+	EXPECT_AMOUNT(view.file_rate, "Unit.MB", "38", "");
+	EXPECT_AMOUNT(view.disk_free, "Unit.GB", "100", "");
+	EXPECT_AMOUNT(view.time_left, "Unit.Hours", "44", "");
+	TSW_EXPECT_EQ(view.backlog, 1);
+	TSW_EXPECT_EQ(view.backlog_size, 16);
+	TSW_EXPECT_TRUE(view.map_shown);
+	TSW_EXPECT_EQ(view.map[0], 1);
+	TSW_EXPECT_EQ(view.map[20], 4);
+	TSW_EXPECT_EQ(view.map[TSW_MAP_BUCKETS - 1], 1);
+
+	struct tsw_status paused_now = status;
+	paused_now.phase = TSW_PHASE_PAUSED;
+	TSW_EXPECT_TRUE(build(&model, &session, paused_now).details_shown);
+	struct tsw_status saving = status;
+	saving.phase = TSW_PHASE_SAVING;
+	TSW_EXPECT_TRUE(build(&model, &session, saving).details_shown);
+}
+
+/* What is not measured yet is not known, never a made-up zero. */
+static void details_say_what_is_not_known_yet(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = monitored(1);
+	status.file_bytes = 0;
+	status.disk_free_bytes = 0;
+	status.bytes_per_second = 0;
+	status.final_ns = 0;
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.file_size.unit == NULL);
+	TSW_EXPECT_TRUE(view.file_rate.unit == NULL);
+	TSW_EXPECT_TRUE(view.disk_free.unit == NULL);
+	TSW_EXPECT_TRUE(view.time_left.unit == NULL);
+	TSW_EXPECT_TRUE(view.compression.unit == NULL);
+	/* Right at the start the map has no slice yet (no section): it is not drawn as one long pause. */
+	memset(status.map, 0, sizeof(status.map));
+	view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(!view.map_shown);
+}
+
+/* Idle and after a recording there are no details to show. */
+static void idle_shows_no_details_and_no_health(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = {0};
+	status.frames_lost = 5; /* never shown idle: idle has no recording to be about */
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(!view.details_shown);
+	TSW_EXPECT_TRUE(!view.map_shown);
+	TSW_EXPECT_EQ(view.health, 0);
+}
+
+/* UX-134, break caught: a warning while all is well (noise mid-recording). */
+static void health_is_silent_when_all_is_well(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, monitored(4));
+	TSW_EXPECT_EQ(view.health, 0);
+	TSW_EXPECT_TRUE(view.health_text == NULL);
+	EXPECT_TEXT(view.context_text, "Hint.AudioSilence");
+}
+
+/* UX-134: only the most urgent issue shows: disk low, then frames lost, then the encoder behind. */
+static void health_shows_only_the_most_urgent_issue(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = monitored(4);
+	status.frames_lost = 37;
+	status.feed_waiting = 12;
+	status.disk_free_bytes = 330 * MIB; /* 330 MB at 38 MB per minute: 8 minutes */
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_EQ(view.health, TSW_HEALTH_DISK_LOW);
+	TSW_EXPECT_EQ(view.health_code, 102);
+	EXPECT_TEXT(view.health_text, "Health.E102");
+	EXPECT_AMOUNT(view.health_amount, "Unit.Minutes", "8", "");
+
+	tsw_dock_model_init(&model);
+	status.disk_free_bytes = 100 * 1024 * MIB;
+	view = build(&model, &session, status);
+	TSW_EXPECT_EQ(view.health, TSW_HEALTH_LOST_FRAMES);
+	TSW_EXPECT_EQ(view.health_code, 201);
+	EXPECT_TEXT(view.health_text, "Health.E201");
+	EXPECT_AMOUNT(view.health_amount, "Unit.Count", "37", "");
+
+	tsw_dock_model_init(&model);
+	status.frames_lost = 0;
+	view = build(&model, &session, status);
+	TSW_EXPECT_EQ(view.health, TSW_HEALTH_ENCODER_BEHIND);
+	TSW_EXPECT_EQ(view.health_code, 203);
+	EXPECT_TEXT(view.health_text, "Health.E203");
+	TSW_EXPECT_TRUE(view.health_amount.unit == NULL);
+}
+
+/* UX-134: lost frames stay, with their count, until the recording ends; the next one starts clean. */
+static void lost_frames_stay_until_the_recording_ends(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = monitored(1);
+	status.frames_lost = 3;
+	TSW_EXPECT_EQ(build(&model, &session, status).health, TSW_HEALTH_LOST_FRAMES);
+	status.recorded_ns += 3600 * SECOND_NS;
+	TSW_EXPECT_EQ(build(&model, &session, status).health, TSW_HEALTH_LOST_FRAMES);
+	struct tsw_status paused_now = status;
+	paused_now.phase = TSW_PHASE_PAUSED;
+	TSW_EXPECT_EQ(build(&model, &session, paused_now).health, TSW_HEALTH_LOST_FRAMES);
+	TSW_EXPECT_EQ(build(&model, &session, ended(1, 0)).health, 0);
+	struct tsw_status next = monitored(1);
+	next.recorded_ns = 5 * SECOND_NS;
+	next.outcome = 1;
+	TSW_EXPECT_EQ(build(&model, &session, next).health, 0);
+}
+
+/* UX-063 and ux-spec 4.1: an issue whose condition ends stays 30 s more, so a condition at its edge
+ * never makes the line blink; a disk warning keeps the time left it last had. */
+static void an_issue_that_ends_stays_thirty_seconds_more(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = monitored(4);
+	status.feed_waiting = 9;
+	TSW_EXPECT_EQ(build(&model, &session, status).health, TSW_HEALTH_ENCODER_BEHIND);
+	status.feed_waiting = 1;
+	status.recorded_ns += 29 * SECOND_NS;
+	TSW_EXPECT_EQ(build(&model, &session, status).health, TSW_HEALTH_ENCODER_BEHIND);
+	status.recorded_ns += 2 * SECOND_NS;
+	TSW_EXPECT_EQ(build(&model, &session, status).health, 0);
+
+	status.disk_free_bytes = 330 * MIB;
+	TSW_EXPECT_EQ(build(&model, &session, status).health, TSW_HEALTH_DISK_LOW);
+	status.phase = TSW_PHASE_PAUSED; /* paused: the file stops growing, the rate is not known */
+	status.bytes_per_second = 0;
+	const struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_EQ(view.health, TSW_HEALTH_DISK_LOW);
+	EXPECT_AMOUNT(view.health_amount, "Unit.Minutes", "8", "");
+}
+
+/* UX-011 comes first while saving: the line says to keep OBS open, whatever the health was. */
+static void saving_says_keep_obs_open_whatever_the_health(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = monitored(4);
+	status.frames_lost = 2;
+	status.phase = TSW_PHASE_SAVING;
+	const struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_EQ(view.health, 0);
+	EXPECT_TEXT(view.context_text, "Hint.Saving");
+}
+
+/* UX-104: a new issue is announced once, politely; its count going up is not news. */
+static void a_new_issue_is_announced_once(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = monitored(1);
+	struct tsw_dock_view view = build(&model, &session, status);
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Start");
+	status.frames_lost = 1;
+	view = build(&model, &session, status);
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Health");
+	status.frames_lost = 2;
+	view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.announce_text == NULL);
+	status.disk_free_bytes = 330 * MIB;
+	view = build(&model, &session, status);
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Health");
+}
+
+/* UX-135 and 3.13: after a recording the summary card shows its speed map; an error card does not, and
+ * a map is never shown twice (an old one with a later outcome). */
+static void the_summary_shows_the_map_of_the_recording(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = monitored(4);
+	(void)build(&model, &session, status);
+	status.phase = TSW_PHASE_SAVING;
+	(void)build(&model, &session, status);
+	struct tsw_dock_view view = build(&model, &session, ended(1, 0));
+	TSW_EXPECT_TRUE(view.card_shown && view.map_shown);
+	TSW_EXPECT_EQ(view.map[20], 4);
+	TSW_EXPECT_TRUE(!view.details_shown);
+	view = build(&model, &session, ended(1, 0));
+	TSW_EXPECT_TRUE(view.map_shown); /* the card keeps it while it is open */
+	tsw_dock_model_dismiss(&model);
+	TSW_EXPECT_TRUE(!build(&model, &session, ended(1, 0)).map_shown);
+	TSW_EXPECT_TRUE(!build(&model, &session, ended(2, 0)).map_shown);
+
+	tsw_dock_model_init(&model);
+	status.phase = TSW_PHASE_RECORDING;
+	(void)build(&model, &session, status);
+	view = build(&model, &session, ended(1, 103));
+	TSW_EXPECT_TRUE(view.card_shown && !view.map_shown);
+}
+
 int main(void)
 {
 	durations_read_as_hours_minutes_seconds();
@@ -614,5 +944,18 @@ int main(void)
 	choosing_while_paused_changes_how_it_resumes();
 	paused_counts_the_pause_not_the_recording();
 	a_pause_and_a_resume_are_announced_once();
+	sizes_read_in_megabytes_gigabytes_and_terabytes();
+	time_left_reads_in_minutes_and_hours_rounded_down();
+	compression_reads_as_times_shorter();
+	details_show_where_the_time_went();
+	details_say_what_is_not_known_yet();
+	idle_shows_no_details_and_no_health();
+	health_is_silent_when_all_is_well();
+	health_shows_only_the_most_urgent_issue();
+	lost_frames_stay_until_the_recording_ends();
+	an_issue_that_ends_stays_thirty_seconds_more();
+	saving_says_keep_obs_open_whatever_the_health();
+	a_new_issue_is_announced_once();
+	the_summary_shows_the_map_of_the_recording();
 	return tsw_test_failures;
 }
