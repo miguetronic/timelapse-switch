@@ -720,6 +720,15 @@ When the selection changes, the thumb slides to its new segment in 160 ms (OutCu
 
 **Strengths and risks.** The most refined and modern; the "outlined next, filled now" idea makes the whole dock teach itself. It looks least like OBS's stock docks in heavy themes (Rachni, Acri), and it paints more, so more code.
 
+**Prototype notes** (branch `ui-dir-cards`). Built as written, with these choices the text left open or that the screenshots asked for:
+
+- *Focus on a speed segment is a dashed ring.* A solid ring around a segment looks exactly like the armed thumb, so it would say "this is the next speed" when it is only focused. Buttons keep a solid ring; on the outlined "Switch to timelapse" button the ring sits inside the accent frame with a 2 px gap, so the two never merge.
+- *Two-line labels are balanced* ("Record with / Timelapse Switch", never "Record with Timelapse / Switch"), and a speed stays with its word through a no-break space ("timelapse ×4", never "×4" alone on a line). The warm summary line gets its own line.
+- *The control height* `hC` is the button's painted height, not its size hint: Yami adds 2 px of transparent margin above and below, so the hint said 36 px where OBS's buttons show 32 px.
+- *Extremes, never clipping.* At Font Size 12 in a dock narrowed by a scroll bar, the main button may take three lines, a start-mode word may wrap under its glyph, and a recording hero that cannot fit at its floor size drops its leading glyph before it would shrink or clip.
+- *No glyph cache.* Glyphs are painted straight into each widget's painter, which is sharp at any screen scale; a cache can come later if a measurement shows the need (`docs/coding-rules.md`, D3).
+- *Not built yet, for lack of data in the view:* the speed map in the summary card, the warning line and card, the Starting state (no such phase is reported yet; its words exist), the Large glance size and Reduce motion settings (the dock has `setReduceMotion`), and the Stop hold fill (painted when given a progress; nothing reports a hotkey hold to the dock yet).
+
 ---
 
 ### 4.3 Direction C: Transport

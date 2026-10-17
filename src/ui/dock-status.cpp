@@ -113,8 +113,9 @@ struct TswStatusCard::Layout {
 	double inner = 0.0; /* the width of the content */
 	QFont tallyFont, heroFont, quietFont, headlineFont, badgeFont, captionFont, digitsFont, statusFont;
 	double heroPoints = 0.0;
-	int heroGlyph = 0;  /* px: the glyph before a recording hero, and the column it takes */
-	int quietGlyph = 0; /* px: the glyph before an idle hero */
+	int heroGlyph = 0;          /* px: the glyph before a recording hero, and the column it takes */
+	int quietGlyph = 0;         /* px: the glyph before an idle hero */
+	bool heroGlyphShown = true; /* false only when a recording hero fits without its glyph alone */
 	double pillHeight = 0.0;
 	double badgeWidth = 0.0;
 	double badgeHeight = 0.0;
@@ -151,8 +152,20 @@ TswStatusCard::TswStatusCard(QWidget *parent, const TswTheme *style) : QWidget(p
 	connect(&sweep, &QVariantAnimation::finished, this, [this]() { update(); });
 }
 
+/* Field by field: the dock shows a view ten times per second, mostly the same one. */
+static bool sameContent(const TswStatusContent &a, const TswStatusContent &b)
+{
+	return a.banner == b.banner && a.tally == b.tally && a.hero == b.hero && a.quiet == b.quiet &&
+	       a.boldQuiet == b.boldQuiet && a.speed == b.speed && a.heroGlyph == b.heroGlyph &&
+	       a.recordedCaption == b.recordedCaption && a.finalCaption == b.finalCaption && a.recorded == b.recorded &&
+	       a.finalLength == b.finalLength && a.dimmed == b.dimmed && a.stretchLabel == b.stretchLabel &&
+	       a.stretchValues == b.stretchValues;
+}
+
 void TswStatusCard::setContent(const TswStatusContent &next, bool animate)
 {
+	if (sameContent(next, content))
+		return; /* nothing to paint again */
 	const bool changed = next.banner != content.banner;
 	if (changed) {
 		previous = content.banner;
@@ -185,8 +198,9 @@ void TswStatusCard::setNarrow(bool isNarrow)
 
 /* The largest hero size, from the target down to the floor, at which both recording heroes fit:
  * REAL TIME alone, TIMELAPSE with the speed badge beside it (besides, 0 when the badge is on the
- * tally line). */
-static double fitHero(const TswTheme &theme, const TswStatusReserve &reserve, double room, double besides, bool *fits)
+ * tally line), each after its glyph when glyph is true. */
+static double fitHero(const TswTheme &theme, const TswStatusReserve &reserve, double room, double besides, bool glyph,
+		      bool *fits)
 {
 	const double target = theme.pointsAt(TswType::HERO);
 	const double floor = theme.pointsAt(TswType::HERO_FLOOR);
@@ -194,7 +208,7 @@ static double fitHero(const TswTheme &theme, const TswStatusReserve &reserve, do
 	for (int step = 0; step < MAX_FIT_STEPS && points >= floor; step++) {
 		QFont font = theme.fontAt(1.0, true);
 		font.setPointSizeF(points);
-		const double lead = std::round(cap(font)) + theme.s3; /* the glyph and its gap */
+		const double lead = glyph ? std::round(cap(font)) + theme.s3 : 0.0; /* the glyph and its gap */
 		const double realTime = lead + tswTextWidth(font, reserve.realTimeHero);
 		const double timelapse = lead + tswTextWidth(font, reserve.timelapseHero) + besides;
 		if (std::max(realTime, timelapse) <= room) {
@@ -221,7 +235,13 @@ void TswStatusCard::measureStateBlock(Layout &lay) const
 	/* 2. The hero: the largest size at which REAL TIME and TIMELAPSE (and the badge) fit. */
 	bool fits = true;
 	const double besides = lay.badgeOnTally ? 0.0 : t.s3 + lay.badgeWidth;
-	lay.heroPoints = fitHero(t, reserve, lay.inner, besides, &fits);
+	lay.heroGlyphShown = true;
+	lay.heroPoints = fitHero(t, reserve, lay.inner, besides, true, &fits);
+	if (!fits) {
+		/* The narrowest dock at the largest font: the word matters more than the glyph beside it. */
+		lay.heroGlyphShown = false;
+		lay.heroPoints = fitHero(t, reserve, lay.inner, besides, false, &fits);
+	}
 	lay.heroFont = t.fontAt(1.0, true);
 	lay.heroFont.setPointSizeF(lay.heroPoints);
 	lay.heroGlyph = static_cast<int>(std::round(cap(lay.heroFont)));
@@ -430,12 +450,14 @@ void TswStatusCard::paintHero(QPainter &painter, const Layout &lay) const
 	const bool timelapse = content.banner == TSW_BANNER_TIMELAPSE;
 	const QColor glyphColor = timelapse ? theme->ink(theme->accent, under) : theme->ink(theme->text, under);
 	const double middle = row.center().y();
-	tswPaintGlyph(painter, content.heroGlyph,
-		      QRectF(row.left(), middle - lay.heroGlyph / 2.0, lay.heroGlyph, lay.heroGlyph), glyphColor);
+	const double lead = lay.heroGlyphShown ? lay.heroGlyph + theme->s3 : 0.0;
+	if (lay.heroGlyphShown)
+		tswPaintGlyph(painter, content.heroGlyph,
+			      QRectF(row.left(), middle - lay.heroGlyph / 2.0, lay.heroGlyph, lay.heroGlyph),
+			      glyphColor);
 	painter.setFont(lay.heroFont);
 	painter.setPen(theme->ink(theme->text, under));
-	painter.drawText(QPointF(row.left() + lay.heroGlyph + theme->s3,
-				 tswCapBaseline(lay.heroFont, row.top(), row.height())),
+	painter.drawText(QPointF(row.left() + lead, tswCapBaseline(lay.heroFont, row.top(), row.height())),
 			 content.hero);
 	if (!lay.badgeOnTally && !content.speed.isEmpty()) {
 		const QRectF badge(row.right() - lay.badgeWidth, middle - lay.badgeHeight / 2.0, lay.badgeWidth,

@@ -93,8 +93,7 @@ struct TswStatusReserve {
 	QStringList quietHeroes; /* sentences, Regular */
 	QStringList headlines;   /* error headlines, Bold */
 	QString widestSpeed;     /* ×16 */
-	QStringList tallies;
-	QString stretchLabel; /* the longest status line, in two parts */
+	QString stretchLabel;    /* the longest status line, in two parts */
 	QString stretchValues;
 };
 
@@ -224,8 +223,8 @@ class TswSegment : public QToolButton {
 public:
 	TswSegment(TswRail *rail, TswGlyph glyph, const QString &label);
 	void setLabel(const QString &label);
-	bool stacksAt(int width) const; /* the label does not fit beside its glyph at this width */
-	int stackedHeight() const;
+	bool stacksAt(int width) const;     /* the label does not fit beside its glyph at this width */
+	int stackedHeight(int width) const; /* glyph above its word, at this segment width */
 	QSize sizeHint() const override;
 	QSize minimumSizeHint() const override;
 
@@ -236,6 +235,7 @@ protected:
 private:
 	QColor labelColor() const;
 	QFont labelFont() const;
+	void paintStacked(QPainter &painter, const QRectF &box, int glyphSize) const;
 
 	TswRail *rail;
 	TswGlyph glyph;

@@ -40,6 +40,7 @@
 #include <QScreen>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <cmath>
 #include <cstdio>
 #include <map>
 #include <set>
@@ -388,9 +389,24 @@ void checkResize(const QString &locale)
 	}
 }
 
+/* A theme author's color replaces the theme's, and still passes the contrast guard (UX-015). */
+void checkThemeHooks()
+{
+	const QColor green(0, 160, 0);
+	QScrollArea *area = showCase(allCases()[3], WIDTHS[0]);
+	auto *dock = area->findChild<TswDock *>();
+	dock->setProperty("accentColor", green);
+	settle();
+	const QColor accent = dock->theme().accent;
+	if (std::abs(accent.hslHue() - green.hslHue()) > 2 || tswContrast(accent, dock->theme().panel) < SHAPE)
+		fail(QString("accentColor %1 gave the accent %2").arg(green.name(), accent.name()));
+	delete area;
+}
+
 void checkLocale(const QString &locale, const QString &pictures)
 {
 	checkResize(locale);
+	checkThemeHooks();
 	const std::vector<Case> cases = allCases();
 	for (const int width : WIDTHS) {
 		Positions positions;
@@ -471,6 +487,7 @@ void compareWithObs(const QJsonObject &reference, const QString &folder, OBSBasi
 	const QImage obs = QImage(folder + "/" + name).convertToFormat(QImage::Format_RGB32);
 	window.resize(width + CENTRAL_WIDTH, window.height() - area.height() + obs.height());
 	settle();
+	checkHeights(*dock, label + ", as tall as OBS's picture"); /* a scroll bar may now take room */
 	const QImage here = area.grab().toImage().convertToFormat(QImage::Format_RGB32);
 	if (here.size() != obs.size())
 		fail(label + QString(": drawn %1x%2, OBS's picture is %3x%4")

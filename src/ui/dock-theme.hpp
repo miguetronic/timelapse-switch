@@ -21,10 +21,8 @@
 #include <QColor>
 #include <QFont>
 
-class QFrame;
 class QLabel;
 class QPushButton;
-class QToolButton;
 class QWidget;
 
 /* Colors a theme author may set on the dock (UX-015); invalid ones come from the theme. */

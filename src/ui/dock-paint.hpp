@@ -46,8 +46,13 @@ void tswPaintRounded(QPainter &painter, const QRectF &box, double radius, const 
 /* A plain solid pen for borders; an invalid color gives no border. */
 QPen tswBorder(const QColor &color, double width);
 
-/* The keyboard focus ring: 2 px in color, inset 1 px, following the radius (UX-110). */
-void tswPaintFocusRing(QPainter &painter, const QRectF &box, double radius, const QColor &color);
+/* How a focus ring is drawn: solid, or dashed where a solid outline already means something. */
+enum class TswRing { Solid, Dashed };
+
+/* The keyboard focus ring: 2 px in color, inset px inside box (1 px, or more to clear a frame),
+ * following the radius (UX-110). */
+void tswPaintFocusRing(QPainter &painter, const QRectF &box, double radius, const QColor &color, double inset,
+		       TswRing style);
 
 /* Is this widget focused from the keyboard (Tab, Backtab or a shortcut)? Set by the dock. */
 bool tswHasKeyFocus(const QWidget *widget);

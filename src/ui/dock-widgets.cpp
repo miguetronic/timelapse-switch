@@ -31,7 +31,7 @@ const double MAIN_RADIUS = 0.6;  /* x L: the main button's corners, a rounded re
 const double DISABLED_INK = 0.6; /* disabled content is muted at 60 % (4.2, main button) */
 const double CARD_RADIUS = 0.45; /* x L, at least MIN_CARD_RADIUS */
 const int MIN_CARD_RADIUS = 6;
-const int MAX_LINES = 2; /* labels wrap to two lines at most (UX-121) */
+const double RING_GAP = 2.0; /* px between a button's frame and its focus ring */
 
 } // namespace
 
@@ -117,6 +117,9 @@ void TswButton::setReserve(const QStringList &labels)
 
 void TswButton::setLook(const TswButtonLook &paint)
 {
+	if (paint.face == look.face && paint.under == look.under && paint.frame == look.frame &&
+	    paint.frameWidth == look.frameWidth && paint.glyph == look.glyph && paint.label == look.label)
+		return; /* the same look again: no repaint */
 	look = paint;
 	update();
 }
@@ -161,9 +164,11 @@ int TswButton::lineCount(const QString &text, int width) const
 {
 	if (text.isEmpty())
 		return 0;
+	/* Usually one or two lines (UX-121); more only in the narrowest dock at the largest font, and
+	 * then the button grows: a label is never cut. */
 	const int lineHeight = QFontMetrics(labelFont).lineSpacing();
 	const int lines = (tswWrappedHeight(labelFont, text, width) + lineHeight / 2) / lineHeight;
-	return std::clamp(lines, 1, MAX_LINES);
+	return std::max(lines, 1);
 }
 
 bool TswButton::hasHeightForWidth() const
@@ -271,8 +276,11 @@ void TswButton::paintEvent(QPaintEvent *event)
 	paintFace(painter, box);
 	/* Pressed: the content moves 1 px down, like a key that travels. */
 	paintContent(painter, isDown() ? box.translated(0, 1) : box);
-	if (tswHasKeyFocus(this))
-		tswPaintFocusRing(painter, box, radius(), theme->focus);
+	if (tswHasKeyFocus(this)) {
+		/* Inside a frame, with a gap, so the ring never merges with an accent outline. */
+		const double inset = look.frameWidth >= 2.0 ? look.frameWidth + RING_GAP : 1.0;
+		tswPaintFocusRing(painter, box, radius(), theme->focus, inset, TswRing::Solid);
+	}
 }
 
 /* --- TswLink --- */
@@ -305,7 +313,9 @@ QSize TswLink::sizeHint() const
 {
 	const QFontMetrics metrics(linkFont);
 	const int glyph_px = tswGlyphSize(linkFont);
-	const int width = glyph_px + theme->s2 + metrics.horizontalAdvance(text()) + 2 * theme->s1;
+	/* A little room around the words for the focus ring; less on the left, so the glyph stays near
+	 * the card's text edge. */
+	const int width = theme->s1 + glyph_px + theme->s2 + metrics.horizontalAdvance(text()) + theme->s2;
 	return {width, std::max(metrics.height() + 2 * theme->s2, static_cast<int>(theme->L * 1.6))};
 }
 
@@ -332,7 +342,7 @@ void TswLink::paintEvent(QPaintEvent *event)
 	const double left = theme->s1 + glyph_px + theme->s2;
 	painter.drawText(QPointF(left, tswCapBaseline(font, 0, height())), text());
 	if (tswHasKeyFocus(this))
-		tswPaintFocusRing(painter, QRectF(rect()), theme->s2, theme->focus);
+		tswPaintFocusRing(painter, QRectF(rect()), theme->s2, theme->focus, 1.0, TswRing::Solid);
 }
 
 /* --- TswSegment --- */
@@ -378,10 +388,27 @@ bool TswSegment::stacksAt(int width) const
 	return need > width;
 }
 
-int TswSegment::stackedHeight() const
+int TswSegment::stackedHeight(int width) const
 {
-	const QFont bold = rail->theme()->fontAt(TswType::RAIL, true);
-	return tswGlyphSize(bold) + rail->theme()->s1 + QFontMetrics(bold).height() + 2 * rail->theme()->s2;
+	const TswTheme *theme = rail->theme();
+	const QFont bold = theme->fontAt(TswType::RAIL, true);
+	const int words = tswWrappedHeight(bold, label, width - 2 * theme->s1); /* may wrap at the largest font */
+	return tswGlyphSize(bold) + theme->s1 + words + 2 * theme->s2;
+}
+
+/* Too narrow for glyph and word side by side: the word goes under its glyph, and wraps if it must
+ * (3.10). */
+void TswSegment::paintStacked(QPainter &painter, const QRectF &box, int glyphSize) const
+{
+	const TswTheme *theme = rail->theme();
+	const QFont font = painter.font();
+	const int room = static_cast<int>(box.width()) - 2 * theme->s1;
+	const int words = tswWrappedHeight(font, label, room);
+	const double top = std::round((box.height() - (glyphSize + theme->s1 + words)) / 2.0);
+	tswPaintGlyph(painter, glyph, QRectF(box.center().x() - glyphSize / 2.0, top, glyphSize, glyphSize),
+		      painter.pen().color());
+	const QRectF text(theme->s1, top + glyphSize + theme->s1, room, words);
+	painter.drawText(text, Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, label);
 }
 
 QSize TswSegment::sizeHint() const
@@ -410,12 +437,7 @@ void TswSegment::paintEvent(QPaintEvent *event)
 	painter.setFont(font);
 	painter.setPen(color);
 	if (glyph != TswGlyph::None && rail->isStacked()) {
-		/* Too narrow for glyph and word side by side: the word goes under its glyph (3.10). */
-		const double top = (box.height() - (glyph_px + theme->s1 + QFontMetrics(font).height())) / 2.0;
-		tswPaintGlyph(painter, glyph, QRectF(box.center().x() - glyph_px / 2.0, top, glyph_px, glyph_px),
-			      color);
-		const QRectF words(0, top + glyph_px + theme->s1, box.width(), QFontMetrics(font).height());
-		painter.drawText(words, Qt::AlignHCenter | Qt::AlignVCenter, label);
+		paintStacked(painter, box, glyph_px);
 	} else {
 		const double gap = glyph_px > 0 ? theme->s2 : 0;
 		const double block = glyph_px + gap + tswTextWidth(font, label);
@@ -424,8 +446,10 @@ void TswSegment::paintEvent(QPaintEvent *event)
 			      color);
 		painter.drawText(QPointF(left + glyph_px + gap, tswCapBaseline(font, 0, box.height())), label);
 	}
-	if (tswHasKeyFocus(this))
-		tswPaintFocusRing(painter, box, radius, theme->focus);
+	if (tswHasKeyFocus(this)) {
+		/* Dashed: a solid outline on a segment means "the next speed" (outlined means next). */
+		tswPaintFocusRing(painter, box, radius, theme->focus, 1.0, TswRing::Dashed);
+	}
 }
 
 void TswSegment::keyPressEvent(QKeyEvent *event)
@@ -564,7 +588,11 @@ int TswRail::heightForWidth(int width) const
 	const int height = std::max(static_cast<int>(std::lround(1.8 * style->L)), style->hC); /* UX-107 */
 	if (!stacksAt(width))
 		return height;
-	return std::max(height, segments.first()->stackedHeight() + 2 * THUMB_INSET);
+	const int segmentWidth = (width - 2 * THUMB_INSET) / static_cast<int>(segments.size());
+	int stacked = 0;
+	for (const TswSegment *segment : segments)
+		stacked = std::max(stacked, segment->stackedHeight(segmentWidth));
+	return std::max(height, stacked + 2 * THUMB_INSET);
 }
 
 QSize TswRail::sizeHint() const

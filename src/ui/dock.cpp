@@ -78,10 +78,11 @@ QString sentence(const QString &word)
 	return word.isEmpty() ? word : word.left(1).toUpper() + word.mid(1).toLower();
 }
 
-/* A file name that may wrap after its separators, so a long name never widens the dock. */
+/* A file name that may wrap after its separators, so a long name never widens the dock. Never
+ * after the dot: "tswitch." above "mp4" reads badly. */
 QString breakable(QString name)
 {
-	for (const QString &separator : {QStringLiteral("_"), QStringLiteral("-"), QStringLiteral(".")})
+	for (const QString &separator : {QStringLiteral("_"), QStringLiteral("-")})
 		name.replace(separator, separator + QChar(0x200B));
 	return name;
 }
@@ -502,8 +503,6 @@ void TswDock::applyReserves()
 	reserve.headlines = {text("Error.E001.Headline"), text("Error.E002.Headline"), text("Error.E103.Headline"),
 			     text("Error.E901.Headline")};
 	reserve.widestSpeed = speedText(WIDEST_SPEED);
-	reserve.tallies = {text("State.Tally.Ready"), text("State.Tally.Rec"), text("State.Tally.Saving"),
-			   text("State.Tally.Saved"), text("State.Tally.Error")};
 	reserve.stretchLabel = text("Counter.Stretch") + " " + speedText(WIDEST_SPEED);
 	reserve.stretchValues = QString("0:00:00") + QString::fromUtf8(ARROW) + "0:00:00";
 	status->setReserve(reserve);
@@ -755,7 +754,7 @@ void TswDock::showCard()
 	cardTitle->setText(name.isEmpty() ? text("State.Hero.Saved") : breakable(name));
 	QString body = text("Summary.Skipped", QString::fromUtf8(view.skipped));
 	if (view.thank_user)
-		body += " " + text("Summary.Thanks");
+		body += "\n" + text("Summary.Thanks"); /* its own line: the fact, then the warm word */
 	cardBody->setTextFormat(Qt::PlainText);
 	cardBody->setText(body);
 	cardTodo->hide();

@@ -21,7 +21,8 @@ namespace {
 
 const int UNBOUNDED_HEIGHT = 100000; /* px: room for any wrapped text when measuring it */
 const double RING_WIDTH = 2.0;       /* UX-110: at least 2 px */
-const double RING_INSET = 1.0;
+const double RING_DASH = 2.0;
+const double RING_DASH_GAP = 1.5;
 const double GLYPH_OF_LINE = 0.8; /* a glyph is this share of its text's line: 16 px at 1.1b */
 const int MAX_BALANCE_STEPS = 16; /* a binary search over a width under 65536 px (P10-2) */
 
@@ -57,10 +58,16 @@ void tswPaintRounded(QPainter &painter, const QRectF &box, double radius, const 
 	painter.restore();
 }
 
-void tswPaintFocusRing(QPainter &painter, const QRectF &box, double radius, const QColor &color)
+void tswPaintFocusRing(QPainter &painter, const QRectF &box, double radius, const QColor &color, double inset,
+		       TswRing style)
 {
-	const QRectF ring = box.adjusted(RING_INSET, RING_INSET, -RING_INSET, -RING_INSET);
-	tswPaintRounded(painter, ring, std::max(0.0, radius - RING_INSET), QColor(), tswBorder(color, RING_WIDTH));
+	const QRectF ring = box.adjusted(inset, inset, -inset, -inset);
+	QPen pen = tswBorder(color, RING_WIDTH);
+	if (style == TswRing::Dashed) {
+		pen.setDashPattern({RING_DASH, RING_DASH_GAP}); /* in pen widths: 4 px dash, 3 px gap */
+		pen.setCapStyle(Qt::FlatCap);                   /* square caps would grow each dash into the gaps */
+	}
+	tswPaintRounded(painter, ring, std::max(0.0, radius - inset), QColor(), pen);
 }
 
 bool tswHasKeyFocus(const QWidget *widget)
