@@ -11,6 +11,10 @@
 #   tests/integration/measure.sh [--resolution 1080|2160] [--seconds 300]
 #                                [--idle 60] [--after 30]
 #                                [--encoder <OBS encoder id>]
+#                                [--modes "obs plugin plugin-c"]
+#
+# Modes: obs, OBS's own Record button; plugin, the plugin on road B (OBS
+# copies the frames); plugin-c, the plugin on road C (ADR-012).
 #
 # Each mode gets a fresh sandbox OBS (sandbox.sh): a minute idle, then the
 # recording, then half a minute once the file is saved. The sync probe is
@@ -38,6 +42,12 @@ measure_mode() {
   local sandbox
   sandbox="$(mktemp -d "${TMPDIR:-/tmp}/timelapse-switch-measure.XXXXXX")"
   make_sandbox "${sandbox}" "${media}" "${height}" "${encoder}" 0
+  # OBS passes its environment on to the plugin, which reads the road there.
+  if [[ "${mode}" == 'plugin-c' ]]; then
+    export TIMELAPSE_SWITCH_ROAD='C'
+  else
+    unset TIMELAPSE_SWITCH_ROAD
+  fi
   start_obs "${sandbox}" || return 1
   local pid="${OBS_PID}" log="${OBS_LOG}"
   trap 'close_obs '"${pid}" EXIT
@@ -56,9 +66,10 @@ measure_mode() {
 
 main() {
   local height=2160 seconds=300 idle=60 after=30
-  local encoder='hevc_ffmpeg_vaapi_tex'
+  local encoder='hevc_ffmpeg_vaapi_tex' modes='obs plugin plugin-c'
   while (($# > 0)); do
     case "$1" in
+      --modes) modes="$2" && shift ;;
       --resolution) height="$2" && shift ;;
       --seconds) seconds="$2" && shift ;;
       --idle) idle="$2" && shift ;;
@@ -75,7 +86,7 @@ main() {
   out="build_x86_64/measure/$(date +%Y-%m-%d_%H-%M-%S)"
   mkdir -p "${out}"
   local mode
-  for mode in obs plugin; do
+  for mode in ${modes}; do
     measure_mode "${mode}" "${media}" "${height}" "${encoder}" "${idle}" \
       "${seconds}" "${after}" "${out}"
   done
