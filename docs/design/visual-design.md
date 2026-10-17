@@ -101,9 +101,8 @@ The six zones of `ux-spec.md` 3.2 stay, in the same order, grouped into four ban
  |           B  readout: captions, digits, status line  |  fixed height
  |  ACTION   C  main button                             |  fixed y, fixed height
  |  BELOW    D  idle: start mode + speed rail           |
- |              recording or saving: caption + rail,    |  same height in all four
- |              and the room of the resume mode         |
- |              paused: speed rail + resume mode        |
+ |              recording or saving: caption + rail     |  same height in all four
+ |              paused: caption + "Resume in" rail      |
  |              summary or error: the card (D to F)     |
  |           E  Pause (Resume) and Stop, after a gap    |  fixed y in recording states
  |  CONTEXT  F  one muted line with an info glyph       |
@@ -115,11 +114,11 @@ The six zones of `ux-spec.md` 3.2 stay, in the same order, grouped into four ban
 - **A** has a fixed height: the tallest of its contents over all states, measured with `QFontMetrics` at the current width (section 3.6, "hero box").
 - **B** has a fixed height of three rows: captions, digits and a *status line*. The status line shows the current stretch while recording ("This stretch 12:03" in real time, "This stretch ×4 19:37 → 4:54" in timelapse), a one-line warning summary when a warning is active, and nothing (but keeps its height) when idle.
 - **C** therefore starts at the same y in every state. Its height is fixed too (section 3.7).
-- **D** has the same height in real time, timelapse, paused and saving, so **E** keeps its y in all recording states, paused included: Resume appears exactly where Pause was (UX-128). While paused D shows two rails, the speeds and "Resume in"; while recording and saving the "Resume in" rail is hidden but keeps its room, below the speed rail, so the speeds stay right under the main button and the room reads as the gap before the transport row.
+- **D** has the same height in real time, timelapse, paused and saving, so **E** keeps its y in all recording states, paused included: Resume appears exactly where Pause was (UX-128). While paused D shows one rail, "Resume in" (Real time and the speeds), in the speed rail's place and exactly as tall, so nothing is kept empty in any state.
 - **Cards** (summary and error) open *below* C, in the D to F area. They never push C down. A habitual click on Record after a take lands on Record.
 - A **warning** never inserts a row above C: its summary takes B's status line, and its details go in a card in the F area (below Stop).
 
-The UI test asserts this: `tswMain.y` is equal across all 11 states, and `tswStop.y` and `tswPause.x` are equal across real time, timelapse, the three paused cases and saving, at each width and language (section 3.13).
+The UI test asserts this: `tswMain.y` is equal across all 11 states, and `tswStop.y`, `tswPause.x` and the height of D's rail are equal across real time, timelapse, the three paused cases and saving, at each width and language; and D keeps no empty room (section 3.13).
 
 ### 3.2 States, zone by zone
 
@@ -129,8 +128,8 @@ The UI test asserts this: `tswMain.y` is equal across all 11 states, and `tswSto
 | Idle, timelapse start | READY | Starts in timelapse ×4 (quiet) | as above | empty | as above | as above, Timelapse selected | hidden | as above |
 | Recording, real time | (o) REC | REAL TIME | live | This stretch 12:03 | Switch to timelapse ×4 | Next speed rail, armed | Pause, Stop and save | File: name |
 | Recording, timelapse | (o) REC | TIMELAPSE ×4 | live | This stretch ×4 19:37 → 4:54 | Back to real time | Speed now rail, engaged | Pause, Stop and save | (i) Audio: silence during timelapse |
-| Paused, resumes in real time | (‖) PAUSED, and a pause sign | Resumes in real time (quiet) | standing still | Paused for 0:01:12 | Resume in real time | Timelapse speed rail, armed; Resume in: Real time / Timelapse | Resume, Stop and save | (i) Nothing is recorded until you resume. |
-| Paused, resumes in timelapse | as above | Resumes in timelapse ×4 (quiet) | as above | as above | Resume in timelapse ×4 (armed) | as above, Timelapse selected | as above | as above |
+| Paused, resumes in real time | (‖) PAUSED, and a pause sign | Resumes in real time (quiet) | standing still | Paused for 0:01:12 | Resume in real time | Resume in: Real time, ×2, ×4, ×8, ×16; Real time armed | Resume, Stop and save | (i) Nothing is recorded until you resume. |
+| Paused, resumes in timelapse | as above | Resumes in timelapse ×4 (quiet) | as above | as above | Resume in timelapse ×4 (armed) | as above, ×4 armed | as above | as above |
 | Saving | ... SAVING | Finishing the file (quiet) | frozen | empty | Record with Timelapse Switch, disabled | Speed rail, disabled | Pause and Stop, disabled | Keep OBS open until the file is saved. |
 | Summary | (v) SAVED | File ready (quiet) | the last take | empty | Record with Timelapse Switch | Summary card | hidden | hidden |
 | Error | (X) ERROR | Recording stopped (headline) | the last take, or 0:00:00 muted | empty | Record with Timelapse Switch | Error card | hidden | hidden |
@@ -171,7 +170,8 @@ New and changed locale keys. Every one exists in `data/locale/en-US.ini` and `es
 | `Action.ResumeRealTime` | Resume in real time | Reanudar en tiempo real | C, paused |
 | `Action.ResumeTimelapse` | Resume in timelapse ×%1 | Reanudar en timelapse ×%1 | C, paused |
 | `Label.StartIn` | Start in | Empezar en | D caption, idle (no colon) |
-| `Label.ResumeIn` | Resume in | Reanudar en | D caption, paused |
+| `Label.ResumeIn` | Resume in | Reanudar en | D caption, paused, over the one rail |
+| `A11y.ResumeChoice` | how it will resume | así se reanudará | description of the chosen segment of that rail |
 | `Label.Speed` | Timelapse speed | Velocidad del timelapse | D caption, idle and saving |
 | `Label.NextSpeed` | Next speed | Próxima velocidad | D caption, real time |
 | `Label.SpeedNow` | Speed now | Velocidad actual | D caption, timelapse |
@@ -421,7 +421,7 @@ All files follow `docs/coding-rules.md`: functions under 60 lines, bounded loops
 ### 3.11 Accessibility
 
 - **Grayscale.** Each state has its own shape: READY plain, REAL TIME outlined, TIMELAPSE filled with chevrons, PAUSED held between two thick bars with a solid pause sign, SAVING dashed with dots, SAVED with a check, ERROR dashed with a cross. Release screenshots include a grayscale pass (UX-100).
-- **Focus order** is set with `setTabOrder` per state, in visual order: idle: main, start mode, speeds; recording: main, speeds, Pause, Stop; paused: main, speeds, resume mode, Resume, Stop; summary: main, card dismiss, Open folder, Play; error: main, card dismiss, fix button, Copy details, Learn more. Esc dismisses an open card (UX-102).
+- **Focus order** is set with `setTabOrder` per state, in visual order: idle: main, start mode, speeds; recording: main, speeds, Pause, Stop; paused: main, the "Resume in" rail, Resume, Stop; summary: main, card dismiss, Open folder, Play; error: main, card dismiss, fix button, Copy details, Learn more. Esc dismisses an open card (UX-102).
 - **Keyboard focus ring** (UX-110): shown only for keyboard focus (Tab, Backtab or a shortcut, caught by a `FocusIn` filter that sets a `tswKeyFocus` property, cleared on `FocusOut`). Painted widgets draw a 2 px ring in `focus`, inset 1 px, following their shape. Theme-drawn widgets under Yami get `border: 2px solid <focus>` from the dock's style sheet; under System the platform's focus frame stays.
 - **Rails.** Arrow keys move focus between segments without selecting; Space or Enter selects. Arrowing through the speeds during a timelapse therefore never changes the live speed by accident.
 - **Names.** Every control has an accessible name in the UI language. The state block's name is the tally and hero ("Recording, timelapse, 4 times faster"); B's name uses words ("31 minutes 40 seconds recorded, 16 minutes 58 seconds of final video", never "→"); chips add "next timelapse speed" or "speed now".
@@ -445,9 +445,10 @@ The theme harness already draws every state in every theme. The baseline adds th
 | Check | Fails when |
 |---|---|
 | Viewport fit | any visible widget's right edge is past the scroll area's viewport, at 220, 260 and 300 px |
-| Fixed positions | `tswMain.y` differs between any two states, or `tswStop.y` or `tswPause.x` between real time, timelapse, paused and saving, at one width and language |
+| Fixed positions | `tswMain.y` differs between any two states, or `tswStop.y`, `tswPause.x` or the height of D's rail between real time, timelapse, paused and saving, at one width and language |
+| No reserve | zone D has empty room: more than a group gap between its visible captions and rails, or below the last one |
 | Zone E | Pause and Stop are neither one row (same y and height, Pause on the left, not touching) nor stacked (same x and width, Pause above) |
-| Cut words | a painted button is narrower than its longest word, glyph and padding (a single word cannot wrap) |
+| Cut words | a painted button is narrower than its longest word, glyph and padding (a single word cannot wrap), or a rail's label is wider than its segment |
 | Quick pauses | 60 Pause and Resume presses, one in four a double press within 400 ms, leave a label or the state block saying something else than the core's state, or move Pause, Stop or the main button (UX-133) |
 | Hero size | the effective hero size is below the direction's floor, measured with `QFontInfo` (labels) or the painted font (exposed as a property for the test) |
 | State contrast | `accent`, `danger` and the timelapse fill (with its border) are below 3:1 against what they sit on; `onAccent`, `text` and `muted` below 4.5:1 |
@@ -737,10 +738,12 @@ In timelapse the FINAL VIDEO digits are painted in `ink(accent, accentTint)`, an
 |---|---|---|
 | Engaged (timelapse running) | `accentFill`, 2 px `accent` border | `onAccent`, Bold |
 | Armed (idle, real time) | `panel` (a cut-out look), 2 px `shape(accent, surface)` border | `text`, Bold |
-| Start (or resume) mode, Real time selected | `raised`, 1 px `edge` | `text`, Bold |
+| Start mode, Real time selected | `raised`, 1 px `edge` | `text`, Bold |
 | Unselected segment | none; `hover(surface)` capsule on hover | `text`, Regular |
 
-When the selection changes, the thumb slides to its new segment in 160 ms (OutCubic). The armed outline is 3.00 to 3.47:1 against the track after the guard; the engaged thumb is filled, so armed and engaged differ in shape, not only in color.
+**The "Resume in" rail** (paused) is the speed rail's twin in the same place: Real time, then ×2, ×4, ×8 and ×16, all armed (a choice for later, never filled). Real time is a *lead* segment: as wide as its play glyph and word need, the speeds sharing the rest, every segment with an equal share of the spare room, so the five fit one row: with their words at 300 and 260 px in both languages (labels shrink from 1.1b to 0.9b first; Spanish at 260 px needs it), and where even then "Real time" cannot fit (220 px, Font Size 12 in Spanish), its play glyph alone in five equal segments, the words in its tooltip and accessible name. It never takes a second row, so it is always as tall as the speed rail.
+
+When the selection changes, the thumb slides to its new segment in 160 ms (OutCubic), its width too where segments differ. The armed outline is 3.00 to 3.47:1 against the track after the guard; the engaged thumb is filled, so armed and engaged differ in shape, not only in color.
 
 **Pause and Stop (E).** Two pills side by side, `s3` apart, `max(1.8 L, hC)`, no fill, 1 px `edge` frame, glyph and label in `text`, Regular: Pause (two bars) and Stop and save (square). While paused the first reads Resume, with the glyph of the mode it will resume in, as on the main button. Equal halves while every label they may show fits its half on one line; else Pause takes what its longer word needs and Stop the rest, so "Stop and save" keeps one line wherever it can (Spanish at 300 px, English at 260 px); only where a word would be cut (220 px at Font Size 12) they stack, full width, like the card's pills. When a label still wraps both become rounded rectangles, never tall stadiums. The arrangement depends only on the width, the language and the theme, so Resume is exactly where Pause was. The hold fill grows from the left of Stop as `dangerTint` with a 2 px leading edge in `shape(danger, dangerTint)`.
 
@@ -766,7 +769,7 @@ When the selection changes, the thumb slides to its new segment in 160 ms (OutCu
 - *Extremes, never clipping.* At Font Size 12 in a dock narrowed by a scroll bar, the main button may take three lines, a start-mode word may wrap under its glyph, and a recording hero that cannot fit at its floor size drops its leading glyph before it would shrink or clip.
 - *No glyph cache.* Glyphs are painted straight into each widget's painter, which is sharp at any screen scale; a cache can come later if a measurement shows the need (`docs/coding-rules.md`, D3).
 - *Not built yet, for lack of data in the view:* the speed map in the summary card (its place is the tape band), the warning line and card, the Starting state (no such phase is reported yet; its words exist), the Large glance size and Reduce motion settings (the dock has `setReduceMotion`), and the Stop hold fill (painted when given a progress; nothing reports a hotkey hold to the dock yet).
-- *Pause* (2026-10-17, REQ-019, UX-128 to UX-133), with these choices the screenshots asked for: the pause sign sits on the tally line, because beside the hero it made "Resumes in timelapse ×16" wrap and every state's card grow; the side bars carry the frame's shape over a thin neutral outline, because a 2 px amber outline with slightly thicker sides read as a color change only; "Resume in" keeps its room below the speeds, not above them, so the recording states keep the speed rail under the main button and the room reads as the gap before Pause and Stop; and a rail that appears shows its choice at once, without the thumb's slide.
+- *Pause* (2026-10-17, REQ-019, UX-128 to UX-133), with these choices the screenshots asked for: the pause sign sits on the tally line, because beside the hero it made "Resumes in timelapse ×16" wrap and every state's card grow; the side bars carry the frame's shape over a thin neutral outline, because a 2 px amber outline with slightly thicker sides read as a color change only; the maintainer then chose one "Resume in" rail (Real time and the speeds) over the two rails of the first build, whose second rail kept about 60 px of empty room in every recording state; and a rail that appears shows its choice at once, without the thumb's slide.
 - *Grafts after the panel review* (2026-10-17, the maintainer chose this direction with them): from Transport, the hollow real-time card, the solid timelapse band, the tape band, the accent bar beside FINAL VIDEO, the summary ticket with its big figure, the error code in the card header and the taller main button; a larger hero and digits; from Native, restraint in motion, the theme's own corners and light button faces, and the tighter narrow margins. The tables above describe the result.
 
 ---

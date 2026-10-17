@@ -145,7 +145,7 @@ The dock is a vertical stack of six zones in four bands: Status (A and B), Actio
 | A | State banner | Two lines. A tally: READY, (o) REC, PAUSED, STARTING, SAVING, SAVED or ERROR. A hero: "Starts in real time", REAL TIME, TIMELAPSE x4, "Resumes in real time" or "Resumes in timelapse x4" (paused), "Finishing the file", "File ready" or the error headline. Words, icon and frame style. |
 | B | Counters | RECORDED and FINAL VIDEO side by side, and a status line: the current stretch while recording, or a warning summary. |
 | C | Main slot | The biggest button, holding the most likely next action: Record (idle), Switch to timelapse or Back to real time (recording), "Resume in real time" or "Resume in timelapse x4" (paused), Record again (error, summary). |
-| D | Speed row | Speed chips x2, x4, x8 and x16 (a custom value later). When idle, also the starting mode; when paused, the mode to resume in. After a recording, the summary or error card takes zones D to F. |
+| D | Speed row | Speed chips x2, x4, x8 and x16 (a custom value later). When idle, also the starting mode. When paused, one "Resume in" rail in the chips' place: Real time, x2, x4, x8 and x16. After a recording, the summary or error card takes zones D to F. |
 | E | Stop slot | "Pause" (while paused, "Resume", in the same place) and "Stop and save", side by side, set apart by a gap or a rule. Shown while recording, paused and saving. |
 | F | Context line | Separate-file hint, file name, audio note, saving note, and the details of a warning. |
 
@@ -247,7 +247,7 @@ Mockups are about 300 px wide, a common dock width. Notes on the right are not p
 +----------------------------------------------+
 ```
 
-**Paused** (REQ-019). The block keeps no record dot and no REC: a PAUSED tally with two bars, a solid pause sign at the end of the tally line, and a frame held between two thick side bars, so it reads as paused without color. The hero, the main button and the "Resume in" rail all say the mode it will resume in, chosen right here; Pause has become Resume in the same place. The counters stand still and the status line counts the pause.
+**Paused** (REQ-019). The block keeps no record dot and no REC: a PAUSED tally with two bars, a solid pause sign at the end of the tally line, and a frame held between two thick side bars, so it reads as paused without color. The hero, the main button and the "Resume in" rail all say the mode it will resume in, chosen right here on one rail that takes the speed rail's place and height, so nothing below it moves; Pause has become Resume in the same place. The counters stand still and the status line counts the pause.
 
 ```
 +-- Timelapse Switch ------------------ [?][*] +
@@ -262,10 +262,9 @@ Mockups are about 300 px wide, a common dock width. Notes on the right are not p
 |  +========================================+  |
 |  ||  >>  Resume in timelapse x4          ||  |   C  names the mode; armed (outlined)
 |  +========================================+  |
-|  TIMELAPSE SPEED                             |   D  the speed to resume at
-|  [    x2   |   (x4)  |    x8   |   x16   ]   |
-|  RESUME IN                                   |      the mode to resume in; while
-|  [    >  Real time   |   (>> Timelapse)  ]   |      recording, its room stays empty
+|  RESUME IN                                   |   D  one rail, as tall as the speed
+|  [ >  Real time  | x2 | (x4) | x8 | x16  ]   |      rail: real time or a speed; armed
+|                                              |
 |  [ >>  Resume      ]  [ []  Stop and save ]  |   E  Resume where Pause was
 |  (i) Nothing is recorded until you resume.   |   F
 +----------------------------------------------+
@@ -567,7 +566,7 @@ Rules behind the table:
 | UX-128 | While recording, in real time or in timelapse, zone E MUST offer "Pause" next to "Stop and save"; while paused, the same button, in the same place, MUST read "Resume". Accessible names: "Pause recording" and "Resume recording". The hotkey "Pause or resume" does the same (3.11). | [CONTROL] [LEARN] |
 | UX-129 | The paused state MUST be unmistakable without color: a PAUSED tally with a pause glyph (two bars), no record dot and no REC, and a frame style that differs from both recording states and from saving. Its hero says, in sentence case, the mode it will resume in: "Resumes in real time" or "Resumes in timelapse x4". | [SELF] |
 | UX-130 | While paused, the main slot MUST read "Resume in real time" or "Resume in timelapse xN": the label itself always names the mode and speed recording will resume in, so the user never has to guess. | [SELF] [CONTROL] |
-| UX-131 | While paused, the user MUST be able to choose the mode to resume in with the same two-segment control as idle ("Resume in": Real time, Timelapse) and the speed chips; the mode and speed hotkeys choose too. None of them resumes by itself. The choice starts from the mode and speed before the pause and lasts until that pause ends. | [CONTROL] |
+| UX-131 | While paused, the user MUST be able to choose how to resume on one rail, "Resume in", that takes the speed chips' place and height: Real time, x2, x4, x8 and x16, the choice marked as armed (outlined and bold). Real time means resume in real time; a speed means resume in timelapse at that speed. The mode and speed hotkeys choose too. None of them resumes by itself. The choice starts from the mode and speed before the pause and lasts until that pause ends. At 300 and 260 px the five segments MUST show their words in both languages; where "Real time" cannot fit on the rail's one row, its play glyph stands for it, with the words in its tooltip and accessible name. | [CONTROL] |
 | UX-132 | While paused, RECORDED and FINAL VIDEO MUST stand still (paused time never counts in either), and the status line MUST show how long the pause has lasted ("Paused for 0:01:12"). | [TASK] [SELF] |
 | UX-133 | Pause and resume MUST act at once and as often as the user wants; only a second press within 400 ms of the previous pause or resume is taken as a double press and ignored (UX-046). Stopping while paused MUST save the file like any other stop. | [CONTROL] [ROBUST] |
 

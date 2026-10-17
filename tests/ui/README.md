@@ -14,7 +14,8 @@ Both draw the same 11 states (idle, idle starting in timelapse, real time, timel
 | Check | Fails when |
 |---|---|
 | Texts | the dock asks for a key the locale file lacks |
-| Zones and fixed positions | a zone is not below the one before it; the main button moves between states, or Pause or Stop between real time, timelapse, paused and saving; Pause and Stop are neither one row nor stacked |
+| Zones and fixed positions | a zone is not below the one before it; the main button moves between states, or Pause or Stop between real time, timelapse, paused and saving; the paused "Resume in" rail is not as tall as the recording speed rail; Pause and Stop are neither one row nor stacked |
+| No reserve | zone D keeps empty room (more than a group gap between its captions and rails, or below them) |
 | Fit | a visible widget ends past what the scroll area shows, or the dock cannot shrink to 200 px |
 | Nothing cut | a label or painted block is shorter than its lines, a painted text does not fit, or the hero falls below its floor (1.5 times the base size) |
 | No hole | the status line, whose row every state keeps, is empty |
@@ -23,7 +24,7 @@ Both draw the same 11 states (idle, idle starting in timelapse, real time, timel
 | Words and focus | the main button is named like a state, or Tab goes back up the dock |
 | Resize | a dock narrowed (or widened) by hand differs from one made at that width |
 | Pause, Stop and the card | they show when they should not, or the other way round; the card's two pills share a row although a label wraps |
-| Cut words | a painted button is narrower than its longest word (a single word cannot wrap, so it would run past the edge) |
+| Cut words | a painted button is narrower than its longest word (a single word cannot wrap, so it would run past the edge), or a rail's label is wider than its segment |
 | Quick pauses | 60 Pause and Resume clicks, one in four a double press within 400 ms, leave a label or the state block out of step with the core, or move Pause, Stop or the main button (UX-133) |
 | Reduce motion | with it on, the thumb still slides, or a slide under way goes on (UX-045) |
 
