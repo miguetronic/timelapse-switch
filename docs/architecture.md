@@ -38,12 +38,12 @@ Only the two valves are new logic. The encoding and the file writing are OBS's o
 | Module | File(s) | Language | Job |
 |---|---|---|---|
 | Plugin entry | `src/plugin-main.c` | C | Load and unload; hotkeys, settings, OBS closing. **Exists.** |
-| Session | `src/core/session.c` | C | Pure logic, no OBS: what each button and hotkey means in each state, the chosen speed and starting mode, the double-press guard (UX-046). **Exists**, unit tested. |
+| Session | `src/core/session.c` | C | Pure logic, no OBS: what each button and hotkey means in each state (also paused), the chosen speed, starting mode and mode to resume in, the double-press guard (UX-046). **Exists**, unit tested. |
 | Dock view | `src/core/dock-view.c` | C | Pure logic, no OBS or Qt: what each zone of the dock shows, the summary and error cards. **Exists**, unit tested. |
 | Controller | `src/controller.c` | C | The one place where hotkeys and dock buttons act, so both give the same result (UX-053). **Exists.** |
 | Logging | `src/plugin-support.*` | C | `tsw_log`: OBS log lines with the plugin prefix. **Exists.** |
 | Compiler differences | `src/tsw-compiler.h` | C | The only conditional compilation. **Exists.** |
-| Timeline | `src/core/timeline.c` | C | Pure math, no OBS: maps any OBS time to its position in the final video. **Exists**, unit tested. |
+| Timeline | `src/core/timeline.c` | C | Pure math, no OBS: maps any OBS time to its position in the final video; a pause is a section in which the final video stands still (ADR-011). **Exists**, unit tested. |
 | Gates | `src/core/gate.c` | C | Pure math, no OBS: from that position, how many copies of each frame and which audio blocks go to the encoder. **Exists**, unit tested, including a 10-minute sync simulation. |
 | Audio ring | `src/core/audio-ring.c` | C | Pure, no OBS: the lock-free queue that carries audio blocks from OBS's audio thread to ours. **Exists**, unit tested. |
 | Valves (real-time path) | `src/recorder-rt.c` | C | Real-time: sends each frame 0, 1 or more times into our video feed, and passes, silences or skips each audio block, as the gates say. **Exists.** |

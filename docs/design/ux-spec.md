@@ -142,11 +142,11 @@ The dock is a vertical stack of six zones in four bands: Status (A and B), Actio
 
 | Zone | Name | Contents by state |
 |---|---|---|
-| A | State banner | Two lines. A tally: READY, (o) REC, STARTING, SAVING, SAVED or ERROR. A hero: "Starts in real time", REAL TIME, TIMELAPSE x4, "Finishing the file", "File ready" or the error headline. Words, icon and frame style. |
+| A | State banner | Two lines. A tally: READY, (o) REC, PAUSED, STARTING, SAVING, SAVED or ERROR. A hero: "Starts in real time", REAL TIME, TIMELAPSE x4, "Resumes in real time" or "Resumes in timelapse x4" (paused), "Finishing the file", "File ready" or the error headline. Words, icon and frame style. |
 | B | Counters | RECORDED and FINAL VIDEO side by side, and a status line: the current stretch while recording, or a warning summary. |
-| C | Main slot | The biggest button, holding the most likely next action: Record (idle), Switch to timelapse or Back to real time (recording), Record again (error, summary). |
-| D | Speed row | Speed chips x2, x4, x8 and x16 (a custom value later). When idle, also the starting mode. After a recording, the summary or error card takes zones D to F. |
-| E | Stop slot | "Stop and save", full width, set apart by a gap or a rule. Shown while recording and saving. |
+| C | Main slot | The biggest button, holding the most likely next action: Record (idle), Switch to timelapse or Back to real time (recording), "Resume in real time" or "Resume in timelapse x4" (paused), Record again (error, summary). |
+| D | Speed row | Speed chips x2, x4, x8 and x16 (a custom value later). When idle, also the starting mode; when paused, the mode to resume in. After a recording, the summary or error card takes zones D to F. |
+| E | Stop slot | "Pause" (while paused, "Resume", in the same place) and "Stop and save", side by side, set apart by a gap or a rule. Shown while recording, paused and saving. |
 | F | Context line | Separate-file hint, file name, audio note, saving note, and the details of a warning. |
 
 **Fixed positions.** At a given width, language, font and density, zones A, B and C keep their pixel positions in every state, and E keeps its position in every recording state: A and B have fixed heights, the status line of B keeps its height even when empty, and cards and warning details open below C, never above it. How each zone looks, in every OBS theme, is specified in `docs/design/visual-design.md`.
@@ -157,15 +157,21 @@ Why does the main slot change from Record to the switch? Because those are the n
 
 ```
   IDLE ---Record---> STARTING ---ok---> REC: REAL TIME  <---switch--->  REC: TIMELAPSE xN
-   ^                    |                     |                              |
-   |                  failed                 Stop                           Stop
-   |                    |                     +--------------+---------------+
-   |                    v                                    v
-   |                  ERROR  <-------- failed ----------  SAVING  ---ok--->  SUMMARY
-   |                    |                                                       |
-   +----- dismiss ------+------------------------- dismiss ---------------------+
+   ^                    |                    |      ^                      ^      |
+   |                  failed                 |      |   Pause    Resume    |      |
+   |                    |                    |      v   (in the mode shown) v      |
+   |                    |                    |    +------- PAUSED ---------+      |
+   |                    |                    |                 |                  |
+   |                    |                   Stop              Stop               Stop
+   |                    |                    +-----------------+------------------+
+   |                    v                                      v
+   |                  ERROR  <-------- failed ------------  SAVING  ---ok--->  SUMMARY
+   |                    |                                                        |
+   +----- dismiss ------+------------------------- dismiss ----------------------+
           (Record pressed in ERROR or SUMMARY goes straight to STARTING)
 ```
+
+**Paused** (REQ-019): reached with Pause from real time or from timelapse, as often as wanted. Nothing reaches the file while paused, and the counters stand still. While paused, the user chooses the mode and speed to resume in (by default the ones before the pause); the banner and the main button always say which. Resume returns to recording in that mode; Stop saves the file as usual.
 
 A failure during a recording (disk full, encoder error) triggers SAVING automatically, so the file is finalized before the ERROR state appears. Speed chips change N inside the timelapse state without leaving it. Warnings never change the state; they appear under the counters or in zone F.
 
@@ -463,6 +469,7 @@ Hotkeys use OBS's own frontend hotkey API, so they appear in Settings > Hotkeys,
 | Timelapse Switch: Faster / Slower | single, two keys (a pair would make one key toggle between them, which is not useful here) | Num + / Num - | |
 | Timelapse Switch: Add chapter marker | single | Num . | |
 | Timelapse Switch: Record / Stop and save | pair, Stop needs a 1 s hold | Num Enter | F18 |
+| Timelapse Switch: Pause or resume | single (one key pauses and resumes; no hold: a pause is undone by the same key) | Num * | F19 |
 
 Rules behind the table:
 
@@ -533,6 +540,12 @@ Rules behind the table:
 | UX-018 | Icons MUST be monochrome vectors (painted with `QPainter`, or SVG tinted at runtime) in a color derived from the surface they sit on, painted at the screen's device pixel ratio and painted again when it changes. The record dot SHOULD use the theme's danger color: it appears in both recording states, so it never encodes the speed. OBS's own icon classes MUST NOT be relied on, because their fixed white or black fills vanish in half the themes. | [EXPECT] |
 | UX-019 | Every release MUST be screenshot-checked in Yami Default, Classic, Grey, Light, Acri, Rachni and System, on each OS. The theme render harness (`tests/ui/obs-themes.sh`) MUST draw every state in those 7 themes, in both languages, at 220, 260 and 300 px, plus Font Size 8 and 12 with Classic and Comfortable density, and check fit, fixed positions, hero size and contrast; a sandbox OBS spot check per release completes it. | [EXPECT] |
 | UX-015 | The dock SHOULD let theme authors override its derived colors through Qt properties (`TswDock { qproperty-accentColor: ...; }`, also `dangerColor`, `successColor`, `warningColor` and `surfaceColor`). Unset properties come from the theme; set ones still pass the contrast adjustment of UX-016. | [EXPECT] |
+| UX-128 | While recording, in real time or in timelapse, zone E MUST offer "Pause" next to "Stop and save"; while paused, the same button, in the same place, MUST read "Resume". Accessible names: "Pause recording" and "Resume recording". The hotkey "Pause or resume" does the same (3.11). | [CONTROL] [LEARN] |
+| UX-129 | The paused state MUST be unmistakable without color: a PAUSED tally with a pause glyph (two bars), no record dot and no REC, and a frame style that differs from both recording states and from saving. Its hero says, in sentence case, the mode it will resume in: "Resumes in real time" or "Resumes in timelapse x4". | [SELF] |
+| UX-130 | While paused, the main slot MUST read "Resume in real time" or "Resume in timelapse xN": the label itself always names the mode and speed recording will resume in, so the user never has to guess. | [SELF] [CONTROL] |
+| UX-131 | While paused, the user MUST be able to choose the mode to resume in with the same two-segment control as idle ("Resume in": Real time, Timelapse) and the speed chips; the mode and speed hotkeys choose too. None of them resumes by itself. The choice starts from the mode and speed before the pause and lasts until that pause ends. | [CONTROL] |
+| UX-132 | While paused, RECORDED and FINAL VIDEO MUST stand still (paused time never counts in either), and the status line MUST show how long the pause has lasted ("Paused for 0:01:12"). | [TASK] [SELF] |
+| UX-133 | Pause and resume MUST act at once and as often as the user wants; only a second press within 400 ms of the previous pause or resume is taken as a double press and ignored (UX-046). Stopping while paused MUST save the file like any other stop. | [CONTROL] [ROBUST] |
 
 ### 3.15 Requirements: confusion guards and onboarding
 
@@ -893,7 +906,7 @@ Spanish happens to fit here, but future languages will not, so the layout must a
 ## 7. Open questions
 
 1. **Speeds.** Integers only (x2 to x60, by keeping 1 frame in N), or also fractions such as x1.5? What should the custom chip default to: x16?
-2. **Pause.** Should the TS recording have a Pause like OBS's, or is "timelapse at a very high speed" enough?
+2. **Pause.** Decided on 2026-10-17: yes, with the mode to resume in chosen while paused (REQ-019, ADR-011, UX-128 to UX-133).
 3. **Both recorders at once.** Keep allowing OBS's own recording in parallel (current spec, with a warning), or block it to keep things simple?
 4. **Settings scope.** Per OBS profile (like OBS's output settings) or global?
 5. **Speed badge in the video.** Should the TS file optionally show a small "x4" badge during timelapse? Rendered only into the TS file it would not leak into a live stream; as a scene source it would. Worth it for v1?

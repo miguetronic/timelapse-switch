@@ -174,3 +174,33 @@ The site is built with **Astro** and its documentation theme **Starlight** (amen
 - The site is published with 1.0.0, when there is a working plugin and a real demo to show.
 - Building it needs Node.js and npm packages. They run only in GitHub Actions and on the maintainer's machine, never reach visitors and are not part of the plugin, so they do not enter its SBOM. They are pinned with a lock file and watched by Dependabot.
 - By default Astro turns file names into lowercase addresses. The error pages must keep the exact pattern above (or the plugin's link changes before 1.0.0), and a check opens every error link the plugin builds, in both languages.
+
+---
+
+## ADR-011. Pause as a section of the plugin's own timeline
+
+*Date: 2026-10-17. Status: accepted (REQ-019).*
+
+**Context.** Users pause recordings, sometimes many times in a row, both in real time and in timelapse, and may want to resume in a different mode. A pause must never freeze OBS, lose sync or damage the file.
+
+**Decision.** A pause is one more section of the plugin's timeline, in which the final video does not move (`tsw_timeline_pause`). Frames and audio of a paused section never pass the gates, so nothing reaches the encoders; resuming appends a normal section, at the mode and speed chosen while paused. The output and the encoders never know a pause happened.
+
+```
+  OBS time:     0s ......... 10s ............ 25s ......... 30s
+  section:      x1           PAUSED            x1
+  final video:  0s ......... 10s              10s ......... 15s     (the pause takes no time)
+```
+
+Details that keep it robust:
+- A pause is refused unless one more section stays free after it, so its resume always fits (the timeline holds 4096 sections: about 2000 pauses per recording).
+- A stop while paused first resumes at the very moment of the stop. Emptying the encoder needs frames and audio flowing, because OBS's file writer interleaves them; with the audio held back by the pause the file was never finished (found by the "pauses" integration scenario before release).
+- No chapter for a pause; resuming at another speed than before adds the chapter of that speed.
+- A second press within 400 ms of the previous pause or resume is a double press (UX-046), with its own clock: a pause right after a speed switch is a real wish.
+
+**Alternatives.**
+- *OBS's own output pause* (`obs_output_pause`). Rejected: it compares exact timestamps, and with frames that arrive at the irregular pace of timelapse a skipped frame can leave the recording paused for ever (the same reason ADR-002 rejected pause-based timelapse); and its timestamps would fight the plugin's own timeline.
+- *Timelapse at a very high speed instead of a pause.* Rejected: it still records, slowly, and it needs a chapter.
+
+**Consequences.**
+- Verified by unit tests (timeline, session, a 10-minute simulation with 410 pauses), and in a real OBS by the integration scenarios `pause` and `pauses` (40 quick pauses, each choosing how to resume, ending with Stop while paused): every pause is left out of the file exactly, sync holds, nothing is lost.
+

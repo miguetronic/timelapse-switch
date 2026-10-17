@@ -21,6 +21,7 @@ Wording follows the usual convention: **must** is mandatory, **should** is recom
 | REQ-005 | Audio and video must stay in sync across any number of switches, without drift: the audio never more than half an audio block from its place (10.7 ms at 48 kHz), the video never more than half a frame (16.7 ms at 30 fps), so they are never more than about 27 ms apart, well under the roughly 45 ms at which viewers notice. | Must | Test, Measure | Draft |
 | REQ-006 | During timelapse sections, the audio must be silence by default. | Must | Test | Draft |
 | REQ-007 | Each switch should add a chapter marker when the file format supports it (Hybrid MP4). | Should | Demo | Draft |
+| REQ-019 | During a recording, in real time or in timelapse, the user must be able to pause and resume as often as they like. Nothing recorded while paused reaches the file, and the file continues without a gap or a jump. While paused, the user can choose the mode and speed to resume in (by default the ones before the pause), and the dock always shows which. Stopping while paused must save the file normally. Many quick pauses must never freeze OBS, lose sync or damage the file. | Must | Test, Demo | Draft |
 
 ## Compatibility
 
@@ -57,7 +58,7 @@ Wording follows the usual convention: **must** is mandatory, **should** is recom
 
 These come from `docs/design/ux-spec.md`, section 7, and will become requirements once decided:
 
-- Non-integer speeds (x1.5)? A pause button?
+- Non-integer speeds (x1.5)?
 - Allow OBS's recording and ours at the same time, or warn only?
 - Sign the installers (Apple Developer ID, Windows signing) before 1.0?
 - A visible "x4" mark in the video, sped-up audio, sound cues?
