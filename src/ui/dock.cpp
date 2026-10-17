@@ -301,8 +301,9 @@ void TswDock::buildCardActions()
 	learnMore->setLabel(text("Button.LearnMore"));
 	auto *links = new QBoxLayout(QBoxLayout::LeftToRight, linkRow);
 	links->setContentsMargins(0, 0, 0, 0);
-	links->addWidget(copyDetails);
-	links->addWidget(learnMore);
+	/* At their own width, also one under the other: a link is its words, not the row. */
+	links->addWidget(copyDetails, 0, Qt::AlignLeft);
+	links->addWidget(learnMore, 0, Qt::AlignLeft);
 	links->addStretch();
 }
 
