@@ -9,7 +9,7 @@ The dock drawn without OBS, in every state, so a person can look at it and a pro
 | Look | Qt's own Fusion look | exactly as OBS draws the dock, in each of its 7 themes |
 | Pictures | `build_x86_64/ui-screenshots/*.png` | `build_x86_64/ui-screenshots/<theme>/` and `.../contact-sheets/` |
 
-Both draw the same 11 states (idle, idle starting in timelapse, real time, timelapse, paused from real time, paused from timelapse, paused after choosing timelapse x16 with a speed key, saving, summary, two errors), in English and Spanish, 300, 260 and 220 px wide, and run the same checks (`docs/design/visual-design.md`, 3.13, and the top of `test-dock.cpp`):
+Both draw the same 16 cases, in English and Spanish, 300, 260 and 220 px wide: 11 states (idle, idle starting in timelapse, real time, timelapse, paused from real time, paused from timelapse, paused after choosing timelapse x16 with a speed key, saving, summary with its speed map, two errors) and 5 monitoring cases (`docs/design/ux-spec.md`, 3.17: the Details open while recording and while paused, and each health issue: disk low, frames lost, encoder behind). Both also open the About dialog. They run the same checks (`docs/design/visual-design.md`, 3.13, and the top of `test-dock.cpp`):
 
 | Check | Fails when |
 |---|---|
@@ -27,6 +27,9 @@ Both draw the same 11 states (idle, idle starting in timelapse, real time, timel
 | Cut words | a painted button is narrower than its longest word (a single word cannot wrap, so it would run past the edge), or a rail's label is wider than its segment |
 | Quick pauses | 60 Pause and Resume clicks, one in four a double press within 400 ms, leave a label or the state block out of step with the core, or move Pause, Stop or the main button (UX-133) |
 | Reduce motion | with it on, the thumb still slides, or a slide under way goes on (UX-045) |
+| Monitoring | the Details show outside a recording, or open by themselves; zone F lacks the health line and its code while an issue is shown, or shows one while all is well; the summary card lacks its speed map, or an error card has one (UX-134 to UX-136) |
+| Menu | the menu button moves between states, is smaller than 24 px or unnamed, or its menu is not Help and About (UX-138) |
+| About | the dialog is modal, reaches past its edges, cuts a text or a word, has a text under 8 pt or 4.5:1, lacks its symbol or one of its four links (UX-138) |
 
 ## Why the themes need their own pictures
 
@@ -81,7 +84,8 @@ QT_QPA_PLATFORM=offscreen build_x86_64/tests/ui/test-dock data/locale build_x86_
 | `build_x86_64/obs-themes/<theme>/` | the dump of one theme (see `theme-probe.cpp` for every file) |
 | `build_x86_64/ui-screenshots/<theme>/<lang>-<width>-<state>.png` | the dock in one state, with OBS's dock title bar, as tall as its content plus some spare room (a dock in OBS is usually taller than what it shows) |
 | `build_x86_64/ui-screenshots/contact-sheets/<theme>-<lang>.png` | every state of one theme side by side on the theme's window color: 300, 260 and 220 px, one row each, and OBS's own idle dock in the last column |
-| `build_x86_64/ui-screenshots/contact-sheets/<theme>-interaction.png` | what a mouse and a keyboard do, which a still picture of a state never shows: hover, pressed, keyboard focus (also on the armed speed, the armed switch and the engaged speed, where a ring meets an outline that means something), disabled and the Stop hold; English at 300 px on top, Spanish at 220 px below |
+| `build_x86_64/ui-screenshots/contact-sheets/<theme>-about.png` | the About dialog in both languages, and the dock with its menu open (English at 300 px, Spanish at 220 px) |
+| `build_x86_64/ui-screenshots/contact-sheets/<theme>-interaction.png` | what a mouse and a keyboard do, which a still picture of a state never shows: hover, pressed, keyboard focus (also on the armed speed, the armed switch and the engaged speed, where a ring meets an outline that means something), disabled, the Stop hold, the menu button and the Details toggle; English at 300 px on top, Spanish at 220 px below |
 
 The themes are the ones that come with OBS: `Yami.Original` (shown as "Default" in OBS), `Yami.Classic`, `Yami.Grey`, `Yami.Acri`, `Yami.Rachni`, `Yami.Light` and `System`. System takes its colors from the desktop, so it is drawn twice: with this desktop's colors (`System`) and with KDE's Breeze Light colors (`System-light-palette`), so a light System is seen even on a dark desktop.
 
