@@ -238,6 +238,7 @@ public:
 	TswSegment(TswRail *rail, TswGlyph glyph, const QString &label);
 	void setLabel(const QString &label);
 	bool fitsBeside(int width, const QFont &font) const;   /* glyph and label side by side in this width */
+	int besideWidth(const QFont &font, bool words) const;  /* glyph and label (or the glyph alone) with air */
 	bool fitsUnder(int width, const QFont &font) const;    /* the label on one line under its glyph */
 	int stackedHeight(int width, const QFont &font) const; /* glyph above its words */
 	QSize sizeHint() const override;
@@ -250,7 +251,8 @@ protected:
 private:
 	QColor labelColor() const;
 	QFont labelFont() const;
-	QColor under() const; /* what the segment's label sits on: the thumb, or the track */
+	bool glyphOnly() const; /* a lead segment whose word does not fit: its glyph alone (TswRail::setLead) */
+	QColor under() const;   /* what the segment's label sits on: the thumb, or the track */
 	void paintStacked(QPainter &painter, const QRectF &box, int glyphSize) const;
 
 	TswRail *rail;
@@ -262,11 +264,18 @@ private:
 class TswRail : public QWidget {
 	Q_OBJECT
 	Q_PROPERTY(bool tswMoving READ isMoving) /* for the UI test: the thumb is sliding */
+	Q_PROPERTY(bool tswClipped READ clipped) /* for the UI test: a label is wider than its segment */
 
 public:
 	enum class Mode { Armed, Engaged, Start }; /* outlined next, filled now, or the start mode */
 	TswRail(QWidget *parent, const TswTheme *theme);
 	TswSegment *addSegment(int id, TswGlyph glyph, const QString &label);
+	/* Lead: the first segment (Real time) takes its own width and the others share the rest, so five
+	 * fit where five equal ones would not; where even its word cannot fit, it shows its glyph alone and
+	 * the segments are equal again. The rail never grows a row for it. */
+	void setLead(bool lead);
+	bool isLead(const TswSegment *segment) const;
+	void refit(); /* the theme's fonts changed: a lead rail's segments change width */
 	QButtonGroup *group() const;
 	void setMode(Mode mode);
 	Mode mode() const;
@@ -279,11 +288,14 @@ public:
 	struct Fit {
 		double points;
 		bool stacked;
+		bool leadWords = true; /* lead rails: the first segment shows its word */
+		double lead = 0.0;     /* lead rails: the first segment's width, px */
 	};
 	Fit fitAt(int width) const;
 	bool isStacked() const;
 	QColor thumbFill() const; /* the selected segment's fill, for what is painted on it */
 	bool isMoving() const;    /* the thumb is sliding */
+	bool clipped() const;     /* a label (one-row rails) is wider than its segment */
 	void finishMotion();      /* Reduce motion: the thumb jumps to where it goes (UX-045) */
 	bool hasHeightForWidth() const override;
 	int heightForWidth(int width) const override;
@@ -296,7 +308,9 @@ protected:
 	void changeEvent(QEvent *event) override;
 
 private:
+	Fit fitLead(int width) const;
 	QRectF segmentBox(int index) const;
+	QRectF thumbBox() const;
 	double thumbRadius(const QRectF &thumb) const;
 	void layoutSegments();
 	void updateFocusPolicies();
@@ -305,8 +319,10 @@ private:
 	QButtonGroup *buttons;
 	QVector<TswSegment *> segments;
 	Mode current = Mode::Armed;
-	int selected = -1;       /* index in segments */
-	QVariantAnimation slide; /* the thumb's left edge, from the old segment to the new one */
+	int selected = -1; /* index in segments */
+	bool lead = false;
+	QVariantAnimation slide; /* 0 to 1, from the thumb's old box to the selected segment's */
+	QRectF slideFrom;
 };
 
 /* A soft card: surface fill, hairline frame, rounded corners. Its content is a normal layout. */

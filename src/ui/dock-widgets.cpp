@@ -25,14 +25,15 @@
 
 namespace {
 
-const int THUMB_INSET = 2;        /* px between the track and its thumb (4.2) */
-const int SLIDE_MS = 160;         /* the thumb's slide (4.2, motion) */
-const double DISABLED_INK = 0.6;  /* disabled content is muted at 60 % (4.2, main button) */
-const double RING_GAP = 2.0;      /* px between a frame and the focus ring inside it */
-const double THUMB_FRAME = 2.0;   /* px: the outline of an armed or engaged thumb */
-const double POINT_STEP = 0.5;    /* pt: rail labels shrink in half points */
-const int MAX_FIT_STEPS = 16;     /* from 1.1b down to the floor at any base size (P10-2) */
-const double STACKED_FLOOR = 0.8; /* x b: a stacked rail label shrinks this far before it wraps */
+const int THUMB_INSET = 2;          /* px between the track and its thumb (4.2) */
+const int SLIDE_MS = 160;           /* the thumb's slide (4.2, motion) */
+const double DISABLED_INK = 0.6;    /* disabled content is muted at 60 % (4.2, main button) */
+const double RING_GAP = 2.0;        /* px between a frame and the focus ring inside it */
+const double THUMB_FRAME = 2.0;     /* px: the outline of an armed or engaged thumb */
+const double POINT_STEP = 0.5;      /* pt: rail labels shrink in half points */
+const int MAX_FIT_STEPS = 16;       /* from 1.1b down to the floor at any base size (P10-2) */
+const double STACKED_FLOOR = 0.8;   /* x b: a stacked rail label shrinks this far before it wraps */
+const double LEAD_WORD_FLOOR = 0.9; /* x b: a lead rail keeps the lead's word down to this size */
 
 } // namespace
 
@@ -435,12 +436,24 @@ QColor TswSegment::labelColor() const
 	return theme->ink(theme->text, under());
 }
 
-bool TswSegment::fitsBeside(int width, const QFont &font) const
+int TswSegment::besideWidth(const QFont &font, bool words) const
 {
 	const TswTheme *theme = rail->theme();
-	const double glyphWidth = glyph == TswGlyph::None ? 0.0 : tswGlyphSize(font) + theme->s2;
+	const int glyph_px = glyph == TswGlyph::None ? 0 : tswGlyphSize(font);
+	const double text = words ? tswTextWidth(font, label) : 0.0;
+	const int gap = glyph_px > 0 && words ? theme->s2 : 0;
 	/* Air on both sides inside the thumb, so a Bold label never touches its outline. */
-	return glyphWidth + 2 * (theme->s2 + theme->s1) + tswTextWidth(font, label) <= width;
+	return static_cast<int>(std::ceil(glyph_px + gap + 2 * (theme->s2 + theme->s1) + text));
+}
+
+bool TswSegment::fitsBeside(int width, const QFont &font) const
+{
+	return besideWidth(font, true) <= width;
+}
+
+bool TswSegment::glyphOnly() const
+{
+	return rail->isLead(this) && !rail->fitAt(rail->width()).leadWords;
 }
 
 bool TswSegment::fitsUnder(int width, const QFont &font) const
@@ -498,6 +511,11 @@ void TswSegment::paintEvent(QPaintEvent *event)
 	painter.setPen(color);
 	if (glyph != TswGlyph::None && rail->isStacked()) {
 		paintStacked(painter, box, glyph_px);
+	} else if (glyphOnly()) {
+		tswPaintGlyph(painter, glyph,
+			      QRectF(box.center().x() - glyph_px / 2.0, box.center().y() - glyph_px / 2.0, glyph_px,
+				     glyph_px),
+			      color);
 	} else {
 		const double gap = glyph_px > 0 ? theme->s2 : 0;
 		const double block = glyph_px + gap + tswTextWidth(font, label);
@@ -593,11 +611,14 @@ void TswRail::select(int id, bool animate)
 	if (index < 0)
 		return;
 	if (index != selected) {
-		const double from = selected >= 0 ? segmentBox(selected).left() : segmentBox(index).left();
+		/* From where the thumb is now (also mid-slide) to the new segment: left edge and width, as
+		 * a lead rail's segments differ in width. */
+		const QRectF from = selected >= 0 ? thumbBox() : segmentBox(index);
 		slide.stop();
 		if (animate && selected >= 0) {
-			slide.setStartValue(from);
-			slide.setEndValue(segmentBox(index).left());
+			slideFrom = from;
+			slide.setStartValue(0.0);
+			slide.setEndValue(1.0);
 			slide.start();
 		}
 		selected = index;
@@ -645,6 +666,8 @@ TswRail::Fit TswRail::fitAt(int width) const
 	const double largest = style->pointsAt(TswType::RAIL);
 	if (segments.isEmpty())
 		return {largest, false};
+	if (lead && segments.size() > 1)
+		return fitLead(width);
 	const int each = (width - 2 * THUMB_INSET) / static_cast<int>(segments.size());
 	QFont font = style->fontAt(TswType::RAIL, true); /* Bold: the widest a label gets */
 	const auto all = [&](bool beside) {
@@ -704,8 +727,98 @@ QSize TswRail::minimumSizeHint() const
 QRectF TswRail::segmentBox(int index) const
 {
 	const double inner = width() - 2.0 * THUMB_INSET;
-	const double each = segments.isEmpty() ? inner : inner / static_cast<double>(segments.size());
-	return {THUMB_INSET + each * index, double(THUMB_INSET), each, height() - 2.0 * THUMB_INSET};
+	const double top = THUMB_INSET;
+	const double tall = height() - 2.0 * THUMB_INSET;
+	if (!lead || segments.size() < 2) {
+		const double each = segments.isEmpty() ? inner : inner / static_cast<double>(segments.size());
+		return {THUMB_INSET + each * index, top, each, tall};
+	}
+	const double first = fitAt(width()).lead;
+	if (index == 0)
+		return {double(THUMB_INSET), top, first, tall};
+	const double each = (inner - first) / static_cast<double>(segments.size() - 1);
+	return {THUMB_INSET + first + each * (index - 1), top, each, tall};
+}
+
+/* The thumb now: under the selected segment, or on its way there. */
+QRectF TswRail::thumbBox() const
+{
+	const QRectF to = segmentBox(selected);
+	if (slide.state() != QAbstractAnimation::Running)
+		return to;
+	const double t = slide.currentValue().toDouble();
+	const auto mix = [t](double a, double b) {
+		return a + (b - a) * t;
+	};
+	return {mix(slideFrom.left(), to.left()), to.top(), mix(slideFrom.width(), to.width()), to.height()};
+}
+
+void TswRail::setLead(bool isLead)
+{
+	lead = isLead;
+	layoutSegments();
+	update();
+}
+
+bool TswRail::isLead(const TswSegment *segment) const
+{
+	return lead && !segments.isEmpty() && segments.first() == segment;
+}
+
+void TswRail::refit()
+{
+	layoutSegments();
+	updateGeometry();
+	update();
+}
+
+/*
+ * A lead rail on one row, always: the lead (Real time) at its own width, with its word, from 1.1b
+ * down to 0.9b; then, where its word cannot fit, its glyph alone (its name stays in its tooltip and
+ * accessible name), the segments equal, from 1.1b down. Every segment gets the room it needs plus an
+ * equal share of what is left (3.10).
+ */
+TswRail::Fit TswRail::fitLead(int width) const
+{
+	const double inner = width - 2.0 * THUMB_INSET;
+	const auto others = static_cast<double>(segments.size() - 1);
+	const double largest = style->pointsAt(TswType::RAIL);
+	const double floors[] = {style->pointsAt(LEAD_WORD_FLOOR), style->pointsAt(STACKED_FLOOR)};
+	QFont font = style->fontAt(TswType::RAIL, true); /* Bold: the widest a label gets */
+	for (int pass = 0; pass < 2; pass++) {
+		const bool words = pass == 0;
+		for (int step = 0; step < MAX_FIT_STEPS; step++) {
+			const double points = largest - step * POINT_STEP;
+			if (points < floors[pass])
+				break;
+			font.setPointSizeF(points);
+			int chip = 0;
+			for (int i = 1; i < segments.size(); i++)
+				chip = std::max(chip, segments[i]->besideWidth(font, true));
+			const double first = words ? segments[0]->besideWidth(font, true) : chip;
+			const double spare = inner - first - others * chip;
+			if (spare >= 0.0)
+				return {points, false, words, first + spare / (others + 1.0)};
+		}
+	}
+	return {floors[1], false, false, inner / (others + 1.0)};
+}
+
+/* For the UI test: a label wider than its segment would run past its edge. Stacked rails wrap their
+ * words instead, so only one-row rails are measured. */
+bool TswRail::clipped() const
+{
+	const Fit fit = fitAt(width());
+	if (fit.stacked)
+		return false;
+	QFont font = style->fontAt(TswType::RAIL, true);
+	font.setPointSizeF(fit.points);
+	for (int i = 0; i < segments.size(); i++) {
+		const bool words = !(lead && i == 0) || fit.leadWords;
+		if (segments[i]->besideWidth(font, words) > segmentBox(i).width() + 0.5)
+			return true;
+	}
+	return false;
 }
 
 /* A pill on one row; a rounded rectangle when the labels stack, never a tall stadium. */
@@ -758,9 +871,7 @@ void TswRail::paintEvent(QPaintEvent *event)
 		return;
 
 	/* The thumb: filled when the speed runs now, outlined when it is the next one (4.2). */
-	QRectF thumb = segmentBox(selected);
-	if (slide.state() == QAbstractAnimation::Running)
-		thumb.moveLeft(slide.currentValue().toDouble());
+	const QRectF thumb = thumbBox();
 	const double radius = thumbRadius(thumb);
 	const bool startRealTime = current == Mode::Start && selected == 0;
 	QPen frame = tswBorder(style->shape(style->accent, style->surface), THUMB_FRAME);
