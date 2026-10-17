@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "tsw-compiler.h"
@@ -43,6 +44,7 @@ enum tsw_health_issue {
 	TSW_HEALTH_DISK_LOW = 1,       /* TSW-E102: less than TSW_DISK_WARN_SECONDS of space left */
 	TSW_HEALTH_LOST_FRAMES = 2,    /* TSW-E201: frames lost because the computer could not keep up */
 	TSW_HEALTH_ENCODER_BEHIND = 4, /* TSW-E203: half the feed or more waits for the encoder */
+	TSW_HEALTH_BOTH_RECORDING = 8, /* TSW-E302: OBS's own recording runs too: twice the encoder's work */
 };
 
 struct tsw_health_input {
@@ -51,6 +53,7 @@ struct tsw_health_input {
 	uint32_t feed_size;        /* frames the feed can hold */
 	uint64_t disk_free_bytes;  /* free space where the file is written; 0 = unknown */
 	uint64_t bytes_per_second; /* how fast the file grows; 0 = unknown or not growing */
+	bool obs_recording_active; /* OBS's own Start Recording is running at the same time */
 };
 
 struct tsw_health {

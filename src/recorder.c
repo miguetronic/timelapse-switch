@@ -449,6 +449,14 @@ enum tsw_result tsw_recorder_start(struct tsw_recorder *recorder, uint32_t speed
 	return TSW_OK;
 }
 
+/* The most frames that waited in the feed, at most its size: while frames are being lost the raw count also
+ * includes the repeats OBS owes, which says nothing more than "full". */
+static long feed_peak(struct tsw_recorder *recorder)
+{
+	const long peak = os_atomic_load_long(&recorder->feed_peak);
+	return peak < VIDEO_CACHE_FRAMES ? peak : VIDEO_CACHE_FRAMES;
+}
+
 /* Where the time of the recording went, up to the stop (the dock shows the same; tests compare it). */
 static void log_totals(struct tsw_recorder *recorder)
 {
@@ -506,7 +514,7 @@ void tsw_recorder_stop(struct tsw_recorder *recorder)
 		"ring full %ld, ring empty %ld | feed: at most %ld of %d frames waiting | smoothness: pictures OBS "
 		"repeated %ld, real-time frames sent twice %ld, skipped %ld",
 		real_s, recorder->frames_in, recorder->frames_sent, lost, recorder->blocks_sent, recorder->ring_full,
-		recorder->ring_empty, os_atomic_load_long(&recorder->feed_peak), (int)VIDEO_CACHE_FRAMES,
+		recorder->ring_empty, feed_peak(recorder), (int)VIDEO_CACHE_FRAMES,
 		os_atomic_load_long(&recorder->input_repeats), os_atomic_load_long(&recorder->gate_repeats),
 		os_atomic_load_long(&recorder->gate_skips));
 	tsw_log(LOG_INFO,
@@ -670,13 +678,17 @@ static void fill_monitoring(struct tsw_recorder *recorder, struct tsw_status *st
 		const long waiting = os_atomic_load_long(&recorder->frames_sent) +
 				     os_atomic_load_long(&recorder->frames_lost) -
 				     (long)video_output_get_total_frames(recorder->video);
-		status->feed_waiting = waiting > 0 ? (uint32_t)waiting : 0;
+		/* While frames are being lost OBS owes repeats to the last slot, so the count can exceed the feed:
+		 * it is reported as full, and the lost frames tell the rest. */
+		status->feed_waiting =
+			waiting <= 0 ? 0 : (waiting >= VIDEO_CACHE_FRAMES ? VIDEO_CACHE_FRAMES : (uint32_t)waiting);
 	}
 	if (!saving)
 		sample_disk(recorder, now);
 	status->file_bytes = recorder->file_bytes;
 	status->disk_free_bytes = recorder->disk_free_bytes;
 	status->bytes_per_second = tsw_disk_meter_rate(&recorder->disk);
+	status->obs_recording_active = obs_frontend_recording_active();
 }
 
 void tsw_recorder_get_status(struct tsw_recorder *recorder, struct tsw_status *status)
