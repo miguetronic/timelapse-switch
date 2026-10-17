@@ -298,9 +298,10 @@ void TswButton::paintEvent(QPaintEvent *event)
 	/* Pressed: the content moves 1 px down, like a key that travels. */
 	paintContent(painter, isDown() ? box.translated(0, 1) : box);
 	if (tswHasKeyFocus(this)) {
-		/* Inside a frame, with a gap, so the ring never merges with an accent outline; 3:1 against
-		 * the face it is drawn on, whatever that face is (UX-110). */
-		const double inset = look.frameWidth >= 2.0 ? look.frameWidth + RING_GAP : 1.0;
+		/* Always inside the button, with a gap: the edge is where an armed button has its accent
+		 * outline (outlined means next), so a focused Record must not look armed. 3:1 against the
+		 * face it is drawn on, whatever that face is (UX-110). */
+		const double inset = std::max(look.frameWidth, 1.0) + RING_GAP;
 		const QColor face = look.face.isValid() ? look.face : look.under;
 		tswPaintFocusRing(painter, box, radius(), theme->shape(theme->focus, face), inset, TswRing::Solid);
 	}
