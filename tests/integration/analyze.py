@@ -22,6 +22,8 @@ probe (sync-probe.c: when OBS delivered each beep and each frame):
                   (REQ-007; Hybrid MP4 only)
     pause         across each pause the picture jumps by exactly the paused time: nothing
                   recorded while paused is in the file, nothing around it is lost (REQ-019)
+    totals        the plugin's own account of the session (time in real time, in timelapse
+                  and paused, switches, pauses, final length) matches the sections
     lost frames   frames lost because the computer could not keep up
     feed          the plugin reports how many frames, at most, waited in its feed for the
                   encoder (docs/performance.md, section 9)
@@ -108,6 +110,39 @@ def plugin_events(log_path: str) -> tuple[list[tuple[float, int]], float, float]
     if stop_s is None:
         raise RuntimeError("the log has no 'recording stopped' line from the plugin")
     return sections, stop_s, lost
+
+
+def plugin_totals(log_path: str) -> dict | None:
+    """From the plugin's "totals" line at the stop: its own account of where the time went."""
+    pattern = (r"\[timelapse-switch\] totals: real time ([\d.]+) s, timelapse ([\d.]+) s, paused ([\d.]+) s"
+               r" \| (\d+) switches, (\d+) pauses \| final ([\d.]+) s")
+    with open(log_path, encoding="utf-8", errors="replace") as log:
+        for line in log:
+            if m := re.search(pattern, line):
+                return {"real": float(m.group(1)), "timelapse": float(m.group(2)), "paused": float(m.group(3)),
+                        "switches": int(m.group(4)), "pauses": int(m.group(5)), "final": float(m.group(6))}
+    return None
+
+
+def check_totals(report: Report, sections: list[dict], log_path: str) -> None:
+    """The dock's details come from the same numbers as this line: they must match the sections."""
+    totals = plugin_totals(log_path)
+    if totals is None:
+        report.check("totals", False, "the plugin wrote no totals line")
+        return
+    expected = {
+        "real": sum(s["end"] - s["start"] for s in sections if s["speed"] == 1),
+        "timelapse": sum(s["end"] - s["start"] for s in sections if s["speed"] > 1),
+        "paused": sum(s["end"] - s["start"] for s in sections if s["speed"] == 0),
+        "switches": len(chaptered(sections)) - 1,
+        "pauses": sum(1 for s in sections if s["speed"] == 0),
+        "final": sections[-1]["out_end"],
+    }
+    wrong = [f"{key} {totals[key]} (expected {expected[key]:.3f})" for key in expected
+             if abs(totals[key] - expected[key]) > 0.01]
+    report.check("totals", not wrong, "; ".join(wrong) or
+                 f"real time {totals['real']:.1f} s, timelapse {totals['timelapse']:.1f} s, paused "
+                 f"{totals['paused']:.1f} s, {totals['switches']} switches, {totals['pauses']} pauses")
 
 
 def feed_waiting(log_path: str) -> tuple[int, int] | None:
@@ -299,6 +334,7 @@ def main() -> int:
     check_silence(report, sections, samples)
     check_chapters(report, sections, args.recording)
     check_pauses(report, sections, numbers)
+    check_totals(report, sections, args.log)
     report.check("lost frames", lost <= args.allow_lost_frames, f"{lost * 100:.2f}% lost")
     feed = feed_waiting(args.log)
     report.check("feed", feed is not None and 1 <= feed[0] <= feed[1],
