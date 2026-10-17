@@ -713,8 +713,7 @@ void TswDock::updateStopRow()
 	const int half = room / 2;
 	const int pauseNeeds = pauseButton->oneLineWidth() + style.s2; /* a pill's round ends eat into its padding */
 	const bool halves = pauseButton->oneLineWidth() <= half && stopButton->oneLineWidth() <= room - half;
-	const bool beside = halves ||
-			    (pauseNeeds <= half && stopButton->minimumSizeHint().width() <= room - pauseNeeds);
+	const bool beside = halves || stopButton->minimumSizeHint().width() <= room - pauseNeeds;
 	const bool fixedPause = beside && !halves;
 	/* Ignored: neither widens the dock (3.10). Fixed when Pause takes its own width: the layout would
 	 * give an Ignored button no width at all. */
