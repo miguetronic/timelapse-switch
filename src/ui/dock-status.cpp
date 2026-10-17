@@ -9,10 +9,10 @@
  * (docs/design/visual-design.md, 4.2, "Status card").
  *
  *   .======================================.
- *   |######################################|  timelapse: a solid band in the accent
+ *   |# # # # # # # # # # # # # # # # # # # |  timelapse: a solid band in the accent
  *   |# ( (o) REC )                        #|  tally pill: am I recording?
  *   |# >> TIMELAPSE               ( x4 )  #|  hero and speed badge: at what speed?
- *   |######################################|
+ *   |# # # # # # # # # # # # # # # # # # # |
  *   | RECORDED          | FINAL VIDEO      |  captions; the bar marks the slower counter
  *   | 0:31:40           | 0:16:58          |  digits
  *   | This stretch x4   19:37 -> 4:54      |  status line
@@ -134,30 +134,32 @@ double chevronPitch(uint32_t speed)
 
 } // namespace
 
+/* Fields from the widest to the narrowest, so the struct has no padding (clang-tidy). */
 struct TswStatusCard::Layout {
-	int height = 0;
-	int pad = 0;
+	/* Sizes and rows, px. */
 	double inner = 0.0; /* the width of the content */
-	QFont tallyFont, heroFont, quietFont, headlineFont, badgeFont, captionFont, digitsFont, statusFont;
 	double heroPoints = 0.0;
-	int heroGlyph = 0;          /* px: the glyph before a recording hero, and the column it takes */
-	int quietGlyph = 0;         /* px: the glyph before an idle hero */
-	bool heroGlyphShown = true; /* false only when a recording hero fits without its glyph alone */
 	double pillHeight = 0.0;
 	double badgeWidth = 0.0;
 	double badgeHeight = 0.0;
-	bool badgeOnTally = false; /* narrow: the speed joins the tally line (4.2, narrow) */
 	double tallyTop = 0.0, tallyHeight = 0.0;
 	double heroTop = 0.0, heroHeight = 0.0;
 	double dividerY = 0.0; /* the dashed hairline; in timelapse, the bottom edge of the band */
 	double readoutTop = 0.0;
 	double captionHeight = 0.0, digitsHeight = 0.0, statusHeight = 0.0;
-	bool stacked = false;    /* the two columns do not fit side by side: one under the other */
 	double gutter = 0.0;     /* between the two columns */
 	double secondLeft = 0.0; /* where the second column starts, from the card's left edge */
 	double statusTop = 0.0;
-	int statusLines = 1;
 	double tapeTop = 0.0, tapeHeight = 0.0;
+	QFont tallyFont, heroFont, quietFont, headlineFont, badgeFont, captionFont, digitsFont, statusFont;
+	int height = 0;
+	int pad = 0;
+	int heroGlyph = 0;  /* px: the glyph before a recording hero, and the column it takes */
+	int quietGlyph = 0; /* px: the glyph before an idle hero */
+	int statusLines = 1;
+	bool heroGlyphShown = true; /* false only when a recording hero fits without its glyph alone */
+	bool badgeOnTally = false;  /* narrow: the speed joins the tally line (4.2, narrow) */
+	bool stacked = false;       /* the two columns do not fit side by side: one under the other */
 	bool clipped = false;
 };
 

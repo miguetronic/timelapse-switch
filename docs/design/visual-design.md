@@ -170,7 +170,9 @@ New and changed locale keys. Every one exists in `data/locale/en-US.ini` and `es
 | `Error.E901.Headline` | Something went wrong | Algo salió mal | A hero, error |
 | `Error.E103.What` | The file could not be written. | No se pudo escribir el archivo. | error card, after "Why:" (no internal names such as "file writer") |
 | `Error.Why` | Why: | Por qué: | error card |
-| `Card.Code` | Code %1 | Código %1 | error card, small |
+| `Card.Error` | Error %1 (shown ERROR TSW-E103) | Error %1 | error card header: the code costs no row of its own |
+| `Card.Session` | Session (shown SESSION) | Sesión | summary card header |
+| `Summary.Skipped.Caption` | of waiting skipped (shown in capitals) | de espera ahorrados | under the summary's big figure, "52:35" |
 | `A11y.Hour.One` / `.Many` | 1 hour / %1 hours | 1 hora / %1 horas | spoken durations |
 | `A11y.Minute.One` / `.Many` | 1 minute / %1 minutes | 1 minuto / %1 minutos | spoken durations |
 | `A11y.Second.One` / `.Many` | 1 second / %1 seconds | 1 segundo / %1 segundos | spoken durations |
