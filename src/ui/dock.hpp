@@ -21,7 +21,8 @@
  *            (  || Pause  ) (  []  Stop and save )  E Pause (Resume while paused) and Stop
  *   CONTEXT  (i) Audio: silence during timelapse   F context line, or the health line when needed
  *            > DETAILS                             the Details, on request (dock-monitor.hpp)
-
+ *
+ * The status card's top corner holds a small menu button: Help and About (dock-about.hpp).
  * Everything it paints is mixed from the active OBS theme (dock-theme.hpp), read again whenever
  * the theme, the font size or the density changes.
  */
@@ -33,11 +34,13 @@
 #include <QString>
 
 #include "core/dock-view.h"
+#include "ui/dock-about.hpp"
 #include "ui/dock-monitor.hpp"
 #include "ui/dock-theme.hpp"
 
 class QBoxLayout;
 class QLabel;
+class QMenu;
 class QScrollArea;
 class QSpacerItem;
 class QVBoxLayout;
@@ -68,6 +71,11 @@ public:
 	/* The dock as OBS shows it: in a scroll area, which gives wrapped texts the height they need (and
 	 * scrolls, instead of cutting them, when the dock is short). Takes ownership of dock. */
 	static QScrollArea *inScrollArea(TswDock *dock);
+
+	/* What the About dialog shows that only the plugin knows: its version and its symbol (UX-138). */
+	void setAboutInfo(const TswAboutInfo &info);
+	/* The About dialog, not modal: from the menu, and for the UI test. */
+	void showAbout();
 
 	/* The Details section: open or closed as the user left it (UX-135); never opened by the dock. */
 	void setDetailsOpen(bool open);
@@ -114,6 +122,7 @@ private:
 	QString spoken(const QString &words) const;
 	QString spokenDuration(const QString &clock) const;
 	void buildZones();
+	void buildMenu();
 	void buildRails();
 	void buildResumeRail();
 	void buildCard();
@@ -164,7 +173,11 @@ private:
 	QSpacerItem *gapStop = nullptr;
 	QSpacerItem *gapContext = nullptr;
 	QSpacerItem *gapDetails = nullptr;
-	TswStatusCard *status = nullptr; /* zones A and B */
+	TswStatusCard *status = nullptr;     /* zones A and B */
+	TswMenuButton *menuButton = nullptr; /* in the status card's top corner: Help and About (UX-138) */
+	QMenu *menu = nullptr;
+	TswAbout *about = nullptr; /* made when first asked for */
+	TswAboutInfo aboutInfo;
 	TswButton *mainButton = nullptr; /* zone C */
 	QWidget *speeds = nullptr;       /* zone D */
 	QVBoxLayout *speedsLayout = nullptr;

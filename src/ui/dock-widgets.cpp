@@ -351,6 +351,17 @@ void TswLink::setLabel(const QString &text)
 	updateGeometry();
 }
 
+void TswLink::setOnPanel(bool onPanel)
+{
+	panel = onPanel;
+	update();
+}
+
+QColor TswLink::under() const
+{
+	return panel ? theme->panel : theme->surface;
+}
+
 void TswLink::setLinkFont(const QFont &font)
 {
 	linkFont = font;
@@ -380,7 +391,7 @@ void TswLink::paintEvent(QPaintEvent *event)
 	QPainter painter(this);
 	painter.setRenderHint(QPainter::Antialiasing);
 	const int glyph_px = tswGlyphSize(linkFont);
-	const QColor color = theme->ink(theme->accentText, theme->surface);
+	const QColor color = theme->ink(theme->accentText, under());
 	const double middle = height() / 2.0;
 	tswPaintGlyph(painter, glyph, QRectF(theme->s2, middle - glyph_px / 2.0, glyph_px, glyph_px), color);
 	QFont font = linkFont;
@@ -392,7 +403,7 @@ void TswLink::paintEvent(QPaintEvent *event)
 	if (tswHasKeyFocus(this)) {
 		/* Around the glyph and the words, not the whole row a stacked list may give the link. */
 		const QRectF content(0, 0, std::min(width(), sizeHint().width()), height());
-		tswPaintFocusRing(painter, content, theme->s2, theme->shape(theme->focus, theme->surface), 0.0,
+		tswPaintFocusRing(painter, content, theme->s2, theme->shape(theme->focus, under()), 0.0,
 				  TswRing::Solid);
 	}
 }

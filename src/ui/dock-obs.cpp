@@ -11,6 +11,8 @@
  *   timer (100 ms) --> controller view --> dock draws it
  *   dock click -----> controller input --> recorder; then the dock draws the new view at once
  *   theme, font size or density changed --> the dock reads the theme again (UX-016)
+ *   the dock's About dialog gets the version and the symbol's pictures from here, so the dock itself
+ *   never needs OBS (UX-138)
  */
 
 #include "ui/dock-obs.h"
@@ -51,11 +53,22 @@ TswDock *findDock()
 	return window != nullptr ? window->findChild<TswDock *>("tswDock") : nullptr;
 }
 
+/* A file of the plugin's data folder (data/ in the sources), or an empty path if it is missing. */
+QString dataFile(const char *name)
+{
+	char *found = obs_module_file(name);
+	const QString path = found != nullptr ? QString::fromUtf8(found) : QString();
+	bfree(found);
+	return path;
+}
+
 } // namespace
 
 void tsw_dock_create(struct tsw_controller *controller, bool details_open)
 {
 	auto *dock = new TswDock(moduleText);
+	dock->setAboutInfo({QString::fromUtf8(PLUGIN_VERSION), dataFile("images/symbol-512.png"),
+			    dataFile("images/symbol-dark-512.png")});
 	dock->setDetailsOpen(details_open);
 	auto refresh = [dock, controller]() {
 		tsw_dock_view view;

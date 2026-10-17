@@ -5,8 +5,8 @@
  */
 
 /*
- * dock-monitor.hpp: the dock's monitoring (docs/design/ux-spec.md, 3.17), in the "Studio cards" look
- * (docs/design/visual-design.md, 4.2).
+ * dock-monitor.hpp: the dock's monitoring and its menu (docs/design/ux-spec.md, 3.17 and 3.18), in
+ * the "Studio cards" look (docs/design/visual-design.md, 4.2).
  *
  * Monitoring follows one rule: silence when all is well, one line when something needs attention,
  * everything else only on request. Think of a car's dashboard: the speed is always there, a warning
@@ -17,6 +17,8 @@
  *   TswDisclosure  the "Details" toggle: a caption with a chevron, closed until the user opens it
  *   TswDetails     the toggle and, when open, a card of values: where the time went, the file and
  *                  the disk, the encoder's backlog, and the speed map
+ *   TswMenuButton  the small round button in the status card's top corner that opens the dock's
+ *                  menu: Help and About (UX-138)
  *
  * Nothing here costs anything measurable (UX-137): the values are the recorder's own counters, set
  * on labels only when they change, and the map is 48 slices painted with a few rectangles.
@@ -26,6 +28,7 @@
 
 #include <QAbstractButton>
 #include <QColor>
+#include <QToolButton>
 #include <QVector>
 #include <QWidget>
 
@@ -136,4 +139,28 @@ private:
 	TswSpeedMap *speedMap = nullptr;
 	QVector<QWidget *> rules;  /* hairlines between the groups */
 	QWidget *mapBox = nullptr; /* the map's caption and strip, close together */
+};
+
+/* The menu button's side, px: square, as tall as the card's round dismiss button. */
+int tswMenuButtonSize(const TswTheme &theme);
+/* The room between the button's edge and its glyph, px: it may overhang padding, the dots never do. */
+int tswMenuButtonInset(const TswTheme &theme);
+
+/* The menu button (UX-138): a "⋯" in a circle that shows only on hover, focus or press; it sits in the
+ * status card's top corner and takes the color of what is under it. */
+class TswMenuButton : public QToolButton {
+	Q_OBJECT
+
+public:
+	TswMenuButton(QWidget *parent, const TswTheme *theme);
+	void setUnder(const QColor &color); /* what it sits on: the status card's fill, or its band */
+	QColor glyphColor() const;          /* for the UI test's contrast check */
+	QColor underColor() const;
+
+protected:
+	void paintEvent(QPaintEvent *event) override;
+
+private:
+	const TswTheme *theme;
+	QColor under;
 };

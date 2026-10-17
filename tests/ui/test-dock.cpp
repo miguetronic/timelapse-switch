@@ -27,8 +27,8 @@
  *     nothing moves (UX-133);
  *   - Reduce motion stops the one animation, the thumb's slide (UX-045);
  *   - the monitoring (ux-spec 3.17): the Details, open while recording and paused, never move zones A
- *     to E (UX-002); each health issue takes zone F; and the summary card shows the speed
- *     map.
+ *     to E (UX-002); each health issue takes zone F; the summary card shows the speed map; the menu
+ *     button keeps its place in every state, and the About dialog fits and passes the same checks.
  * It also saves a picture of each case, for a person to look at.
  *
  *   test-dock <folder with en-US.ini and es-ES.ini> <folder for the pictures> [<OBS theme dumps>]
@@ -49,8 +49,11 @@
 #include <QFontInfo>
 #include <QJsonObject>
 #include <QLabel>
+#include <QMenu>
+#include <QPainter>
 #include <QRegularExpression>
 #include <QScreen>
+#include <QToolButton>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <cmath>
@@ -68,6 +71,7 @@
 #include "core/dock-view.h"
 #include "core/session.h"
 #include "obs-theme.hpp"
+#include "ui/dock-about.hpp"
 #include "ui/dock-monitor.hpp"
 #include "ui/dock-theme.hpp"
 #include "ui/dock-widgets.hpp"
@@ -94,6 +98,8 @@ const uint64_t DEBOUNCE_NS = 400000000; /* a second Pause within 400 ms is a dou
 const int QUICK_PRESSES = 60;           /* Pause and Resume pressed this many times in a row */
 
 int failures = 0;
+QString images;                           /* data/images: the symbol's pictures for the About dialog */
+const char SAMPLE_VERSION[] = "1.0.0";    /* the plugin gives its own version; any will do here */
 std::map<std::string, std::string> texts; /* the locale file being tested */
 std::set<std::string> missing;            /* keys the dock asked for that the file lacks */
 
@@ -415,6 +421,7 @@ void checkContrast(const TswDock &dock, const QString &label)
 {
 	const TswTheme &t = dock.theme();
 	const TswMapColors map = tswMapColors(t, t.surface);
+	const auto *menu = dock.findChild<TswMenuButton *>("tswMenu");
 	const struct {
 		const char *what;
 		QColor color;
@@ -444,6 +451,8 @@ void checkContrast(const TswDock &dock, const QString &label)
 		{"the speed map's real-time outline on its card", map.realTimeEdge, t.surface, SHAPE},
 		{"the speed map's hatching on its tint", map.hatch, map.timelapse, SHAPE},
 		{"the speed map's hatching on its card", map.hatch, t.surface, SHAPE},
+		{"the menu glyph on what it sits on", menu->glyphColor(), menu->underColor(), SHAPE},
+		{"links on the panel (About)", t.ink(t.accentText, t.panel), t.panel, TEXT},
 	};
 	for (const auto &pair : pairs) {
 		const double contrast = tswContrast(pair.color, pair.under);
@@ -502,7 +511,8 @@ void checkWordsAndFocus(const TswDock &dock, const QString &label)
 		if (main->accessibleName().compare(QString::fromUtf8(lookup(key)), Qt::CaseInsensitive) == 0)
 			fail(label + ": the main button is named like a state: " + main->accessibleName());
 	}
-	const QWidget *first = main;
+	/* From the first control in visual order: the menu button, in the status card's top corner. */
+	const QWidget *first = dock.findChild<QWidget *>("tswMenu");
 	int top = -1;
 	const QWidget *widget = first;
 	for (int step = 0; step < MAX_FOCUS_STEPS; step++) {
@@ -525,12 +535,17 @@ struct Positions {
 	std::map<std::string, int> main;
 	std::map<std::string, int> pause;
 	std::map<std::string, int> stop;
-	std::map<std::string, int> rail; /* the height of zone D's rail: speeds, or "Resume in" */
+	std::map<std::string, int> rail;  /* the height of zone D's rail: speeds, or "Resume in" */
+	std::map<std::string, int> menuX; /* the menu button, in the status card's corner in every state */
+	std::map<std::string, int> menuY;
 };
 
 void notePositions(const TswDock &dock, const Case &c, Positions *positions)
 {
 	positions->main[c.name] = dock.findChild<QWidget *>("tswMain")->y();
+	const auto *menu = dock.findChild<QWidget *>("tswMenu");
+	positions->menuX[c.name] = menu->mapTo(&dock, QPoint(0, 0)).x();
+	positions->menuY[c.name] = menu->mapTo(&dock, QPoint(0, 0)).y();
 	if (c.status.phase != TSW_PHASE_IDLE) {
 		positions->pause[c.name] = dock.findChild<QWidget *>("tswPause")->x();
 		positions->stop[c.name] = dock.findChild<QWidget *>("tswStop")->y();
@@ -553,9 +568,32 @@ void checkPositions(const Positions &positions, const QString &label)
 		}
 	};
 	same(positions.main, "the main button");
+	same(positions.menuX, "the menu button (its x)");
+	same(positions.menuY, "the menu button");
 	same(positions.pause, "Pause (its x)");
 	same(positions.rail, "the height of zone D's rail");
 	same(positions.stop, "Stop, and Pause beside it,");
+}
+
+/* The menu (UX-138): its two entries, Help and About, and the button's name for screen readers. */
+void checkMenu(const TswDock &dock, const QString &label)
+{
+	const auto *button = dock.findChild<QToolButton *>("tswMenu");
+	const auto *menu = dock.findChild<QMenu *>("tswDockMenu");
+	if (button == nullptr || menu == nullptr || button->menu() != menu) {
+		fail(label + ": no menu button with the dock's menu");
+		return;
+	}
+	if (button->accessibleName() != QString::fromUtf8(lookup("Menu.Button")))
+		fail(label + ": the menu button is not named for screen readers");
+	QStringList entries;
+	for (const QAction *action : menu->actions())
+		entries << action->text();
+	const QStringList expected{QString::fromUtf8(lookup("Menu.Help")), QString::fromUtf8(lookup("Menu.About"))};
+	if (entries != expected)
+		fail(label + ": the menu holds " + entries.join(", ") + ", not Help and About");
+	if (button->width() < 24 || button->height() < 24)
+		fail(label + ": the menu button is smaller than 24 px (WCAG 2.5.8)");
 }
 
 void checkLayout(const TswDock &dock, const QWidget &viewport, const Case &c, const QString &label)
@@ -568,6 +606,7 @@ void checkLayout(const TswDock &dock, const QWidget &viewport, const Case &c, co
 	checkTextFloor(dock, label);
 	checkCardRows(dock, label);
 	checkWordsAndFocus(dock, label);
+	checkMenu(dock, label);
 }
 
 /* The states every picture set shows, in this order: the paused ones right after the recording ones
@@ -614,10 +653,62 @@ void settle()
 		QApplication::processEvents();
 }
 
+/* --- The menu and the About dialog (UX-138) --- */
+
+/* A dock as dock-obs.cpp makes one: with the version and the symbol's pictures for its About dialog. */
+void giveAboutInfo(TswDock *dock)
+{
+	dock->setAboutInfo({SAMPLE_VERSION, images + "/symbol-512.png", images + "/symbol-dark-512.png"});
+}
+
+/* The About dialog opens from the dock, not modal (UX-013), and passes the dock's own checks: nothing
+ * past its edges, no text cut, no word cut, no text under 8 pt, every link there with its words. */
+TswAbout *checkAbout(TswDock &dock, const QString &label)
+{
+	dock.showAbout();
+	settle();
+	auto *about = dock.findChild<TswAbout *>("tswAbout");
+	if (about == nullptr || !about->isVisible()) {
+		fail(label + ": the About dialog did not open");
+		return about;
+	}
+	if (about->isModal())
+		fail(label + ": the About dialog is modal; it must never block OBS (UX-013)");
+	for (const QWidget *widget : about->findChildren<QWidget *>()) {
+		if (!widget->isVisible())
+			continue;
+		const QRect box(widget->mapTo(about, QPoint(0, 0)), widget->size());
+		if (box.left() < 0 || box.right() >= about->width() || box.bottom() >= about->height())
+			fail(label + QString(": %1 \"%2\" reaches past the About dialog's edge")
+					     .arg(widget->metaObject()->className(), widget->accessibleName()));
+		if (widget->hasHeightForWidth() && widget->height() < widget->heightForWidth(widget->width()))
+			fail(label +
+			     QString(": text cut in the About dialog: %1").arg(widget->metaObject()->className()));
+		const auto *text = qobject_cast<const QLabel *>(widget);
+		if (text != nullptr && QFontInfo(text->font()).pointSizeF() < TEXT_FLOOR)
+			fail(label + ": \"" + text->text() + "\" is under 8 pt in the About dialog");
+		const auto *button = qobject_cast<const TswButton *>(widget);
+		if (button != nullptr && button->width() < button->minimumSizeHint().width())
+			fail(label + ": a word is cut in the About dialog's " + button->accessibleName());
+	}
+	if (about->findChildren<TswLink *>().size() != 4)
+		fail(label + ": the About dialog does not have its four links");
+	const auto *symbol = about->findChild<QWidget *>("tswSymbol");
+	if (symbol == nullptr || !symbol->isVisible() || symbol->height() <= 0)
+		fail(label + ": the About dialog shows no symbol");
+	for (const QLabel *text : about->findChildren<QLabel *>()) {
+		const QColor color = text->palette().color(QPalette::WindowText);
+		if (tswContrast(color, dock.theme().panel) < TEXT)
+			fail(label + ": \"" + text->text() + "\" in the About dialog is under 4.5:1");
+	}
+	return about;
+}
+
 /* A dock in a scroll area of this width, showing a case, settled (as in OBS). */
 QScrollArea *showCase(const Case &c, int width)
 {
 	auto *dock = new TswDock(lookup);
+	giveAboutInfo(dock);
 	QScrollArea *area = TswDock::inScrollArea(dock);
 	area->setFixedWidth(width);
 	area->resize(width, TALL);
@@ -788,6 +879,11 @@ void checkLocale(const QString &locale, const QString &pictures)
 		}
 		checkPositions(positions, QString("%1 %2 px").arg(locale).arg(width));
 	}
+	QScrollArea *area = showCase(caseNamed("timelapse"), WIDTHS[0]);
+	TswAbout *about = checkAbout(*area->findChild<TswDock *>(), QString("%1 About").arg(locale));
+	if (about != nullptr)
+		about->grab().save(QString("%1/%2-about.png").arg(pictures, locale));
+	delete area;
 }
 
 /* --- The dock in OBS's themes (tests/ui/README.md) --- */
@@ -874,6 +970,7 @@ TswDock *dockInObs(OBSBasic &window, const Case &c, int width)
 	frame->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable |
 			   QDockWidget::DockWidgetFloatable);
 	auto *dock = new TswDock(lookup);
+	giveAboutInfo(dock);
 	frame->setWidget(TswDock::inScrollArea(dock));
 	frame->setFixedWidth(width);
 	window.addDockWidget(Qt::RightDockWidgetArea, frame);
@@ -957,6 +1054,9 @@ const Interaction INTERACTIONS[] = {
 	{"Open folder: focus", "summary", "tswOpenFolder", Act::Focus},
 	{"Close: hover", "summary", "tswDismiss", Act::Hover},
 	{"Learn more: focus", "error-103", "tswLearnMore", Act::Focus},
+	{"menu: hover", "idle", "tswMenu", Act::Hover},
+	{"menu: focus", "timelapse", "tswMenu", Act::Focus},
+	{"menu: pressed", "paused", "tswMenu", Act::Press},
 	{"Details: hover", "real-time", "tswDetailsToggle", Act::Hover},
 	{"Details: focus", "details", "tswDetailsToggle", Act::Focus},
 };
@@ -1004,6 +1104,46 @@ QList<Shot> renderInteractions(const ObsTheme &theme, const QString &locale, int
 			{QString("%1 (%2, %3 px)").arg(interaction.label, locale).arg(width), grabDock(window, label)});
 	}
 	return row;
+}
+
+/* The dock with its menu open, as a click on the menu button shows it: the menu below the button, its
+ * right edge on the button's. The menu is a window of its own, so it is drawn onto the dock's picture. */
+QImage menuPicture(const ObsTheme &theme, const QString &locale, int width)
+{
+	const QString label = QString("%1 %2 %3 px menu").arg(theme.name, locale).arg(width);
+	OBSBasic window;
+	TswDock *dock = dockInObs(window, caseNamed("timelapse"), width);
+	QImage base = grabDock(window, label);
+	auto *button = dock->findChild<QToolButton *>("tswMenu");
+	auto *menu = dock->findChild<QMenu *>("tswDockMenu");
+	const QPoint corner = button->mapToGlobal(QPoint(button->width(), button->height()));
+	button->setDown(true); /* as a click leaves it while its menu is open */
+	base = grabDock(window, label);
+	menu->popup(corner - QPoint(menu->sizeHint().width(), 0));
+	settle();
+	if (!menu->isVisible()) {
+		fail(label + ": the menu did not open");
+		return base;
+	}
+	const QImage popup = menu->grab().toImage();
+	const QPoint at = menu->pos() - window.findChild<OBSDock *>()->mapToGlobal(QPoint(0, 0));
+	QImage out(std::max(base.width(), at.x() + popup.width()), std::max(base.height(), at.y() + popup.height()),
+		   QImage::Format_ARGB32_Premultiplied);
+	out.fill(Qt::transparent);
+	QPainter painter(&out);
+	painter.drawImage(0, 0, base);
+	painter.drawImage(at, popup);
+	menu->hide();
+	return out;
+}
+
+/* The About dialog in one language, checked and drawn (UX-138). */
+QImage aboutPicture(const ObsTheme &theme, const QString &locale)
+{
+	OBSBasic window;
+	TswDock *dock = dockInObs(window, caseNamed("timelapse"), WIDTHS[0]);
+	TswAbout *about = checkAbout(*dock, QString("%1 %2 About").arg(theme.name, locale));
+	return about != nullptr ? about->grab().toImage() : QImage();
 }
 
 /* The look of the contact sheet: OBS's window color, text color and font under the theme. */
@@ -1069,6 +1209,7 @@ void renderThemes(const QString &locales, const QString &pictures, const QString
 			std::printf("NOTE  %s: OBS ran at %g dpi, these pictures at %g dpi\n", qPrintable(theme.name),
 				    theme.logicalDpi, dpi);
 		QList<QList<Shot>> interactions;
+		QList<Shot> attribution; /* the About dialog and the open menu, in both languages */
 		for (const char *locale : LOCALES) {
 			if (!loadLocale(locales + "/" + locale + ".ini")) {
 				fail(QString("cannot read %1.ini").arg(locale));
@@ -1079,12 +1220,19 @@ void renderThemes(const QString &locales, const QString &pictures, const QString
 			/* English at the widest width, Spanish at the narrowest: the two extremes. */
 			const bool english = QString(locale) == LOCALES[0];
 			interactions.append(renderInteractions(theme, locale, english ? WIDTHS[0] : WIDTHS[2]));
+			attribution.append({QString("About (%1)").arg(locale), aboutPicture(theme, locale)});
+			const int width = english ? WIDTHS[0] : WIDTHS[2];
+			attribution.append({QString("menu (%1, %2 px)").arg(locale).arg(width),
+					    menuPicture(theme, locale, width)});
 			for (const std::string &key : missing)
 				fail(QString("%1.ini has no %2").arg(locale, QString::fromStdString(key)));
 		}
 		contactSheet(QString("%1: hover, pressed, keyboard focus, disabled and the Stop hold").arg(theme.name),
 			     interactions, sheetLook())
 			.save(QString("%1/contact-sheets/%2-interaction.png").arg(pictures, theme.name));
+		contactSheet(QString("%1: the About dialog and the dock's menu (UX-138)").arg(theme.name),
+			     {attribution}, sheetLook())
+			.save(QString("%1/contact-sheets/%2-about.png").arg(pictures, theme.name));
 		std::printf("theme %s: pictures in %s/%s\n", qPrintable(theme.name), qPrintable(pictures),
 			    qPrintable(theme.name));
 	}
@@ -1107,6 +1255,7 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	const QString locales = QString::fromLocal8Bit(argv[1]);
+	images = locales + "/../images";
 	const QString pictures = QString::fromLocal8Bit(argv[2]);
 	QDir().mkpath(pictures);
 	if (argc >= 4) {

@@ -33,7 +33,9 @@ const double HATCH_WIDTH = 1.25;   /* px: the timelapse hatching */
 const double TAPE_INK = 0.3;       /* the line a pause leaves visible: text over the surface */
 const double TIMELAPSE_INK = 0.2;  /* the tint under the hatching: accent over the surface */
 const double REAL_TIME_INK = 0.12; /* real time's quiet fill: text over the surface, as a raised face */
+const double MENU_ROWS = 1.6;      /* x L: the menu button, as the card's round dismiss button */
 const double TOGGLE_ROWS = 1.6;    /* x L: the Details toggle, an easy target */
+const double MENU_GLYPH = 0.55;    /* the menu glyph's share of its button, as the tally pill's glyph */
 const int MAX_HATCH_LINES = 512;   /* more than any stretch needs at the densest pitch (P10-2) */
 const char UNKNOWN_KEY[] = "Details.Unknown";
 
@@ -454,4 +456,66 @@ void TswDetails::restyle(bool narrow)
 	mapBox->layout()->setSpacing(t.s2); /* a caption sits close to what it names (3.7) */
 	speedMap->updateGeometry();
 	speedMap->update();
+}
+
+/* --- TswMenuButton --- */
+
+TswMenuButton::TswMenuButton(QWidget *parent, const TswTheme *style) : QToolButton(parent), theme(style)
+{
+	setObjectName("tswMenu");
+	setAttribute(Qt::WA_Hover);
+	setFocusPolicy(Qt::StrongFocus);
+	setPopupMode(QToolButton::InstantPopup);
+	setAutoRaise(true);
+}
+
+void TswMenuButton::setUnder(const QColor &color)
+{
+	if (color == under)
+		return;
+	under = color;
+	update();
+}
+
+QColor TswMenuButton::underColor() const
+{
+	return under.isValid() ? under : theme->panel;
+}
+
+QColor TswMenuButton::glyphColor() const
+{
+	return theme->shape(theme->muted, underColor());
+}
+
+void TswMenuButton::paintEvent(QPaintEvent *event)
+{
+	(void)event;
+	QPainter painter(this);
+	painter.setRenderHint(QPainter::Antialiasing);
+	const QRectF box(rect());
+	const QColor face = underColor();
+	/* Quiet until reached: a circle only under the mouse, and a firmer one while pressed or while its
+	 * menu is open, so the menu reads as coming from it (4.2, dismiss). */
+	if (isDown())
+		tswPaintRounded(painter, box, box.height() / 2.0, theme->hover(theme->hover(face)), QPen(Qt::NoPen));
+	else if (underMouse() && isEnabled())
+		tswPaintRounded(painter, box, box.height() / 2.0, theme->hover(face), QPen(Qt::NoPen));
+	const double glyph = std::round(box.height() * MENU_GLYPH);
+	tswPaintGlyph(painter, TswGlyph::More,
+		      QRectF(box.center().x() - glyph / 2.0, box.center().y() - glyph / 2.0, glyph, glyph),
+		      glyphColor());
+	if (tswHasKeyFocus(this))
+		tswPaintFocusRing(painter, box, box.height() / 2.0, theme->shape(theme->focus, face), 1.0,
+				  TswRing::Solid);
+}
+
+int tswMenuButtonSize(const TswTheme &theme)
+{
+	return static_cast<int>(std::lround(MENU_ROWS * theme.L));
+}
+
+int tswMenuButtonInset(const TswTheme &theme)
+{
+	const int size = tswMenuButtonSize(theme);
+	return (size - static_cast<int>(std::lround(size * MENU_GLYPH))) / 2;
 }

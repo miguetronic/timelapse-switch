@@ -38,6 +38,7 @@ enum class TswGlyph {
 	Close,       /* card dismiss */
 	Chevron,     /* one chevron, pointing right: timelapse tape, a closed Details section */
 	ChevronDown, /* one chevron, pointing down: an open Details section */
+	More,        /* three dots in a row: the dock's menu */
 };
 
 /* tswPaintGlyph: paints glyph in the square centered in box, in color. Thread: UI. */

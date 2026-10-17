@@ -22,6 +22,7 @@
 #include <QFileInfo>
 #include <QFocusEvent>
 #include <QLabel>
+#include <QMenu>
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QShortcut>
@@ -148,6 +149,7 @@ QString TswDock::spokenDuration(const QString &clock) const
 void TswDock::buildZones()
 {
 	status = new TswStatusCard(this, &style);
+	buildMenu();
 	mainButton = new TswButton(this, &style);
 	mainButton->setObjectName("tswMain");
 	buildRails();
@@ -196,6 +198,40 @@ void TswDock::buildZones()
 	zones->addSpacerItem(gapDetails);
 	zones->addWidget(details); /* last: opening it moves nothing above it (UX-002) */
 	zones->addStretch();
+}
+
+/*
+ * The dock's menu (UX-138): a small button in the status card's top corner, never a footer or a link
+ * in the dock. Help opens the documentation site and About the dialog, each only when chosen: a stray
+ * click mid-recording never takes the focus away from OBS (3.18).
+ */
+void TswDock::buildMenu()
+{
+	menuButton = new TswMenuButton(status, &style);
+	menuButton->setAccessibleName(text("Menu.Button"));
+	menuButton->setToolTip(text("Menu.Button"));
+	menu = new QMenu(this);
+	menu->setObjectName("tswDockMenu");
+	QAction *help = menu->addAction(text("Menu.Help"));
+	QAction *aboutAction = menu->addAction(text("Menu.About"));
+	connect(help, &QAction::triggered, this, []() { QDesktopServices::openUrl(QUrl(QString(TSW_DOCS_URL))); });
+	connect(aboutAction, &QAction::triggered, this, [this]() { showAbout(); });
+	menuButton->setMenu(menu);
+	status->setMenuButton(menuButton);
+}
+
+void TswDock::setAboutInfo(const TswAboutInfo &info)
+{
+	aboutInfo = info;
+}
+
+void TswDock::showAbout()
+{
+	if (about == nullptr)
+		about = new TswAbout(this, &style, lookup, aboutInfo);
+	about->show(); /* not modal: OBS and the recording carry on (UX-013) */
+	about->raise();
+	about->activateWindow();
 }
 
 void TswDock::setDetailsOpen(bool open)
@@ -430,7 +466,7 @@ void TswDock::connectInputs()
  * one of the speed rail and the "Resume in" rail shows at a time, in the same place. */
 void TswDock::watchKeyFocus()
 {
-	QList<QWidget *> order{mainButton, dismiss, openFolder, play, copyDetails, learnMore};
+	QList<QWidget *> order{menuButton, mainButton, dismiss, openFolder, play, copyDetails, learnMore};
 	for (TswRail *rail : {startRail, speedRail, resumeRail}) {
 		for (QAbstractButton *segment : rail->group()->buttons())
 			order << segment;
@@ -605,6 +641,8 @@ void TswDock::restyle()
 	updateCardRows(); /* the fonts may have changed */
 	updateStopRow();
 	refresh(false);
+	if (about != nullptr)
+		about->restyle();
 	update();
 	restyling = false;
 }
@@ -614,6 +652,10 @@ void TswDock::applyReserves()
 {
 	const QString widest = QString::number(WIDEST_SPEED);
 	TswStatusReserve reserve;
+	for (const char *tally : {"State.Tally.Ready", "State.Tally.Rec", "State.Tally.Paused", "State.Tally.Starting",
+				  "State.Tally.Saving", "State.Tally.Saved", "State.Tally.Error"})
+		reserve.tallies << text(tally);
+	reserve.badgeTallies = {text("State.Tally.Rec"), text("State.Tally.Paused")};
 	reserve.realTimeHero = text("State.Hero.RealTime");
 	reserve.timelapseHero = text("State.Hero.Timelapse");
 	reserve.quietHeroes = {text("State.Hero.StartsRealTime"),
@@ -705,6 +747,7 @@ void TswDock::applyMetrics()
 	for (TswRail *rail : {startRail, speedRail, resumeRail})
 		rail->refit(); /* the "Resume in" rail's segments follow the fonts */
 	details->restyle(narrow);
+	status->placeMenuButton(); /* the fonts may have moved its row */
 	updateGaps();
 }
 
