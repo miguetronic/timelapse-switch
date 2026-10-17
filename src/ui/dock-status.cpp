@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "ui/dock-monitor.hpp"
 #include "ui/dock-paint.hpp"
 #include "ui/dock-widgets.hpp"
 
@@ -154,8 +155,10 @@ struct TswStatusCard::Layout {
 	double dividerY = 0.0; /* the dashed hairline; in timelapse, the bottom edge of the band */
 	double readoutTop = 0.0;
 	double captionHeight = 0.0, digitsHeight = 0.0, statusHeight = 0.0;
-	double gutter = 0.0;     /* between the two columns */
-	double secondLeft = 0.0; /* where the second column starts, from the card's left edge */
+	double menuSize = 0.0;     /* the menu button's side; 0 without one */
+	double menuOverhang = 0.0; /* how far its clear margin reaches into the card's padding */
+	double gutter = 0.0;       /* between the two columns */
+	double secondLeft = 0.0;   /* where the second column starts, from the card's left edge */
 	double statusTop = 0.0;
 	double tapeTop = 0.0, tapeHeight = 0.0;
 	QFont tallyFont, heroFont, quietFont, headlineFont, badgeFont, captionFont, digitsFont, statusFont;
@@ -166,6 +169,7 @@ struct TswStatusCard::Layout {
 	int statusLines = 1;
 	bool heroGlyphShown = true; /* false only when a recording hero fits without its glyph alone */
 	bool badgeOnTally = false;  /* narrow: the speed joins the tally line (4.2, narrow) */
+	bool menuOnTally = true;    /* the menu button ends the tally line; else it has a row above it */
 	bool stacked = false;       /* the two columns do not fit side by side: one under the other */
 	bool clipped = false;
 };
@@ -190,12 +194,20 @@ static bool sameContent(const TswStatusContent &a, const TswStatusContent &b)
 	       a.dimmed == b.dimmed && a.stretchLabel == b.stretchLabel && a.stretchValues == b.stretchValues;
 }
 
+void TswStatusCard::setMenuButton(TswMenuButton *button)
+{
+	menu = button;
+	placeMenuButton();
+}
+
 void TswStatusCard::setContent(const TswStatusContent &next)
 {
-	if (sameContent(next, content))
-		return; /* nothing to paint again */
-	content = next;
-	update();
+	if (!sameContent(next, content)) { /* else nothing to paint again */
+		content = next;
+		update();
+	}
+	if (menu != nullptr)
+		menu->setUnder(stateColor()); /* a new state, or a new theme: what the button sits on */
 }
 
 void TswStatusCard::setReserve(const TswStatusReserve &texts)
@@ -203,6 +215,7 @@ void TswStatusCard::setReserve(const TswStatusReserve &texts)
 	reserve = texts;
 	updateGeometry();
 	update();
+	placeMenuButton();
 }
 
 void TswStatusCard::setNarrow(bool isNarrow)
@@ -212,6 +225,28 @@ void TswStatusCard::setNarrow(bool isNarrow)
 	narrow = isNarrow;
 	updateGeometry();
 	update();
+	placeMenuButton();
+}
+
+/* Square, at the right end of the tally line and centered on it, or alone in the top corner: the same
+ * place in every state. */
+void TswStatusCard::placeMenuButton()
+{
+	if (menu == nullptr)
+		return;
+	const Layout lay = measure(width());
+	const int size = static_cast<int>(lay.menuSize);
+	const double top = lay.menuOnTally ? lay.tallyTop + (lay.tallyHeight - size) / 2.0 : lay.pad - lay.menuOverhang;
+	const QRect box(static_cast<int>(std::lround(lay.pad + lay.inner + lay.menuOverhang - size)),
+			static_cast<int>(std::lround(top)), size, size);
+	if (menu->geometry() != box)
+		menu->setGeometry(box);
+}
+
+void TswStatusCard::resizeEvent(QResizeEvent *event)
+{
+	QWidget::resizeEvent(event);
+	placeMenuButton();
 }
 
 /* The largest hero size, from the target down to the floor, at which both recording heroes fit:
@@ -244,11 +279,14 @@ void TswStatusCard::measureStateBlock(Layout &lay) const
 {
 	const TswTheme &t = *theme;
 
-	/* 1. The speed badge, as wide as the widest speed so the hero line never shifts. */
+	/* 1. The speed badge, as wide as the widest speed so the hero line never shifts; the tally pill;
+	 *    and where the menu button goes. */
 	lay.badgeHeight = std::round(cap(lay.badgeFont) + 2 * t.s3);
 	lay.badgeWidth =
 		std::max(lay.badgeHeight, std::ceil(tswTextWidth(lay.badgeFont, reserve.widestSpeed)) + 2 * t.s3);
 	lay.badgeOnTally = narrow;
+	lay.pillHeight = std::round(cap(lay.tallyFont) + 2 * t.s2 + 2);
+	measureMenu(lay);
 
 	/* 2. The hero: the largest size at which REAL TIME and TIMELAPSE (and the badge) fit. */
 	bool fits = true;
@@ -267,7 +305,6 @@ void TswStatusCard::measureStateBlock(Layout &lay) const
 	lay.clipped = !fits;
 
 	/* 3. Rows: each as tall as the tallest thing it may show at this width. */
-	lay.pillHeight = std::round(cap(lay.tallyFont) + 2 * t.s2 + 2);
 	lay.tallyHeight = lay.badgeOnTally ? std::max(lay.pillHeight, lay.badgeHeight) : lay.pillHeight;
 	double hero = std::round(cap(lay.heroFont)) + 2;
 	if (!lay.badgeOnTally)
@@ -278,6 +315,41 @@ void TswStatusCard::measureStateBlock(Layout &lay) const
 	for (const QString &text : reserve.headlines)
 		hero = std::max(hero, double(tswWrappedHeight(lay.headlineFont, text, static_cast<int>(lay.inner))));
 	lay.heroHeight = hero;
+}
+
+/* The widest of these tally pills (each with a glyph, the widest kind). */
+double TswStatusCard::widestPill(const Layout &lay, const QStringList &tallies) const
+{
+	const double glyph = std::round(lay.pillHeight * PILL_GLYPH) + theme->s2;
+	double widest = 0.0;
+	for (const QString &tally : tallies)
+		widest = std::max(widest, tswTextWidth(lay.tallyFont, tally));
+	return std::ceil(2 * theme->s3 + glyph + widest);
+}
+
+/* What the menu button takes on the tally line, after the pill: the gap, the badge if any, the button
+ * less what of its clear margin reaches into the padding. */
+double TswStatusCard::menuNeeds(const Layout &lay, bool badge) const
+{
+	const double button = lay.menuSize - lay.menuOverhang;
+	return badge ? theme->s3 + lay.badgeWidth + theme->s1 + button : theme->s3 + button;
+}
+
+/* The menu button ends the tally line where every pill fits beside it, with its badge (the pause sign,
+ * or the speed when narrow) for REC and PAUSED. Where they cannot share it (the narrowest dock at the
+ * largest font), the button takes a row of its own above the tally line, still in the card's top
+ * corner (UX-138). Its clear margin may reach into the card's padding, its dots never past the content. */
+void TswStatusCard::measureMenu(Layout &lay) const
+{
+	lay.menuSize = menu != nullptr ? tswMenuButtonSize(*theme) : 0.0;
+	lay.menuOnTally = true;
+	if (menu == nullptr)
+		return;
+	const double frame = 2.0; /* the widest card frame (real time, timelapse, error) */
+	lay.menuOverhang = std::max(0.0, std::min(double(tswMenuButtonInset(*theme)), lay.pad - frame - 1.0));
+	const double plain = widestPill(lay, reserve.tallies) + menuNeeds(lay, false);
+	const double badged = widestPill(lay, reserve.badgeTallies) + menuNeeds(lay, true);
+	lay.menuOnTally = std::max(plain, badged) <= lay.inner;
 }
 
 /*
@@ -342,7 +414,8 @@ TswStatusCard::Layout TswStatusCard::measure(int width) const
 
 	/* 5. Top to bottom: state block, hairline, readout, status line, tape. */
 	const double pair = lay.captionHeight + t.s2 + lay.digitsHeight;
-	lay.tallyTop = lay.pad;
+	/* A menu button in a row of its own pushes the tally line down by what it takes below the padding. */
+	lay.tallyTop = lay.menuOnTally ? lay.pad : lay.pad - lay.menuOverhang + lay.menuSize;
 	lay.heroTop = lay.tallyTop + lay.tallyHeight + t.s3;
 	lay.dividerY = std::round(lay.heroTop + lay.heroHeight + t.s3);
 	lay.readoutTop = lay.dividerY + 1 + t.s3;
@@ -383,8 +456,10 @@ bool TswStatusCard::clipped() const
 	const Layout lay = measure(width());
 	if (lay.clipped)
 		return true;
-	/* What shows now must fit too: the tally pill, and a badge beside it. */
+	/* What shows now must fit too: the tally pill, a badge beside it, and the menu button. */
 	const bool badge = hasBadge();
+	if (lay.menuOnTally && menu != nullptr)
+		return pillWidth(lay) + menuNeeds(lay, badge) > lay.inner;
 	return pillWidth(lay) + (badge ? theme->s3 + lay.badgeWidth : 0.0) > lay.inner;
 }
 
@@ -499,7 +574,9 @@ void TswStatusCard::paintTally(QPainter &painter, const Layout &lay) const
 		/* Centered on the tally line; when wide it overhangs the gaps above and below the line (the pad
 		 * and s3 are both larger than the overhang), so no state's card grows for it. */
 		const double badgeTop = std::round(lay.tallyTop + (lay.tallyHeight - lay.badgeHeight) / 2.0);
-		const QRectF badge(lay.pad + lay.inner - lay.badgeWidth, badgeTop, lay.badgeWidth, lay.badgeHeight);
+		const double right =
+			lay.pad + lay.inner - (lay.menuOnTally ? lay.menuSize - lay.menuOverhang + theme->s1 : 0.0);
+		const QRectF badge(right - lay.badgeWidth, badgeTop, lay.badgeWidth, lay.badgeHeight);
 		if (content.banner == TSW_BANNER_PAUSED)
 			paintPauseBadge(painter, badge);
 		else

@@ -17,6 +17,8 @@ OBS looks for plugins in a folder of your user account. Timelapse Switch puts ev
   |       +-- bin/64bit/timelapse-switch.so     the plugin itself
   |       +-- data/locale/en-US.ini             its texts, English
   |       +-- data/locale/es-ES.ini             its texts, Spanish
+  |       +-- data/images/symbol-512.png        its symbol, for the About dialog
+  |       +-- data/images/symbol-dark-512.png   the same, for dark themes
   |
   +-- plugin_config/
       +-- timelapse-switch/                 <- its settings and hotkeys,
@@ -78,4 +80,4 @@ The tool removes only those two folders, and checks the exact path before it rem
 
 ## 6. For contributors: how this is checked
 
-`tests/tools/test-dev-install.sh` (run by `ctest`) installs, reinstalls and uninstalls into a made-up OBS folder that also holds another plugin and existing settings, and checks that exactly the plugin's files appear and disappear, that settings survive an uninstall unless `--purge` is given, and that the other plugin is never touched.
+`tests/tools/test-dev-install.sh` (run by `ctest`) installs, reinstalls and uninstalls into a made-up OBS folder that also holds another plugin and existing settings, and checks that exactly the plugin's files appear and disappear (the module and every file of `data/`), that settings survive an uninstall unless `--purge` is given, and that the other plugin is never touched.

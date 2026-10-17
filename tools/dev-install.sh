@@ -69,7 +69,8 @@ remove_own_folder() {
 #######################################
 # Copies the built plugin into place in one step: the new copy is made
 # next to the old one and then takes its place, so OBS never finds half
-# an installation.
+# an installation. All of the plugin's data goes with it (its texts in
+# locale/, its pictures in images/), as the build left it in the rundir.
 # Arguments:
 #   OBS configuration folder.
 #######################################
@@ -85,7 +86,7 @@ install_plugin() {
   rm -rf -- "${staging}"
   mkdir -p "${staging}/bin/64bit" "${staging}/data"
   cp "${rundir}/${NAME}.so" "${staging}/bin/64bit/"
-  cp -r "${rundir}/${NAME}/locale" "${staging}/data/"
+  cp -r "${rundir}/${NAME}/." "${staging}/data/"
   if [[ -e "${target}" ]]; then
     remove_own_folder "${target}" "${config}" plugins >/dev/null
   fi

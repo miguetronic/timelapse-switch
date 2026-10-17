@@ -73,6 +73,12 @@ void paintFilled(QPainter &p, TswGlyph glyph)
 		for (const double x : {3.0, 8.0, 13.0})
 			p.drawEllipse(QPointF(x, 8), 1.5, 1.5);
 		break;
+	case TswGlyph::More: /* the busy dots, a little larger: a button needs a firmer mark */
+		p.setPen(Qt::NoPen);
+		p.setBrush(color);
+		for (const double x : {2.5, 8.0, 13.5})
+			p.drawEllipse(QPointF(x, 8), 1.75, 1.75);
+		break;
 	default:
 		break;
 	}
@@ -158,6 +164,11 @@ void paintStroked(QPainter &p, TswGlyph glyph)
 		break;
 	case TswGlyph::Chevron: {
 		const QPointF chevron[] = {{5, 3}, {10, 8}, {5, 13}};
+		p.drawPolyline(chevron, 3);
+		break;
+	}
+	case TswGlyph::ChevronDown: {
+		const QPointF chevron[] = {{3, 5.5}, {8, 10.5}, {13, 5.5}};
 		p.drawPolyline(chevron, 3);
 		break;
 	}
