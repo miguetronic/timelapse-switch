@@ -44,6 +44,7 @@ const int SPEEDS[] = {2, 4, 8, 16};
 const uint32_t WIDEST_SPEED = 16;
 const int START_REAL_TIME = 0; /* ids of the start-mode segments */
 const int START_TIMELAPSE = 1;
+const int RESUME_REAL_TIME = 1; /* the "Resume in" rail: 1 is Real time, the others their speed */
 const double MAIN_ROWS =
 	2.75; /* x L: the main button's height, above UX-107's 2.5: an easy target with paint on the hands */
 const double CONTROL_ROWS = 1.8; /* x L: Stop and the rails */
@@ -199,6 +200,7 @@ void TswDock::buildRails()
 	speeds->setObjectName("tswSpeeds");
 	startGroup = new QWidget(speeds);
 	startCaption = new TswReservedLabel(startGroup);
+	startCaption->setText(text("Label.StartIn").toUpper());
 	startRail = new TswRail(startGroup, &style);
 	startRail->setMode(TswRail::Mode::Start);
 	/* Object names let a theme author or the UI test pick one control (UX-015, tests/ui). */
@@ -211,12 +213,14 @@ void TswDock::buildRails()
 	speedGroup = new QWidget(speeds);
 	speedCaption = new TswReservedLabel(speedGroup);
 	speedRail = new TswRail(speedGroup, &style);
+	speedRail->setObjectName("tswSpeedRail");
 	for (const int speed : SPEEDS) {
 		TswSegment *segment =
 			speedRail->addSegment(speed, TswGlyph::None, speedText(static_cast<uint32_t>(speed)));
 		segment->setObjectName(QString("tswSpeed%1").arg(speed));
 		segment->setAccessibleName(text("A11y.Speed", QString::number(speed)));
 	}
+	buildResumeRail();
 	for (QWidget *group : {startGroup, speedGroup}) {
 		auto *column = new QVBoxLayout(group);
 		column->setContentsMargins(0, 0, 0, 0);
@@ -225,16 +229,35 @@ void TswDock::buildRails()
 	startGroup->layout()->addWidget(startRail);
 	speedGroup->layout()->addWidget(speedCaption);
 	speedGroup->layout()->addWidget(speedRail);
-	/* While recording the start mode is hidden but keeps its room (below the speeds, arrangeRails), so
-	 * zone D is as tall as while paused, when it shows "Resume in": Pause and Stop never move (UX-002,
-	 * UX-128). */
-	QSizePolicy keep = startGroup->sizePolicy();
-	keep.setRetainSizeWhenHidden(true);
-	startGroup->setSizePolicy(keep);
+	speedGroup->layout()->addWidget(resumeRail);
 	speedsLayout = new QVBoxLayout(speeds);
 	speedsLayout->setContentsMargins(0, 0, 0, 0);
 	speedsLayout->addWidget(startGroup);
 	speedsLayout->addWidget(speedGroup);
+}
+
+/*
+ * While paused the speed rail gives way to one "Resume in" rail in the same place: Real time, then the
+ * speeds (UX-131). One rail, as tall as the speed rail, so Pause and Stop below it never move and the
+ * recording states keep no empty room for it (UX-002, UX-128).
+ */
+void TswDock::buildResumeRail()
+{
+	resumeRail = new TswRail(speedGroup, &style);
+	resumeRail->setObjectName("tswResumeRail");
+	TswSegment *realTime = resumeRail->addSegment(RESUME_REAL_TIME, TswGlyph::Play, text("Label.RealTime"));
+	realTime->setObjectName("tswResumeRealTime");
+	realTime->setAccessibleName(text("Label.RealTime"));
+	realTime->setToolTip(text("Label.RealTime")); /* where only its glyph fits */
+	for (const int speed : SPEEDS) {
+		TswSegment *segment =
+			resumeRail->addSegment(speed, TswGlyph::None, speedText(static_cast<uint32_t>(speed)));
+		segment->setObjectName(QString("tswResume%1").arg(speed));
+		segment->setAccessibleName(text("A11y.Speed", QString::number(speed)));
+	}
+	resumeRail->setLead(true);
+	resumeRail->setMode(TswRail::Mode::Armed); /* a choice for later: outlined, never filled */
+	resumeRail->hide();
 }
 
 void TswDock::buildCard()
@@ -347,6 +370,13 @@ void TswDock::connectInputs()
 	connect(startRail->group(), &QButtonGroup::idClicked, this, [this](int id) {
 		emit inputRequested(id == START_TIMELAPSE ? TSW_INPUT_START_TIMELAPSE : TSW_INPUT_START_REAL_TIME, 0);
 	});
+	/* While paused: Real time, or timelapse at that speed; the session only chooses, never resumes. */
+	connect(resumeRail->group(), &QButtonGroup::idClicked, this, [this](int id) {
+		if (id == RESUME_REAL_TIME)
+			emit inputRequested(TSW_INPUT_START_REAL_TIME, 0);
+		else
+			emit inputRequested(TSW_INPUT_SPEED_KEY, static_cast<unsigned>(id));
+	});
 	connect(dismiss, &QAbstractButton::clicked, this, [this]() { emit dismissRequested(); });
 	connect(openFolder, &QAbstractButton::clicked, this,
 		[this]() { QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath())); });
@@ -357,31 +387,21 @@ void TswDock::connectInputs()
 		[this]() { QDesktopServices::openUrl(QUrl(QString(ERROR_PAGE).arg(threeDigits(view.error_texts)))); });
 }
 
-/* The keyboard focus ring shows only for keyboard focus (UX-110). */
+/* The keyboard focus ring shows only for keyboard focus (UX-110); Tab follows the eye (UX-102). Only
+ * one of the speed rail and the "Resume in" rail shows at a time, in the same place. */
 void TswDock::watchKeyFocus()
 {
-	QList<QWidget *> watched{mainButton,  dismiss,   openFolder,  play,
-				 copyDetails, learnMore, pauseButton, stopButton};
-	for (TswRail *rail : {startRail, speedRail}) {
-		for (QAbstractButton *segment : rail->group()->buttons())
-			watched << segment;
-	}
-	for (QWidget *widget : watched)
-		widget->installEventFilter(this);
-	updateTabOrder(true);
-}
-
-/* Tab follows the eye (UX-102): the rails in the order they show (arrangeRails). */
-void TswDock::updateTabOrder(bool startFirst)
-{
 	QList<QWidget *> order{mainButton, dismiss, openFolder, play, copyDetails, learnMore};
-	for (TswRail *rail : {startFirst ? startRail : speedRail, startFirst ? speedRail : startRail}) {
+	for (TswRail *rail : {startRail, speedRail, resumeRail}) {
 		for (QAbstractButton *segment : rail->group()->buttons())
 			order << segment;
 	}
 	order << pauseButton << stopButton;
-	for (int i = 1; i < order.size(); i++)
-		setTabOrder(order[i - 1], order[i]);
+	for (int i = 0; i < order.size(); i++) {
+		order[i]->installEventFilter(this);
+		if (i > 0)
+			setTabOrder(order[i - 1], order[i]);
+	}
 }
 
 QScrollArea *TswDock::inScrollArea(TswDock *dock)
@@ -574,9 +594,8 @@ void TswDock::applyReserves()
 				text("Action.ResumeRealTime"), text("Action.ResumeTimelapse", widest)});
 	pauseButton->setReserve({text("Action.Pause"), text("Action.Resume")});
 	stopButton->setReserve({text("Action.Stop")});
-	startCaption->setReserve({text("Label.StartIn").toUpper(), text("Label.ResumeIn").toUpper()});
-	speedCaption->setReserve(
-		{text("Label.Speed").toUpper(), text("Label.NextSpeed").toUpper(), text("Label.SpeedNow").toUpper()});
+	speedCaption->setReserve({text("Label.Speed").toUpper(), text("Label.NextSpeed").toUpper(),
+				  text("Label.SpeedNow").toUpper(), text("Label.ResumeIn").toUpper()});
 }
 
 /* Sizes of the labels that are not painted, through their own style sheets (3.6): setFont would
@@ -643,8 +662,8 @@ void TswDock::applyMetrics()
 	contextRow->layout()->setSpacing(t.s2);
 	const int line = QFontMetrics(t.fontAt(TswType::CONTEXT, false)).height();
 	contextIcon->setGlyph(TswGlyph::Info, t.muted, QSize(tswGlyphSize(t.fontAt(TswType::CONTEXT, false)), line));
-	for (TswRail *rail : {startRail, speedRail})
-		rail->updateGeometry();
+	for (TswRail *rail : {startRail, speedRail, resumeRail})
+		rail->refit(); /* the "Resume in" rail's segments follow the fonts */
 	updateGaps();
 }
 
@@ -855,38 +874,37 @@ void TswDock::showMain()
 		mainButton->setAccessibleName(spoken(words));
 }
 
-/* Idle: the start mode first, then the speeds. Recording, paused and saving: the speeds first, under
- * the main button as always, and below them the room of the mode to resume in, filled while paused,
- * right above the Resume button it qualifies. */
-void TswDock::arrangeRails(bool startFirst)
-{
-	if ((speedsLayout->indexOf(startGroup) == 0) == startFirst)
-		return;
-	speedsLayout->removeWidget(startGroup);
-	speedsLayout->insertWidget(startFirst ? 0 : 1, startGroup);
-	updateTabOrder(startFirst);
-}
-
+/* Idle: the start mode and the speeds. Recording and saving: the speeds. Paused: the one "Resume in"
+ * rail, in the speeds' place (UX-131). A rail that just appeared shows its choice at once; only one
+ * already shown slides to a new one. */
 void TswDock::showRails(bool animate)
 {
 	speeds->setVisible(view.speeds_shown);
-	/* A rail that just appeared shows its choice at once; only one already shown slides to it. */
 	const bool startWasShown = !startGroup->isHidden();
-	arrangeRails(!view.stop_shown);
+	const bool resumeWasShown = !resumeRail->isHidden();
 	startGroup->setVisible(view.start_mode_shown);
-	startCaption->setText(text(view.start_label).toUpper());
+	speedRail->setVisible(!view.speeds_real_time);
+	resumeRail->setVisible(view.speeds_real_time);
 	speedCaption->setText(text(view.speed_label).toUpper());
 	const bool engaged = view.banner == TSW_BANNER_TIMELAPSE;
 	speedRail->setEnabled(view.speeds_enabled);
 	speedRail->setMode(engaged ? TswRail::Mode::Engaged : TswRail::Mode::Armed);
-	speedRail->select(static_cast<int>(view.speed_selected), animate);
+	if (!view.speeds_real_time)
+		speedRail->select(static_cast<int>(view.speed_selected), animate);
+	else
+		resumeRail->select(static_cast<int>(view.speed_selected), animate && resumeWasShown);
 	startRail->select(view.start_in_timelapse ? START_TIMELAPSE : START_REAL_TIME, animate && startWasShown);
-	/* The selected speed says whether it is the next one or the one running now (UX-103). */
+	/* The selected segment says whether it is the next speed, the one running now, or how it will
+	 * resume (UX-103). */
 	const QString role = text(engaged ? "A11y.Engaged" : "A11y.Armed");
-	for (QAbstractButton *segment : speedRail->group()->buttons()) {
-		const QString description = segment->isChecked() ? role : QString();
-		if (segment->accessibleDescription() != description)
-			segment->setAccessibleDescription(description);
+	const QString resumes = text("A11y.ResumeChoice");
+	for (TswRail *rail : {speedRail, resumeRail}) {
+		for (QAbstractButton *segment : rail->group()->buttons()) {
+			const QString description = segment->isChecked() ? (rail == resumeRail ? resumes : role)
+									 : QString();
+			if (segment->accessibleDescription() != description)
+				segment->setAccessibleDescription(description);
+		}
 	}
 }
 

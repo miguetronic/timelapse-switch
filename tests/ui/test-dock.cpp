@@ -11,12 +11,13 @@
  *   - every text the dock asks for exists in the locale file, so no raw key ever shows (UX-120);
  *   - the zones keep their order from top to bottom (UX-002), and the main button keeps its y in
  *     every state, Pause and Stop theirs in every recording state, paused included (fixed
- *     positions), side by side in one row;
+ *     positions), side by side in one row; zone D keeps no empty room, and the paused "Resume in"
+ *     rail is exactly as tall as the recording speed rail;
  *   - nothing is wider than what is visible, even at 220 px (UX-012), and the dock can shrink to
  *     200 px;
  *   - the main button is at least 2.5 lines tall (UX-107), and its words are a verb, never a state;
- *   - no text is cut: every label and painted block is as tall as its lines need (UX-121), and
- *     the painted hero never falls below its floor size;
+ *   - no text is cut: every label and painted block is as tall as its lines need (UX-121), no word
+ *     is wider than its button or rail segment, and the painted hero never falls below its floor;
  *   - the colors pass the contrast guard, and no label is colored with a status color (UX-111);
  *   - no text is smaller than 8 pt, whatever OBS's Font Size;
  *   - Tab visits the controls in visual order (UX-102);
@@ -50,6 +51,7 @@
 #include <QScrollBar>
 #include <cmath>
 #include <cstdio>
+#include <algorithm>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -233,6 +235,38 @@ void checkZones(const TswDock &dock, const Case &c, const QString &label)
 		fail(label + ": card shown when it should not be, or the other way round");
 }
 
+/*
+ * Zone D keeps no empty room: its visible captions and rails follow each other with nothing between
+ * them but the layout's spacing, from its top to its bottom. A hidden rail that kept its room would
+ * show here as a hole (the reserve the recording states once had).
+ */
+void checkNoReserve(const TswDock &dock, const QString &label)
+{
+	const auto *speeds = dock.findChild<QWidget *>("tswSpeeds");
+	if (!speeds->isVisible())
+		return;
+	std::vector<std::pair<int, int>> rows; /* top and bottom of each visible caption and rail */
+	for (const QWidget *widget : speeds->findChildren<QWidget *>()) {
+		const bool part = qobject_cast<const QLabel *>(widget) != nullptr ||
+				  qobject_cast<const TswRail *>(widget) != nullptr;
+		if (part && widget->isVisible()) {
+			const int top = widget->mapTo(speeds, QPoint(0, 0)).y();
+			rows.emplace_back(top, top + widget->height());
+		}
+	}
+	std::sort(rows.begin(), rows.end());
+	int bottom = 0;
+	for (const auto &row : rows) {
+		if (row.first - bottom > dock.theme().s4)
+			fail(label + QString(": zone D has %1 px of empty room above y %2")
+					     .arg(row.first - bottom)
+					     .arg(row.first));
+		bottom = std::max(bottom, row.second);
+	}
+	if (speeds->height() - bottom > 1)
+		fail(label + QString(": zone D has %1 px of empty room at its bottom").arg(speeds->height() - bottom));
+}
+
 /* No text is cut: every widget that grows with its text has the height it needs (UX-121). */
 void checkHeights(const TswDock &dock, const QString &label)
 {
@@ -268,6 +302,10 @@ void checkHeights(const TswDock &dock, const QString &label)
 					     .arg(button->objectName(), button->accessibleName())
 					     .arg(button->width())
 					     .arg(button->minimumSizeHint().width()));
+	}
+	for (const TswRail *rail : dock.findChildren<TswRail *>()) {
+		if (rail->isVisible() && rail->property("tswClipped").toBool())
+			fail(label + ": a label is wider than its segment in " + rail->objectName());
 	}
 	const auto *main = dock.findChild<QWidget *>("tswMain");
 	if (main->height() < dock.theme().L * 5 / 2)
@@ -399,6 +437,7 @@ struct Positions {
 	std::map<std::string, int> main;
 	std::map<std::string, int> pause;
 	std::map<std::string, int> stop;
+	std::map<std::string, int> rail; /* the height of zone D's rail: speeds, or "Resume in" */
 };
 
 void notePositions(const TswDock &dock, const Case &c, Positions *positions)
@@ -407,6 +446,8 @@ void notePositions(const TswDock &dock, const Case &c, Positions *positions)
 	if (c.status.phase != TSW_PHASE_IDLE) {
 		positions->pause[c.name] = dock.findChild<QWidget *>("tswPause")->x();
 		positions->stop[c.name] = dock.findChild<QWidget *>("tswStop")->y();
+		const char *rail = c.status.phase == TSW_PHASE_PAUSED ? "tswResumeRail" : "tswSpeedRail";
+		positions->rail[c.name] = dock.findChild<QWidget *>(rail)->height();
 	}
 }
 
@@ -425,12 +466,14 @@ void checkPositions(const Positions &positions, const QString &label)
 	};
 	same(positions.main, "the main button");
 	same(positions.pause, "Pause (its x)");
+	same(positions.rail, "the height of zone D's rail");
 	same(positions.stop, "Stop, and Pause beside it,");
 }
 
 void checkLayout(const TswDock &dock, const QWidget &viewport, const Case &c, const QString &label)
 {
 	checkZones(dock, c, label);
+	checkNoReserve(dock, label);
 	checkHeights(dock, label);
 	checkFit(dock, viewport, label);
 	checkContrast(dock, label);
@@ -810,7 +853,8 @@ const Interaction INTERACTIONS[] = {
 	{"Stop: hover", "timelapse", "tswStop", Act::Hover},
 	{"Stop: held 60 %", "timelapse", "tswStop", Act::Hold},
 	{"Resume: pressed", "paused", "tswPause", Act::Press},
-	{"resume Timelapse: focus", "paused", "tswStartTimelapse", Act::Focus},
+	{"resume x8: focus", "paused", "tswResume8", Act::Focus},
+	{"resume Real time: focus", "paused-timelapse", "tswResumeRealTime", Act::Focus},
 	{"armed resume: focus", "paused-timelapse", "tswMain", Act::Focus},
 	{"saving: disabled", "saving", nullptr, Act::None},
 	{"Open folder: focus", "summary", "tswOpenFolder", Act::Focus},

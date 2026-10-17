@@ -80,11 +80,11 @@ struct tsw_dock_view {
 	/* D. Speed row */
 	bool speeds_shown;
 	const char *speed_label; /* key */
-	uint32_t speed_selected;
+	uint32_t speed_selected; /* 2 to 16; while paused also 1, the "Real time" segment */
 	bool speeds_enabled;
-	bool start_mode_shown;   /* idle: "Start in: real time / timelapse"; paused: "Resume in" (UX-131) */
+	bool speeds_real_time;   /* paused: one "Resume in" rail, Real time and the speeds (UX-131) */
+	bool start_mode_shown;   /* idle: "Start in: real time / timelapse" */
 	bool start_in_timelapse; /* idle: it will start in timelapse; paused: it will resume in timelapse */
-	const char *start_label; /* key: "Start in", or "Resume in" while paused */
 
 	/* E. Pause (it sends TSW_INPUT_PAUSE) and Stop, side by side (UX-128) */
 	const char *pause_text; /* key: "Pause", or "Resume" while paused, in the same place */

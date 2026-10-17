@@ -247,8 +247,9 @@ static void build_saving(struct tsw_dock_view *view)
 
 /*
  * Paused: nothing reaches the file. The counters stand still, the status line counts the pause, and
- * the hero, the main button and the start-mode rail all name the mode it will resume in; Pause
- * becomes Resume in the same place (UX-128 to UX-132).
+ * the hero, the main button and the one "Resume in" rail (Real time and the speeds) all name the
+ * mode it will resume in; Pause becomes Resume in the same place (UX-128 to UX-132). The rail is
+ * zone D's only rail, as while recording, so nothing below it moves.
  */
 static void build_paused(const struct tsw_session *session, const struct tsw_status *status, struct tsw_dock_view *view)
 {
@@ -266,11 +267,10 @@ static void build_paused(const struct tsw_session *session, const struct tsw_sta
 	view->section_speed = 1;
 	tsw_format_duration(status->section_recorded_ns, view->section_recorded);
 	view->section_final[0] = '\0';
-	view->start_mode_shown = true;
-	view->start_label = "Label.ResumeIn";
 	view->start_in_timelapse = timelapse;
-	view->speed_label = "Label.Speed";
-	view->speed_selected = view->hero_speed;
+	view->speeds_real_time = true;
+	view->speed_label = "Label.ResumeIn";
+	view->speed_selected = resume; /* 1 selects "Real time" */
 	view->pause_text = "Action.Resume";
 	view->context_text = "Hint.Paused";
 }
@@ -331,7 +331,6 @@ void tsw_dock_view_build(struct tsw_dock_model *model, const struct tsw_session 
 	view->main_enabled = true;
 	view->speed_selected = session->timelapse_speed;
 	view->start_in_timelapse = session->start_in_timelapse;
-	view->start_label = "Label.StartIn";
 	view->section_label = "Counter.Stretch";
 	view->context_path = status->path != NULL ? status->path : "";
 

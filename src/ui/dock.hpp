@@ -111,6 +111,7 @@ private:
 	QString spokenDuration(const QString &clock) const;
 	void buildZones();
 	void buildRails();
+	void buildResumeRail();
 	void buildCard();
 	void buildCardActions();
 	void buildContext();
@@ -128,8 +129,6 @@ private:
 	void showRails(bool animate);
 	void showStop();
 	void showPause();
-	void arrangeRails(bool startFirst);
-	void updateTabOrder(bool startFirst);
 	void showCard();
 	void showSummaryCard();
 	void showErrorCard();
@@ -168,6 +167,7 @@ private:
 	QWidget *speedGroup = nullptr;
 	TswReservedLabel *speedCaption = nullptr;
 	TswRail *speedRail = nullptr;
+	TswRail *resumeRail = nullptr;    /* while paused, in the speed rail's place: Real time and the speeds */
 	QBoxLayout *stopRow = nullptr;    /* zone E: Pause and Stop side by side (updateStopRow) */
 	TswButton *pauseButton = nullptr; /* Pause, or Resume while paused, in the same place (UX-128) */
 	TswButton *stopButton = nullptr;

@@ -121,6 +121,7 @@ static void idle_offers_record_and_the_starting_mode(void)
 	EXPECT_TEXT(view.main_text, "Action.Record");
 	TSW_EXPECT_TRUE(view.main_enabled);
 	TSW_EXPECT_TRUE(view.speeds_shown && view.speeds_enabled && view.start_mode_shown);
+	TSW_EXPECT_TRUE(!view.speeds_real_time);
 	EXPECT_TEXT(view.speed_label, "Label.Speed");
 	TSW_EXPECT_EQ(view.speed_selected, 4);
 	TSW_EXPECT_TRUE(!view.stop_shown);
@@ -406,6 +407,7 @@ static void recording_offers_pause_next_to_stop(void)
 		TSW_EXPECT_TRUE(view.pause_shown && view.pause_enabled);
 		EXPECT_TEXT(view.pause_text, "Action.Pause");
 		TSW_EXPECT_TRUE(view.stop_shown && view.stop_enabled);
+		TSW_EXPECT_TRUE(!view.speeds_real_time && !view.start_mode_shown); /* as approved: one speed rail */
 	}
 	struct tsw_status saving = recording(1);
 	saving.phase = TSW_PHASE_SAVING;
@@ -418,12 +420,13 @@ static void recording_offers_pause_next_to_stop(void)
 	struct tsw_status idle = {0};
 	view = build(&fresh, &session, idle);
 	TSW_EXPECT_TRUE(!view.pause_shown);
-	EXPECT_TEXT(view.start_label, "Label.StartIn");
 	view = build(&fresh, &session, ended(1, 0));
 	TSW_EXPECT_TRUE(!view.pause_shown && !view.stop_shown);
 }
 
-/* UX-129 to UX-131: paused from real time, every zone says it will resume in real time. */
+/* UX-129 to UX-131: paused from real time, every zone says it will resume in real time. Zone D is one
+ * rail, "Resume in": Real time (speed 1) and the speeds, as tall as the recording speed rail, so
+ * nothing below it moves. */
 static void paused_from_real_time_resumes_in_real_time(void)
 {
 	struct tsw_dock_model model;
@@ -437,12 +440,11 @@ static void paused_from_real_time_resumes_in_real_time(void)
 	EXPECT_TEXT(view.main_text, "Action.ResumeRealTime");
 	TSW_EXPECT_EQ(view.main_speed, 1);
 	TSW_EXPECT_TRUE(view.main_enabled);
-	TSW_EXPECT_TRUE(view.start_mode_shown);
-	EXPECT_TEXT(view.start_label, "Label.ResumeIn");
+	TSW_EXPECT_TRUE(!view.start_mode_shown); /* no second rail: the paused zone D is one rail */
 	TSW_EXPECT_TRUE(!view.start_in_timelapse);
-	TSW_EXPECT_TRUE(view.speeds_shown && view.speeds_enabled);
-	EXPECT_TEXT(view.speed_label, "Label.Speed");
-	TSW_EXPECT_EQ(view.speed_selected, 4); /* the timelapse speed it would use */
+	TSW_EXPECT_TRUE(view.speeds_shown && view.speeds_enabled && view.speeds_real_time);
+	EXPECT_TEXT(view.speed_label, "Label.ResumeIn");
+	TSW_EXPECT_EQ(view.speed_selected, 1); /* the "Real time" segment */
 	TSW_EXPECT_TRUE(view.pause_shown && view.pause_enabled);
 	EXPECT_TEXT(view.pause_text, "Action.Resume"); /* the same button, in the same place (UX-128) */
 	TSW_EXPECT_TRUE(view.stop_shown && view.stop_enabled);
@@ -465,13 +467,15 @@ static void paused_from_timelapse_resumes_in_timelapse(void)
 	EXPECT_TEXT(view.main_text, "Action.ResumeTimelapse");
 	TSW_EXPECT_EQ(view.main_speed, 8);
 	TSW_EXPECT_TRUE(view.start_in_timelapse);
+	TSW_EXPECT_TRUE(view.speeds_real_time && view.speeds_enabled && !view.start_mode_shown);
+	EXPECT_TEXT(view.speed_label, "Label.ResumeIn");
 	TSW_EXPECT_EQ(view.speed_selected, 8);
-	TSW_EXPECT_TRUE(view.speeds_enabled);
 	EXPECT_TEXT(view.pause_text, "Action.Resume");
 }
 
 /* UX-131: what the user chooses while paused shows at once in the hero, the main button and the
- * rails (tsw_session_effective_speed), and none of it resumes by itself. */
+ * rail (tsw_session_effective_speed), and none of it resumes by itself. The rail's "Real time" sends
+ * TSW_INPUT_START_REAL_TIME and a speed segment TSW_INPUT_SPEED_KEY: resume in timelapse at it. */
 static void choosing_while_paused_changes_how_it_resumes(void)
 {
 	struct tsw_dock_model model;
@@ -485,16 +489,10 @@ static void choosing_while_paused_changes_how_it_resumes(void)
 	EXPECT_TEXT(view.hero_text, "State.Hero.ResumesRealTime");
 	EXPECT_TEXT(view.main_text, "Action.ResumeRealTime");
 	TSW_EXPECT_TRUE(!view.start_in_timelapse);
-	TSW_EXPECT_EQ(view.speed_selected, 8); /* the speed chips keep the timelapse speed */
+	TSW_EXPECT_EQ(view.speed_selected, 1);
 
-	/* A chip while resuming in real time only chooses the speed of the next timelapse. */
-	command = tsw_session_input(&session, &status, TSW_INPUT_SPEED_CHIP, 16, 0);
-	TSW_EXPECT_EQ(command.kind, TSW_COMMAND_NONE);
-	view = build(&model, &session, status);
-	EXPECT_TEXT(view.main_text, "Action.ResumeRealTime");
-	TSW_EXPECT_EQ(view.speed_selected, 16);
-
-	command = tsw_session_input(&session, &status, TSW_INPUT_START_TIMELAPSE, 0, 0);
+	/* A speed segment chooses timelapse at that speed, from real time too. */
+	command = tsw_session_input(&session, &status, TSW_INPUT_SPEED_KEY, 16, 0);
 	TSW_EXPECT_EQ(command.kind, TSW_COMMAND_NONE);
 	view = build(&model, &session, status);
 	EXPECT_TEXT(view.hero_text, "State.Hero.ResumesTimelapse");
@@ -504,17 +502,19 @@ static void choosing_while_paused_changes_how_it_resumes(void)
 	TSW_EXPECT_TRUE(view.start_in_timelapse);
 	TSW_EXPECT_EQ(view.speed_selected, 16);
 
-	/* While resuming in timelapse a chip changes the speed it resumes at; Slower can reach real time. */
-	command = tsw_session_input(&session, &status, TSW_INPUT_SPEED_CHIP, 2, 0);
+	command = tsw_session_input(&session, &status, TSW_INPUT_SPEED_KEY, 2, 0);
 	TSW_EXPECT_EQ(command.kind, TSW_COMMAND_NONE);
 	view = build(&model, &session, status);
 	TSW_EXPECT_EQ(view.main_speed, 2);
 	TSW_EXPECT_EQ(view.speed_selected, 2);
+
+	/* The hotkeys choose on the same rail: Slower from x2 is real time. */
 	command = tsw_session_input(&session, &status, TSW_INPUT_SLOWER, 0, 0);
 	TSW_EXPECT_EQ(command.kind, TSW_COMMAND_NONE);
 	view = build(&model, &session, status);
 	EXPECT_TEXT(view.main_text, "Action.ResumeRealTime");
 	TSW_EXPECT_TRUE(!view.start_in_timelapse);
+	TSW_EXPECT_EQ(view.speed_selected, 1);
 	TSW_EXPECT_EQ(view.banner, TSW_BANNER_PAUSED);
 }
 
