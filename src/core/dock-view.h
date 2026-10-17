@@ -9,9 +9,12 @@
  *
  *   recorder status + session choices ---> [ dock view ] ---> words, numbers and styles per zone
  *
- * The zones never move (UX-002):
- *   A banner    B counters (and the summary or error card)    C main button
- *   D speed row    E stop button    F context line
+ * The zones never move (UX-002), in four bands (docs/design/visual-design.md, 3.1):
+ *   STATUS   A state block: a tally line (REC) and a hero line (TIMELAPSE x4)
+ *            B readout: recorded and final length, and a status line (the current stretch)
+ *   ACTION   C main button
+ *   BELOW    D speed rails, or the summary or error card    E Stop and save
+ *   CONTEXT  F one muted line
  *
  * Words are locale keys (the .ini files in data/locale). The dock translates them and puts the number
  * or name it is given in place of "%1". Pure logic with no OBS or Qt dependency, unit tested.
@@ -33,33 +36,37 @@ enum {
 	TSW_TIME_TEXT = 16, /* room for "h:mm:ss" up to 9999 hours, and the final zero */
 };
 
+/* The kind of state the state block shows; each has its own word, glyph and frame (UX-003). */
 enum tsw_banner {
-	TSW_BANNER_READY,     /* idle: neutral */
-	TSW_BANNER_BUSY,      /* saving: neutral, with a spinner */
-	TSW_BANNER_REAL_TIME, /* outlined frame with the record dot */
-	TSW_BANNER_TIMELAPSE, /* filled with the theme highlight, heavier frame, chevrons */
-	TSW_BANNER_SAVED,     /* the summary card: calm */
-	TSW_BANNER_ERROR,     /* the error card: danger frame */
+	TSW_BANNER_READY,     /* idle: quiet */
+	TSW_BANNER_BUSY,      /* saving: quiet, with busy dots */
+	TSW_BANNER_REAL_TIME, /* recording at normal speed */
+	TSW_BANNER_TIMELAPSE, /* recording sped up: the one filled, accent state */
+	TSW_BANNER_SAVED,     /* the summary card is open */
+	TSW_BANNER_ERROR,     /* the error card is open */
 };
 
 struct tsw_dock_view {
-	/* A. Banner */
+	/* A. State block: two signals, never merged (UX-003) */
 	enum tsw_banner banner;
-	const char *banner_text;   /* key; "%1" = banner_speed */
-	const char *banner_detail; /* key or NULL: how the recording will start */
-	uint32_t banner_speed;
+	const char *tally_text; /* key: READY, REC, SAVING, SAVED or ERROR */
+	const char *hero_text;  /* key; "%1" = hero_speed */
+	bool hero_quiet;        /* sentence case and smaller: never looks like a recording */
+	uint32_t hero_speed;    /* timelapse: the speed now; idle: the speed it will start at */
 
-	/* B. Counters */
-	bool counters_dimmed; /* idle: "-:--:--" */
+	/* B. Readout */
+	bool counters_dimmed; /* idle: a dimmed 0:00:00 (UX-006) */
 	char recorded[TSW_TIME_TEXT];
 	char final_length[TSW_TIME_TEXT];
-	bool section_shown; /* timelapse: the current section */
-	char section_recorded[TSW_TIME_TEXT];
+	bool section_shown;                   /* recording: the current stretch, in the status line (UX-007) */
+	uint32_t section_speed;               /* 1 in real time */
+	char section_recorded[TSW_TIME_TEXT]; /* short: "19:37" */
 	char section_final[TSW_TIME_TEXT];
 
-	/* B. Card after a recording: summary (error_code 0) or error */
+	/* Card after a recording, below C: summary (error_code 0) or error */
 	bool card_shown;
 	uint32_t error_code;         /* TSW-E number; 0 = summary */
+	uint32_t error_texts;        /* the code whose texts the dock shows: 1, 2, 103, or 901 for any other */
 	char skipped[TSW_TIME_TEXT]; /* summary: waiting the timelapse saved */
 	bool thank_user;             /* summary: the one warm line of the OBS session (UX-072) */
 
@@ -83,18 +90,26 @@ struct tsw_dock_view {
 	/* F. Context line */
 	const char *context_text; /* key or NULL; "%1" = the file name of context_path */
 	const char *context_path; /* borrowed from the status; the dock shows its file name */
+
+	/* Screen readers (UX-104) */
+	const char *announce_text; /* key or NULL: a change of state to announce once */
 };
 
-/* What the dock remembers between two views: the card after a recording. */
+/* What the dock remembers between two views: the card after a recording, and what was announced. */
 struct tsw_dock_model {
 	uint32_t seen_outcome; /* the last outcome already turned into a card */
 	bool card_open;
-	bool thanked;   /* the warm line was used in this OBS session */
-	bool thank_now; /* the open card carries it */
+	bool thanked;                /* the warm line was used in this OBS session */
+	bool thank_now;              /* the open card carries it */
+	enum tsw_banner told_banner; /* the state screen readers last heard about */
+	uint32_t told_speed;         /* and its speed */
 };
 
 /* tsw_format_duration: ns as "h:mm:ss" (whole seconds, at most 9999:59:59). Memory: none allocated. */
 void tsw_format_duration(uint64_t ns, char text[TSW_TIME_TEXT]);
+
+/* tsw_format_short_duration: ns as "m:ss" under an hour, "h:mm:ss" from an hour on. Memory: none. */
+void tsw_format_short_duration(uint64_t ns, char text[TSW_TIME_TEXT]);
 
 /* tsw_dock_model_init: no card yet. Thread: UI. */
 void tsw_dock_model_init(struct tsw_dock_model *model);

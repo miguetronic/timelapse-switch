@@ -5,38 +5,60 @@
  */
 
 /*
- * dock.hpp: the dock's widgets (docs/design/ux-spec.md, section 3). It only draws a view
- * (core/dock-view.h) and reports clicks; it knows nothing about OBS, so the UI test can
- * draw it without OBS (tests/ui). dock-obs.cpp connects it to the controller.
+ * dock.hpp: the dock (docs/design/ux-spec.md, section 3), drawn in the "Studio cards" direction
+ * (docs/design/visual-design.md, 4.2). It only draws a view (core/dock-view.h) and reports clicks;
+ * it knows nothing about OBS, so the UI test can draw it without OBS (tests/ui). dock-obs.cpp
+ * connects it to the controller.
  *
- *   +-- A banner: state word, icon, frame style ---------+
- *   |   B counters, section, summary or error card       |
- *   |   C main button (the most likely next action)      |
- *   |   D speed chips; while idle, the starting mode     |
- *   |   E Stop and save (smaller, set apart)             |
- *   |   F context line                                   |
- *   +----------------------------------------------------+
+ *   STATUS   .-----------------------------------.  status card: zones A and B
+ *            | ( (o) REC )                       |
+ *            | >> TIMELAPSE             ( x4 )   |
+ *            | RECORDED 0:31:40  FINAL 0:16:58   |
+ *            '-----------------------------------'
+ *   ACTION   (  >  Back to real time            )  C main button
+ *   BELOW    SPEED NOW                             D rails (or the summary or error card)
+ *            (( x2 |#x4#| x8 | x16 ))
+ *            (  []  Stop and save               )  E Stop, one row apart
+ *   CONTEXT  (i) Audio: silence during timelapse   F context line
+ *
+ * Everything it paints is mixed from the active OBS theme (dock-theme.hpp), read again whenever
+ * the theme, the font size or the density changes.
  */
 
 #pragma once
 
+#include <QColor>
 #include <QFrame>
 #include <QString>
 
 #include "core/dock-view.h"
+#include "ui/dock-theme.hpp"
 
 class QBoxLayout;
-class QButtonGroup;
 class QLabel;
-class QPushButton;
-class QRadioButton;
 class QScrollArea;
+class QSpacerItem;
+class QVBoxLayout;
+class TswButton;
+class TswCard;
+class TswGlyphIcon;
+class TswLink;
+class TswRail;
+class TswReservedLabel;
+class TswStatusCard;
 
 /* Translates a locale key: obs_module_text in OBS, a reader of the .ini files in the UI test. */
 using TswText = const char *(*)(const char *key);
 
 class TswDock : public QFrame {
 	Q_OBJECT
+	/* Theme author hooks (UX-015): a theme may set them in its style sheet; they still pass the
+	 * contrast guard. Invalid by default: the colors then come from the theme. */
+	Q_PROPERTY(QColor accentColor READ accentColor WRITE setAccentColor)
+	Q_PROPERTY(QColor dangerColor READ dangerColor WRITE setDangerColor)
+	Q_PROPERTY(QColor successColor READ successColor WRITE setSuccessColor)
+	Q_PROPERTY(QColor warningColor READ warningColor WRITE setWarningColor)
+	Q_PROPERTY(QColor surfaceColor READ surfaceColor WRITE setSurfaceColor)
 
 public:
 	explicit TswDock(TswText translate, QWidget *parent = nullptr);
@@ -48,62 +70,111 @@ public:
 	 * scrolls, instead of cutting them, when the dock is short). Takes ownership of dock. */
 	static QScrollArea *inScrollArea(TswDock *dock);
 
+	/* Reduce motion: every transition becomes instant (3.12). Off until the Feedback settings exist. */
+	void setReduceMotion(bool reduce);
+
+	/* The colors and sizes in use, for the UI test's contrast checks. */
+	const TswTheme &theme() const;
+	bool isNarrow() const;
+
+	QColor accentColor() const;
+	void setAccentColor(const QColor &color);
+	QColor dangerColor() const;
+	void setDangerColor(const QColor &color);
+	QColor successColor() const;
+	void setSuccessColor(const QColor &color);
+	QColor warningColor() const;
+	void setWarningColor(const QColor &color);
+	QColor surfaceColor() const;
+	void setSurfaceColor(const QColor &color);
+
+public slots:
+	/* Reads the theme again, once, after the current burst of events (3.4, "When to restyle"). */
+	void scheduleRestyle();
+
 signals:
-	void inputRequested(int input, unsigned speed); /* an enum tsw_input, and the speed of a chip */
-	void dismissRequested();                        /* the card's Close button */
+	void inputRequested(int input, unsigned speed); /* an enum tsw_input, and the speed of a segment */
+	void dismissRequested();                        /* the card's dismiss button, or Esc */
 
 protected:
+	bool event(QEvent *event) override;
 	void changeEvent(QEvent *event) override;
-	void resizeEvent(QResizeEvent *event) override;
+	bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
 	QString text(const char *key) const;
 	QString text(const char *key, const QString &argument) const;
-	void buildBanner();
-	void buildCounters();
+	QString speedText(uint32_t speed) const;
+	QString spoken(const QString &words) const;
+	QString spokenDuration(const QString &clock) const;
+	void buildZones();
+	void buildRails();
 	void buildCard();
-	void buildButtons();
-	void buildSpeedRow();
-	void applyBannerStyle();
-	void refresh();
-	void showBanner();
-	void showCounters();
+	void buildContext();
+	void connectInputs();
+	void watchKeyFocus();
+	void restyle();
+	void applyMetrics();
+	void applyStyleSheets();
+	void applyReserves();
+	void updateNarrow(int viewportWidth);
+	void updateGaps();
+	void refresh(bool animate);
+	void showStatus(bool animate);
+	void showMain();
+	void showRails(bool animate);
+	void showStop();
 	void showCard();
-	void showButtons();
-	void showSpeedRow();
+	void showErrorCard();
 	void showContext();
+	void announce();
 	void copyErrorDetails();
 
 	TswText lookup;
 	tsw_dock_view view{};
 	QString path; /* the file of the view, copied: the view's pointer is only borrowed */
-	bool compact = false;
-	bool styled = false; /* the banner style matches view.banner */
-	enum tsw_banner styledBanner = TSW_BANNER_READY;
+	TswTheme style;
+	TswThemeHooks hooks;
+	TswProbes probes;
+	bool narrow = false;
+	bool styled = false;    /* the theme was read at least once */
+	bool restyling = false; /* events caused by restyle() itself are ignored */
+	bool restylePending = false;
+	bool viewShown = false; /* a first view was shown: later changes may animate */
+	bool reduceMotion = false;
+	enum tsw_banner shownBanner = TSW_BANNER_READY;
 
-	QFrame *banner = nullptr; /* zone A */
-	QLabel *bannerIcon = nullptr;
-	QLabel *bannerText = nullptr;
-	QLabel *bannerDetail = nullptr;
-	QLabel *counters = nullptr; /* zone B */
-	QLabel *section = nullptr;
-	QFrame *card = nullptr;
+	QVBoxLayout *zones = nullptr;
+	QSpacerItem *gapMain = nullptr; /* the gaps between the zones, set by state and width */
+	QSpacerItem *gapCard = nullptr;
+	QSpacerItem *gapSpeeds = nullptr;
+	QSpacerItem *gapStop = nullptr;
+	QSpacerItem *gapContext = nullptr;
+	TswStatusCard *status = nullptr; /* zones A and B */
+	TswButton *mainButton = nullptr; /* zone C */
+	QWidget *speeds = nullptr;       /* zone D */
+	QVBoxLayout *speedsLayout = nullptr;
+	QWidget *startGroup = nullptr;
+	TswReservedLabel *startCaption = nullptr;
+	TswRail *startRail = nullptr;
+	QWidget *speedGroup = nullptr;
+	TswReservedLabel *speedCaption = nullptr;
+	TswRail *speedRail = nullptr;
+	TswButton *stopButton = nullptr; /* zone E */
+	QWidget *contextRow = nullptr;   /* zone F */
+	TswGlyphIcon *contextIcon = nullptr;
+	QLabel *context = nullptr;
+	TswCard *card = nullptr; /* the summary or error card, below C */
+	QBoxLayout *cardLayout = nullptr;
 	QLabel *cardTitle = nullptr;
+	TswButton *dismiss = nullptr;
 	QLabel *cardBody = nullptr;
-	QPushButton *openFolder = nullptr;
-	QPushButton *play = nullptr;
-	QPushButton *copyDetails = nullptr;
-	QPushButton *learnMore = nullptr;
-	QPushButton *closeCard = nullptr;
+	QLabel *cardTodo = nullptr;
 	QBoxLayout *cardActions = nullptr; /* side by side, or one under the other when narrow */
-	QPushButton *mainButton = nullptr; /* zone C */
-	QWidget *speedRow = nullptr;       /* zone D */
-	QLabel *speedLabel = nullptr;
-	QButtonGroup *chips = nullptr;
-	QWidget *startRow = nullptr;
-	QBoxLayout *startLayout = nullptr; /* side by side, or one under the other when narrow */
-	QRadioButton *startRealTime = nullptr;
-	QRadioButton *startTimelapse = nullptr;
-	QPushButton *stopButton = nullptr; /* zone E */
-	QLabel *context = nullptr;         /* zone F */
+	TswButton *openFolder = nullptr;
+	TswButton *play = nullptr;
+	QWidget *linkRow = nullptr;
+	TswLink *copyDetails = nullptr;
+	TswLink *learnMore = nullptr;
+	QLabel *codePill = nullptr;
 };
