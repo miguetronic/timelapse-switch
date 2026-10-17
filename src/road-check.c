@@ -15,7 +15,7 @@
 #include "road-check-internal.h"
 
 enum {
-	LIST_CAPACITY = 1 << 17, /* frames per road: 72 minutes at 30 fps; 2 MB per road */
+	LIST_CAPACITY = 131072, /* frames per road: 72 minutes at 30 fps; 2 MB per road */
 };
 
 /* The bytes and rows of picture in each plane of the formats road C supports. */
@@ -53,7 +53,7 @@ struct tsw_road_check *tsw_road_check_create(const struct obs_video_info *ovi, t
 	struct tsw_road_check *check = bzalloc(sizeof(*check));
 	check->forward = forward;
 	check->param = param;
-	check->storage = bmalloc(2 * LIST_CAPACITY * sizeof(*check->storage));
+	check->storage = bmalloc((size_t)2 * LIST_CAPACITY * sizeof(*check->storage));
 	if (!describe_planes(check, ovi->output_format, ovi->output_width, ovi->output_height) ||
 	    tsw_road_list_init(&check->b, check->storage, LIST_CAPACITY) != TSW_OK ||
 	    tsw_road_list_init(&check->c, check->storage + LIST_CAPACITY, LIST_CAPACITY) != TSW_OK) {
