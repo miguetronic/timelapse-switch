@@ -28,7 +28,7 @@ struct tsw_recorder {
 	struct tsw_timeline timeline;
 	volatile long sections;           /* published sections of the timeline */
 	volatile bool capturing;          /* frames and audio blocks are taken in */
-	struct tsw_video_gate video_gate; /* OBS video thread only */
+	struct tsw_video_gate video_gate; /* the thread that receives frames only: OBS's (road B) or ours (C) */
 	struct tsw_audio_gate audio_gate; /* our audio thread only */
 	struct tsw_audio_ring ring;       /* OBS audio thread to our audio thread */
 	uint64_t block_ns;                /* duration of one audio block */
@@ -53,6 +53,7 @@ struct tsw_recorder {
 	obs_encoder_t *video_encoder;
 	obs_encoder_t *audio_encoder;
 	obs_output_t *output;
+	struct tsw_gpu_road *gpu_road; /* road C (ADR-012), or NULL: road B */
 	char *path;
 	size_t mix; /* OBS audio track that is recorded */
 
@@ -89,7 +90,9 @@ struct tsw_recorder {
 	char *last_path; /* owned: replaced at the next outcome, freed in tsw_recorder_destroy */
 };
 
-/* The real-time callbacks (recorder-rt.c); recorder.c hands them to OBS. */
+struct tsw_gpu_road;
+
+/* The real-time callbacks (recorder-rt.c); recorder.c hands them to OBS, or the frames one to road C. */
 void tsw_recorder_receive_frame(void *param, struct video_data *frame);
 void tsw_recorder_receive_audio(void *param, size_t mix, struct audio_data *data);
 bool tsw_recorder_provide_audio(void *param, uint64_t start_ts, uint64_t end_ts, uint64_t *new_ts, uint32_t mixers,

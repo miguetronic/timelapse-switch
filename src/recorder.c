@@ -13,6 +13,7 @@
 
 #include "recorder.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include <obs-frontend-api.h>
@@ -23,6 +24,7 @@
 
 #include "core/check.h"
 #include "fault.h"
+#include "gpu-road.h"
 #include "plugin-support.h"
 #include "recorder-internal.h"
 
@@ -219,10 +221,13 @@ static enum tsw_result create_encoders(struct tsw_recorder *recorder)
 /* Stops taking frames and audio in. The removal waits for a callback in progress. */
 static void stop_capture(struct tsw_recorder *recorder)
 {
-	if (!os_atomic_set_bool(&recorder->capturing, false))
-		return; /* was not capturing */
-	obs_remove_raw_video_callback(tsw_recorder_receive_frame, recorder);
-	obs_remove_raw_audio_callback(recorder->mix, tsw_recorder_receive_audio, recorder);
+	const bool was_capturing = os_atomic_set_bool(&recorder->capturing, false);
+	if (was_capturing && recorder->gpu_road == NULL)
+		obs_remove_raw_video_callback(tsw_recorder_receive_frame, recorder);
+	if (was_capturing)
+		obs_remove_raw_audio_callback(recorder->mix, tsw_recorder_receive_audio, recorder);
+	tsw_gpu_road_destroy(recorder->gpu_road); /* also when it was prepared but never began */
+	recorder->gpu_road = NULL;
 }
 
 /* Releases everything start created, in reverse order. Safe on a half-started recorder. */
@@ -402,6 +407,26 @@ static enum tsw_result reset_timeline(struct tsw_recorder *recorder, const struc
 	return TSW_OK;
 }
 
+/* Road C (ADR-012) is experimental: used only when TIMELAPSE_SWITCH_ROAD=C, until its checks pass. */
+static const bool ROAD_C_BY_DEFAULT = false;
+
+/* How frames will reach us: road C when it is wanted and supported, road B otherwise. Prepared before the
+ * recording starts (card memory, a thread), so the timeline does not start late. Logged either way. */
+static void choose_road(struct tsw_recorder *recorder, const struct obs_video_info *ovi)
+{
+	const char *asked = getenv("TIMELAPSE_SWITCH_ROAD");
+	const bool wanted = asked != NULL ? strcmp(asked, "C") == 0 : ROAD_C_BY_DEFAULT;
+	const char *reason = wanted ? tsw_gpu_road_unsupported(ovi) : "road C not enabled (experimental, ADR-012)";
+	if (reason == NULL) {
+		recorder->gpu_road = tsw_gpu_road_create(ovi, tsw_recorder_receive_frame, recorder);
+		reason = "road C could not be prepared";
+	}
+	if (recorder->gpu_road != NULL)
+		tsw_log(LOG_INFO, "frames | road C: the plugin copies them, off OBS's graphics thread (ADR-012)");
+	else
+		tsw_log(LOG_INFO, "frames | road B: OBS copies them | reason=\"%s\"", reason);
+}
+
 enum tsw_result tsw_recorder_start(struct tsw_recorder *recorder, uint32_t speed)
 {
 	if (!TSW_CHECK(recorder != NULL && speed >= 1 && speed <= TSW_MAX_SPEED))
@@ -422,6 +447,9 @@ enum tsw_result tsw_recorder_start(struct tsw_recorder *recorder, uint32_t speed
 	if (result == TSW_OK)
 		result = create_output(recorder);
 
+	if (result == TSW_OK)
+		choose_road(recorder, &ovi);
+
 	/* 2. Start writing. Starting the encoders takes tens of milliseconds, so the timeline starts only
 	 *    afterwards, right before frames and audio come in: with an earlier start the video gate would
 	 *    fill the gap by repeating the first frame, and the video would trail the audio. */
@@ -441,12 +469,26 @@ enum tsw_result tsw_recorder_start(struct tsw_recorder *recorder, uint32_t speed
 	add_chapter(recorder, speed > 1 ? "Chapter.Timelapse" : "Chapter.RealTime", speed); /* before any frame: 0:00 */
 	struct video_scale_info frames = {ovi.output_format, ovi.output_width, ovi.output_height, ovi.range,
 					  ovi.colorspace};
-	obs_add_raw_video_callback(&frames, tsw_recorder_receive_frame, recorder);
+	if (recorder->gpu_road != NULL)
+		tsw_gpu_road_begin(recorder->gpu_road);
+	else
+		obs_add_raw_video_callback(&frames, tsw_recorder_receive_frame, recorder);
 	obs_add_raw_audio_callback(recorder->mix, NULL, tsw_recorder_receive_audio, recorder);
 	os_atomic_set_bool(&recorder->capturing, true);
 	tsw_log(LOG_INFO, "recording started, speed x%u | file=\"%s\" | %ux%u at %u/%u fps", speed, recorder->path,
 		ovi.output_width, ovi.output_height, ovi.fps_num, ovi.fps_den);
 	return TSW_OK;
+}
+
+/* What road C counted (ADR-012): a frame that found every slot busy shows in the file as a repeat. */
+static void log_road(const struct tsw_recorder *recorder)
+{
+	if (recorder->gpu_road == NULL)
+		return;
+	struct tsw_gpu_road_counts counts;
+	tsw_gpu_road_get_counts(recorder->gpu_road, &counts);
+	tsw_log(LOG_INFO, "road C: frames staged %ld, found every slot busy %ld, could not be mapped %ld",
+		counts.staged, counts.unstaged, counts.unmapped);
 }
 
 /* The most frames that waited in the feed, at most its size: while frames are being lost the raw count also
@@ -522,6 +564,7 @@ void tsw_recorder_stop(struct tsw_recorder *recorder)
 		((double)recorder->first_frame_ns - (double)recorder->start_ns) / 1e6,
 		((double)recorder->first_block_ns - (double)recorder->start_ns) / 1e6,
 		(double)recorder->frame_delay_ns / 1e6, (double)recorder->block_delay_ns / 1e6);
+	log_road(recorder);
 	log_totals(recorder);
 
 	/* 2. Flush, then stop. Encoders hold a few frames (x264 about 40) and hand them over only as new

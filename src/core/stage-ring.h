@@ -54,13 +54,13 @@ struct tsw_stage_slot {
 
 struct tsw_stage_ring {
 	struct tsw_stage_slot slots[TSW_STAGE_SLOTS];
-	uint64_t interval_ns; /* one frame at OBS's frame rate */
-	long claimed;         /* frames staged so far: graphics thread only */
-	long reclaimed;       /* slots come back so far: graphics thread only */
-	volatile long copied; /* slots the copier finished so far: copier thread only */
-	long unstaged;        /* frames drawn while every slot was busy: graphics thread only */
-	long unmapped;        /* frames whose slot could not be mapped: graphics thread only */
-	bool pending;         /* the last staged frame waits for the next one: graphics thread only */
+	uint64_t interval_ns;   /* one frame at OBS's frame rate */
+	long claimed;           /* frames staged so far: graphics thread only */
+	long reclaimed;         /* slots come back so far: graphics thread only */
+	volatile long copied;   /* slots the copier finished so far: copier thread only */
+	volatile long unstaged; /* frames drawn while every slot was busy: written by the graphics thread */
+	volatile long unmapped; /* frames whose slot could not be mapped: written by the graphics thread */
+	bool pending;           /* the last staged frame waits for the next one: graphics thread only */
 };
 
 /*

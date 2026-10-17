@@ -53,7 +53,8 @@ static void note_smoothness(struct tsw_recorder *recorder, const struct video_da
 		os_atomic_set_long(&recorder->gate_repeats, recorder->gate_repeats + (long)copies - 1);
 }
 
-/* OBS video thread, once per frame: send it 0, 1 or more times to our video feed. */
+/* Once per frame, on OBS's video thread (road B) or on our copier thread (road C, gpu-road.c): send it 0,
+ * 1 or more times to our video feed. */
 void tsw_recorder_receive_frame(void *param, struct video_data *frame)
 {
 	struct tsw_recorder *recorder = param;

@@ -38,7 +38,15 @@ endif()
 
 target_sources(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE src/controller.c src/fault.c src/plugin-main.c src/recorder.c src/recorder-rt.c src/ui/dock-obs.cpp
+  PRIVATE
+    src/controller.c
+    src/fault.c
+    src/gpu-road.c
+    src/gpu-road-rt.c
+    src/plugin-main.c
+    src/recorder.c
+    src/recorder-rt.c
+    src/ui/dock-obs.cpp
 )
 
 # Power of Ten, rule 10 (docs/coding-rules.md): our own code builds with pedantic warnings and zero tolerance.

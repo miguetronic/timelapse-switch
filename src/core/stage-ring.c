@@ -63,7 +63,7 @@ bool tsw_stage_ring_claim(struct tsw_stage_ring *ring, uint64_t timestamp, size_
 	*previous = SIZE_MAX;
 	struct tsw_stage_slot *next = &ring->slots[slot_at(ring->claimed)];
 	if (os_atomic_load_long(&next->state) != TSW_STAGE_FREE) {
-		ring->unstaged++; /* the frame staged before this one will cover its interval */
+		os_atomic_set_long(&ring->unstaged, ring->unstaged + 1); /* the frame staged before covers it */
 		return false;
 	}
 
@@ -95,7 +95,7 @@ void tsw_stage_ring_publish(struct tsw_stage_ring *ring, size_t slot, bool mappe
 		return;
 	handed->mapped = mapped;
 	if (!mapped)
-		ring->unmapped++;
+		os_atomic_set_long(&ring->unmapped, ring->unmapped + 1);
 	os_atomic_set_long(&handed->state, TSW_STAGE_READY); /* last: the copier may take it from here */
 }
 
