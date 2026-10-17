@@ -315,6 +315,34 @@ static void a_failed_start_shows_no_times(void)
 	TSW_EXPECT_TRUE(view.context_text == NULL);
 }
 
+/* A failed start has no file to name, so its status line shows the stretch at zero, dimmed like
+ * the counters, as idle does: never an empty hole. */
+static void a_failed_start_shows_the_stretch_at_zero(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = ended(1, 1);
+	status.last_recorded_ns = 0;
+	status.last_final_ns = 0;
+	status.path = "";
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.section_shown);
+	TSW_EXPECT_EQ(view.section_speed, 1);
+	EXPECT_TEXT(view.section_recorded, "0:00");
+	TSW_EXPECT_TRUE(view.counters_dimmed);
+}
+
+/* After a take, the status line is the file's (the dock names it there), not a stretch. */
+static void a_saved_take_shows_no_stretch(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, ended(1, 0));
+	TSW_EXPECT_TRUE(view.card_shown && !view.section_shown);
+}
+
 /* A code the dock has no texts for is shown as the unexpected error, TSW-E901. */
 static void an_unknown_error_uses_the_unexpected_error_texts(void)
 {
@@ -387,6 +415,8 @@ int main(void)
 	a_recording_that_never_sped_up_skips_nothing();
 	a_failure_opens_the_error_card();
 	a_failed_start_shows_no_times();
+	a_failed_start_shows_the_stretch_at_zero();
+	a_saved_take_shows_no_stretch();
 	an_unknown_error_uses_the_unexpected_error_texts();
 	changes_of_state_are_announced_once();
 	a_new_recording_closes_the_card();

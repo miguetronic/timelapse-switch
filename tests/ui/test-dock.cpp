@@ -210,6 +210,9 @@ void checkHeights(const TswDock &dock, const QString &label)
 		fail(label + QString(": hero %1 pt, below its floor of %2 pt")
 				     .arg(status->property("tswHeroPoints").toDouble())
 				     .arg(floor));
+	/* The status row is reserved in every state; left empty it looks like a hole (UX-007). */
+	if (status->property("tswStatusLine").toString().isEmpty())
+		fail(label + ": the status line is empty, a hole in the status card");
 	const auto *main = dock.findChild<QWidget *>("tswMain");
 	if (main->height() < dock.theme().L * 5 / 2)
 		fail(label + ": the main button is shorter than 2.5 lines");

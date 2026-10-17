@@ -146,11 +146,16 @@ static const char *announcement(struct tsw_dock_model *model, const struct tsw_d
 	return NULL;
 }
 
+/* Nothing recorded (idle, or a start that failed): the counters at zero, dimmed (UX-006), and the
+ * status line too, so it is never an empty hole. */
 static void show_zero_times(struct tsw_dock_view *view)
 {
 	view->counters_dimmed = true;
 	memcpy(view->recorded, ZERO_TIME, sizeof(ZERO_TIME));
 	memcpy(view->final_length, ZERO_TIME, sizeof(ZERO_TIME));
+	view->section_shown = true;
+	view->section_speed = 1;
+	tsw_format_short_duration(0, view->section_recorded);
 }
 
 /* The current stretch for the status line: live while recording, frozen while saving. */
@@ -171,10 +176,6 @@ static void build_idle(const struct tsw_session *session, struct tsw_dock_view *
 	view->hero_quiet = true;
 	view->hero_speed = session->timelapse_speed;
 	show_zero_times(view);
-	/* The status line too, at zero and dimmed like the counters: never an empty hole. */
-	view->section_shown = true;
-	view->section_speed = 1;
-	tsw_format_short_duration(0, view->section_recorded);
 	view->speeds_shown = true;
 	view->speeds_enabled = true;
 	view->speed_label = "Label.Speed";

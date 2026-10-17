@@ -385,6 +385,11 @@ double TswStatusCard::smallestPoints() const
 	return std::min({lay.tallyFont.pointSizeF(), lay.captionFont.pointSizeF(), lay.statusFont.pointSizeF()});
 }
 
+QString TswStatusCard::statusLine() const
+{
+	return (content.stretchLabel + " " + content.stretchValues).trimmed();
+}
+
 /* The tally pill: padding, glyph, gap, word, padding. */
 double TswStatusCard::pillWidth(const Layout &lay) const
 {
@@ -507,9 +512,10 @@ void TswStatusCard::paintStretch(QPainter &painter, const Layout &lay) const
 	painter.setFont(lay.statusFont);
 	painter.setPen(theme->ink(theme->muted, under));
 	painter.drawText(QPointF(lay.pad, top + metrics.ascent()), content.stretchLabel);
+	/* Two reserved lines are always both used, the label above its values, like the readout's
+	 * captions: a short stretch on one line would leave the second as a hole. */
 	const double labelWidth = metrics.horizontalAdvance(content.stretchLabel + "  ");
-	const bool oneLine = lay.statusLines == 1 ||
-			     labelWidth + metrics.horizontalAdvance(content.stretchValues) <= lay.inner;
+	const bool oneLine = lay.statusLines == 1;
 	const QPointF values = oneLine ? QPointF(lay.pad + labelWidth, top + metrics.ascent())
 				       : QPointF(lay.pad, top + lay.statusHeight + metrics.ascent());
 	/* Values that are still too long (a file name) are shortened in the middle: the start and the

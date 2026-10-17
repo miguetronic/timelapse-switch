@@ -105,6 +105,7 @@ class TswStatusCard : public QWidget {
 	Q_PROPERTY(double tswHeroPoints READ heroPoints)         /* for the UI test: the hero's painted size */
 	Q_PROPERTY(bool tswClipped READ clipped)                 /* for the UI test: a painted text did not fit */
 	Q_PROPERTY(double tswSmallestPoints READ smallestPoints) /* for the UI test: its smallest text */
+	Q_PROPERTY(QString tswStatusLine READ statusLine)        /* for the UI test: never an empty row */
 
 public:
 	TswStatusCard(QWidget *parent, const TswTheme *theme);
@@ -118,6 +119,7 @@ public:
 	double heroPoints() const;
 	bool clipped() const;
 	double smallestPoints() const;
+	QString statusLine() const; /* the status line's words, label and values */
 
 	struct Layout; /* fonts and rows for one width (dock-status.cpp) */
 

@@ -58,7 +58,7 @@ struct tsw_dock_view {
 	bool counters_dimmed; /* idle: a dimmed 0:00:00 (UX-006) */
 	char recorded[TSW_TIME_TEXT];
 	char final_length[TSW_TIME_TEXT];
-	bool section_shown; /* the current stretch, in the status line (UX-007): live, frozen while saving, 0 idle */
+	bool section_shown; /* the current stretch, in the status line (UX-007): live, frozen while saving, 0:00 if none */
 	uint32_t section_speed;               /* 1 in real time */
 	char section_recorded[TSW_TIME_TEXT]; /* short: "19:37" */
 	char section_final[TSW_TIME_TEXT];
