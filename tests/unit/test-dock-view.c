@@ -45,6 +45,16 @@ static struct tsw_status recording(uint32_t speed)
 	return status;
 }
 
+/* Paused for 0:01:12 after recording at speed: the counters stand where the pause began. */
+static struct tsw_status paused(uint32_t speed)
+{
+	struct tsw_status status = recording(speed);
+	status.phase = TSW_PHASE_PAUSED;
+	status.section_recorded_ns = 72 * SECOND_NS;
+	status.section_final_ns = 0;
+	return status;
+}
+
 static struct tsw_status ended(uint32_t outcome, uint32_t error_code)
 {
 	struct tsw_status status = {0};
@@ -383,6 +393,184 @@ static void changes_of_state_are_announced_once(void)
 	EXPECT_TEXT(view.announce_text, "A11y.Announce.Error");
 }
 
+/* UX-128: while recording, in real time or in timelapse, Pause sits next to Stop; while saving both
+ * are disabled, not hidden (UX-011); idle and the cards have neither. */
+static void recording_offers_pause_next_to_stop(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	const uint32_t speeds[] = {1, 8};
+	for (size_t i = 0; i < sizeof(speeds) / sizeof(speeds[0]); i++) {
+		struct tsw_dock_view view = build(&model, &session, recording(speeds[i]));
+		TSW_EXPECT_TRUE(view.pause_shown && view.pause_enabled);
+		EXPECT_TEXT(view.pause_text, "Action.Pause");
+		TSW_EXPECT_TRUE(view.stop_shown && view.stop_enabled);
+	}
+	struct tsw_status saving = recording(1);
+	saving.phase = TSW_PHASE_SAVING;
+	struct tsw_dock_view view = build(&model, &session, saving);
+	TSW_EXPECT_TRUE(view.pause_shown && !view.pause_enabled);
+	EXPECT_TEXT(view.pause_text, "Action.Pause");
+
+	struct tsw_dock_model fresh;
+	tsw_dock_model_init(&fresh);
+	struct tsw_status idle = {0};
+	view = build(&fresh, &session, idle);
+	TSW_EXPECT_TRUE(!view.pause_shown);
+	EXPECT_TEXT(view.start_label, "Label.StartIn");
+	view = build(&fresh, &session, ended(1, 0));
+	TSW_EXPECT_TRUE(!view.pause_shown && !view.stop_shown);
+}
+
+/* UX-129 to UX-131: paused from real time, every zone says it will resume in real time. */
+static void paused_from_real_time_resumes_in_real_time(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, paused(1));
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_PAUSED);
+	EXPECT_TEXT(view.tally_text, "State.Tally.Paused"); /* never REC: no recording look */
+	EXPECT_TEXT(view.hero_text, "State.Hero.ResumesRealTime");
+	TSW_EXPECT_TRUE(view.hero_quiet);
+	EXPECT_TEXT(view.main_text, "Action.ResumeRealTime");
+	TSW_EXPECT_EQ(view.main_speed, 1);
+	TSW_EXPECT_TRUE(view.main_enabled);
+	TSW_EXPECT_TRUE(view.start_mode_shown);
+	EXPECT_TEXT(view.start_label, "Label.ResumeIn");
+	TSW_EXPECT_TRUE(!view.start_in_timelapse);
+	TSW_EXPECT_TRUE(view.speeds_shown && view.speeds_enabled);
+	EXPECT_TEXT(view.speed_label, "Label.Speed");
+	TSW_EXPECT_EQ(view.speed_selected, 4); /* the timelapse speed it would use */
+	TSW_EXPECT_TRUE(view.pause_shown && view.pause_enabled);
+	EXPECT_TEXT(view.pause_text, "Action.Resume"); /* the same button, in the same place (UX-128) */
+	TSW_EXPECT_TRUE(view.stop_shown && view.stop_enabled);
+	TSW_EXPECT_TRUE(!view.card_shown);
+	EXPECT_TEXT(view.context_text, "Hint.Paused");
+}
+
+/* Paused from timelapse x8, it resumes in timelapse x8 unless the user chooses otherwise. */
+static void paused_from_timelapse_resumes_in_timelapse(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	session.timelapse_speed = 8; /* as recording at x8 leaves it */
+	struct tsw_dock_view view = build(&model, &session, paused(8));
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_PAUSED);
+	EXPECT_TEXT(view.tally_text, "State.Tally.Paused");
+	EXPECT_TEXT(view.hero_text, "State.Hero.ResumesTimelapse");
+	TSW_EXPECT_EQ(view.hero_speed, 8);
+	EXPECT_TEXT(view.main_text, "Action.ResumeTimelapse");
+	TSW_EXPECT_EQ(view.main_speed, 8);
+	TSW_EXPECT_TRUE(view.start_in_timelapse);
+	TSW_EXPECT_EQ(view.speed_selected, 8);
+	TSW_EXPECT_TRUE(view.speeds_enabled);
+	EXPECT_TEXT(view.pause_text, "Action.Resume");
+}
+
+/* UX-131: what the user chooses while paused shows at once in the hero, the main button and the
+ * rails (tsw_session_effective_speed), and none of it resumes by itself. */
+static void choosing_while_paused_changes_how_it_resumes(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	session.timelapse_speed = 8;
+	const struct tsw_status status = paused(8);
+	struct tsw_command command = tsw_session_input(&session, &status, TSW_INPUT_START_REAL_TIME, 0, 0);
+	TSW_EXPECT_EQ(command.kind, TSW_COMMAND_NONE);
+	struct tsw_dock_view view = build(&model, &session, status);
+	EXPECT_TEXT(view.hero_text, "State.Hero.ResumesRealTime");
+	EXPECT_TEXT(view.main_text, "Action.ResumeRealTime");
+	TSW_EXPECT_TRUE(!view.start_in_timelapse);
+	TSW_EXPECT_EQ(view.speed_selected, 8); /* the speed chips keep the timelapse speed */
+
+	/* A chip while resuming in real time only chooses the speed of the next timelapse. */
+	command = tsw_session_input(&session, &status, TSW_INPUT_SPEED_CHIP, 16, 0);
+	TSW_EXPECT_EQ(command.kind, TSW_COMMAND_NONE);
+	view = build(&model, &session, status);
+	EXPECT_TEXT(view.main_text, "Action.ResumeRealTime");
+	TSW_EXPECT_EQ(view.speed_selected, 16);
+
+	command = tsw_session_input(&session, &status, TSW_INPUT_START_TIMELAPSE, 0, 0);
+	TSW_EXPECT_EQ(command.kind, TSW_COMMAND_NONE);
+	view = build(&model, &session, status);
+	EXPECT_TEXT(view.hero_text, "State.Hero.ResumesTimelapse");
+	TSW_EXPECT_EQ(view.hero_speed, 16);
+	EXPECT_TEXT(view.main_text, "Action.ResumeTimelapse");
+	TSW_EXPECT_EQ(view.main_speed, 16);
+	TSW_EXPECT_TRUE(view.start_in_timelapse);
+	TSW_EXPECT_EQ(view.speed_selected, 16);
+
+	/* While resuming in timelapse a chip changes the speed it resumes at; Slower can reach real time. */
+	command = tsw_session_input(&session, &status, TSW_INPUT_SPEED_CHIP, 2, 0);
+	TSW_EXPECT_EQ(command.kind, TSW_COMMAND_NONE);
+	view = build(&model, &session, status);
+	TSW_EXPECT_EQ(view.main_speed, 2);
+	TSW_EXPECT_EQ(view.speed_selected, 2);
+	command = tsw_session_input(&session, &status, TSW_INPUT_SLOWER, 0, 0);
+	TSW_EXPECT_EQ(command.kind, TSW_COMMAND_NONE);
+	view = build(&model, &session, status);
+	EXPECT_TEXT(view.main_text, "Action.ResumeRealTime");
+	TSW_EXPECT_TRUE(!view.start_in_timelapse);
+	TSW_EXPECT_EQ(view.banner, TSW_BANNER_PAUSED);
+}
+
+/* UX-132: while paused the counters stand still (they are not dimmed: they are what is in the file)
+ * and the status line counts the pause, in full: "Paused for 0:01:12". */
+static void paused_counts_the_pause_not_the_recording(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, paused(4));
+	TSW_EXPECT_TRUE(!view.counters_dimmed);
+	EXPECT_TEXT(view.recorded, "0:12:34");
+	EXPECT_TEXT(view.final_length, "0:06:40");
+	TSW_EXPECT_TRUE(view.section_shown);
+	EXPECT_TEXT(view.section_label, "Counter.Paused");
+	TSW_EXPECT_EQ(view.section_speed, 1); /* no arrow: nothing is added to the final video */
+	EXPECT_TEXT(view.section_recorded, "0:01:12");
+
+	view = build(&model, &session, recording(4));
+	EXPECT_TEXT(view.section_label, "Counter.Stretch");
+	struct tsw_status idle = {0};
+	view = build(&model, &session, idle);
+	EXPECT_TEXT(view.section_label, "Counter.Stretch");
+}
+
+/* UX-104: a pause and a resume are announced once each; a choice made while paused is not a change of
+ * state, and a stop while paused saves without a word, as any stop. */
+static void a_pause_and_a_resume_are_announced_once(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, recording(1));
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Start");
+	struct tsw_status status = paused(1);
+	view = build(&model, &session, status);
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Paused");
+	view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.announce_text == NULL);
+	const struct tsw_command command = tsw_session_input(&session, &status, TSW_INPUT_START_TIMELAPSE, 0, 0);
+	TSW_EXPECT_EQ(command.kind, TSW_COMMAND_NONE);
+	view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.announce_text == NULL);
+	view = build(&model, &session, recording(4));
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Resumed");
+	view = build(&model, &session, recording(4));
+	TSW_EXPECT_TRUE(view.announce_text == NULL);
+	view = build(&model, &session, paused(4));
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Paused");
+	status = paused(4);
+	status.phase = TSW_PHASE_SAVING;
+	view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.announce_text == NULL);
+}
+
 static void a_new_recording_closes_the_card(void)
 {
 	struct tsw_dock_model model;
@@ -420,5 +608,11 @@ int main(void)
 	an_unknown_error_uses_the_unexpected_error_texts();
 	changes_of_state_are_announced_once();
 	a_new_recording_closes_the_card();
+	recording_offers_pause_next_to_stop();
+	paused_from_real_time_resumes_in_real_time();
+	paused_from_timelapse_resumes_in_timelapse();
+	choosing_while_paused_changes_how_it_resumes();
+	paused_counts_the_pause_not_the_recording();
+	a_pause_and_a_resume_are_announced_once();
 	return tsw_test_failures;
 }

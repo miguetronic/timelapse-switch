@@ -127,18 +127,25 @@ static bool is_recording(enum tsw_banner banner)
 	return banner == TSW_BANNER_REAL_TIME || banner == TSW_BANNER_TIMELAPSE;
 }
 
-/* What screen readers hear, once per change of state or speed (UX-104); NULL when nothing changed. */
+/* What screen readers hear, once per change of state or speed (UX-104); NULL when nothing changed. A
+ * choice made while paused is not a change of state: the main button and the rails say it. */
 static const char *announcement(struct tsw_dock_model *model, const struct tsw_dock_view *view)
 {
 	const uint32_t speed = view->banner == TSW_BANNER_TIMELAPSE ? view->hero_speed : 1;
 	const bool same = view->banner == model->told_banner && speed == model->told_speed;
 	const bool was_recording = is_recording(model->told_banner);
+	const bool was_paused = model->told_banner == TSW_BANNER_PAUSED;
 	model->told_banner = view->banner;
 	model->told_speed = speed;
 	if (same)
 		return NULL;
-	if (is_recording(view->banner))
+	if (view->banner == TSW_BANNER_PAUSED)
+		return "A11y.Announce.Paused";
+	if (is_recording(view->banner)) {
+		if (was_paused)
+			return "A11y.Announce.Resumed";
 		return was_recording ? "A11y.Announce.Switch" : "A11y.Announce.Start";
+	}
 	if (view->banner == TSW_BANNER_SAVED)
 		return "A11y.Announce.Saved";
 	if (view->banner == TSW_BANNER_ERROR)
@@ -232,12 +239,43 @@ static void build_saving(struct tsw_dock_view *view)
 	view->hero_quiet = true;
 	view->speeds_enabled = false;
 	view->stop_enabled = false;
+	view->pause_enabled = false;
 	view->main_enabled = false; /* main_text stays "Action.Record": the next action once saved */
 	view->speed_label = "Label.Speed";
 	view->context_text = "Hint.Saving";
 }
 
-/* Recording or saving: the live counters, the switch, the speed rail and Stop. */
+/*
+ * Paused: nothing reaches the file. The counters stand still, the status line counts the pause, and
+ * the hero, the main button and the start-mode rail all name the mode it will resume in; Pause
+ * becomes Resume in the same place (UX-128 to UX-132).
+ */
+static void build_paused(const struct tsw_session *session, const struct tsw_status *status, struct tsw_dock_view *view)
+{
+	const uint32_t resume = tsw_session_effective_speed(session, status);
+	const bool timelapse = resume > 1;
+	view->banner = TSW_BANNER_PAUSED;
+	view->tally_text = "State.Tally.Paused";
+	view->hero_text = timelapse ? "State.Hero.ResumesTimelapse" : "State.Hero.ResumesRealTime";
+	view->hero_quiet = true; /* sentence case: a pause never looks like a recording (UX-129) */
+	view->hero_speed = timelapse ? resume : session->timelapse_speed;
+	view->main_text = timelapse ? "Action.ResumeTimelapse" : "Action.ResumeRealTime";
+	view->main_speed = resume;
+	view->section_shown = true;
+	view->section_label = "Counter.Paused";
+	view->section_speed = 1;
+	tsw_format_duration(status->section_recorded_ns, view->section_recorded);
+	view->section_final[0] = '\0';
+	view->start_mode_shown = true;
+	view->start_label = "Label.ResumeIn";
+	view->start_in_timelapse = timelapse;
+	view->speed_label = "Label.Speed";
+	view->speed_selected = view->hero_speed;
+	view->pause_text = "Action.Resume";
+	view->context_text = "Hint.Paused";
+}
+
+/* Recording, paused or saving: the counters, the switch, the speed rail, Pause and Stop. */
 static void build_recording(const struct tsw_session *session, const struct tsw_status *status,
 			    struct tsw_dock_view *view)
 {
@@ -245,9 +283,16 @@ static void build_recording(const struct tsw_session *session, const struct tsw_
 	tsw_format_duration(status->final_ns, view->final_length);
 	view->speeds_shown = true;
 	view->speeds_enabled = true;
+	view->pause_shown = true;
+	view->pause_enabled = true;
+	view->pause_text = "Action.Pause";
 	view->stop_shown = true;
 	view->stop_enabled = true;
 	view->main_enabled = true;
+	if (status->phase == TSW_PHASE_PAUSED) {
+		build_paused(session, status, view);
+		return;
+	}
 	const bool timelapse = status->speed > 1;
 	show_stretch(status, timelapse ? status->speed : 1, view);
 	if (status->phase == TSW_PHASE_SAVING) {
@@ -286,6 +331,8 @@ void tsw_dock_view_build(struct tsw_dock_model *model, const struct tsw_session 
 	view->main_enabled = true;
 	view->speed_selected = session->timelapse_speed;
 	view->start_in_timelapse = session->start_in_timelapse;
+	view->start_label = "Label.StartIn";
+	view->section_label = "Counter.Stretch";
 	view->context_path = status->path != NULL ? status->path : "";
 
 	if (status->phase != TSW_PHASE_IDLE)

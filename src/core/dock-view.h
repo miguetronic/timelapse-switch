@@ -13,7 +13,7 @@
  *   STATUS   A state block: a tally line (REC) and a hero line (TIMELAPSE x4)
  *            B readout: recorded and final length, and a status line (the current stretch)
  *   ACTION   C main button
- *   BELOW    D speed rails, or the summary or error card    E Stop and save
+ *   BELOW    D speed rails, or the summary or error card    E Pause (or Resume) and Stop and save
  *   CONTEXT  F one muted line
  *
  * Words are locale keys (the .ini files in data/locale). The dock translates them and puts the number
@@ -42,6 +42,7 @@ enum tsw_banner {
 	TSW_BANNER_BUSY,      /* saving: quiet, with busy dots */
 	TSW_BANNER_REAL_TIME, /* recording at normal speed */
 	TSW_BANNER_TIMELAPSE, /* recording sped up: the one filled, accent state */
+	TSW_BANNER_PAUSED,    /* recording, paused: nothing reaches the file until it resumes (UX-129) */
 	TSW_BANNER_SAVED,     /* the summary card is open */
 	TSW_BANNER_ERROR,     /* the error card is open */
 };
@@ -49,18 +50,19 @@ enum tsw_banner {
 struct tsw_dock_view {
 	/* A. State block: two signals, never merged (UX-003) */
 	enum tsw_banner banner;
-	const char *tally_text; /* key: READY, REC, SAVING, SAVED or ERROR */
+	uint32_t hero_speed;    /* timelapse: the speed now; idle and paused: the timelapse speed it would use */
+	const char *tally_text; /* key: READY, REC, PAUSED, SAVING, SAVED or ERROR */
 	const char *hero_text;  /* key; "%1" = hero_speed */
 	bool hero_quiet;        /* sentence case and smaller: never looks like a recording */
-	uint32_t hero_speed;    /* timelapse: the speed now; idle: the speed it will start at */
 
 	/* B. Readout */
 	bool counters_dimmed; /* idle: a dimmed 0:00:00 (UX-006) */
 	char recorded[TSW_TIME_TEXT];
 	char final_length[TSW_TIME_TEXT];
 	bool section_shown; /* the current stretch, in the status line (UX-007): live, frozen while saving, 0:00 if none */
-	uint32_t section_speed;               /* 1 in real time */
-	char section_recorded[TSW_TIME_TEXT]; /* short: "19:37" */
+	uint32_t section_speed;               /* 1 in real time and while paused */
+	const char *section_label;            /* key: "This stretch", or "Paused for" while paused (UX-132) */
+	char section_recorded[TSW_TIME_TEXT]; /* short: "19:37"; while paused, how long: "0:01:12" */
 	char section_final[TSW_TIME_TEXT];
 
 	/* Card after a recording, below C: summary (error_code 0) or error */
@@ -72,7 +74,7 @@ struct tsw_dock_view {
 
 	/* C. Main button: it always sends TSW_INPUT_MAIN */
 	const char *main_text; /* key; "%1" = main_speed */
-	uint32_t main_speed;
+	uint32_t main_speed;   /* while paused: the speed it will resume at, 1 = real time */
 	bool main_enabled;
 
 	/* D. Speed row */
@@ -80,10 +82,14 @@ struct tsw_dock_view {
 	const char *speed_label; /* key */
 	uint32_t speed_selected;
 	bool speeds_enabled;
-	bool start_mode_shown; /* idle: "Start in: real time / timelapse" */
-	bool start_in_timelapse;
+	bool start_mode_shown;   /* idle: "Start in: real time / timelapse"; paused: "Resume in" (UX-131) */
+	bool start_in_timelapse; /* idle: it will start in timelapse; paused: it will resume in timelapse */
+	const char *start_label; /* key: "Start in", or "Resume in" while paused */
 
-	/* E. Stop button */
+	/* E. Pause (it sends TSW_INPUT_PAUSE) and Stop, side by side (UX-128) */
+	const char *pause_text; /* key: "Pause", or "Resume" while paused, in the same place */
+	bool pause_shown;
+	bool pause_enabled;
 	bool stop_shown;
 	bool stop_enabled;
 

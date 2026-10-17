@@ -72,6 +72,7 @@ CardPaint cardPaint(const TswTheme &t, enum tsw_banner banner)
 	case TSW_BANNER_ERROR:
 		return {t.dangerTint, t.danger, 2.0, true};
 	case TSW_BANNER_READY:
+	case TSW_BANNER_PAUSED:
 	case TSW_BANNER_SAVED:
 		break;
 	}
@@ -102,6 +103,7 @@ PillPaint pillPaint(const TswTheme &t, enum tsw_banner banner, const QColor &und
 	case TSW_BANNER_ERROR:
 		return {t.surface, QColor(), TswGlyph::Error, t.shape(t.danger, t.surface), t.text};
 	case TSW_BANNER_READY:
+	case TSW_BANNER_PAUSED:
 		break;
 	}
 	return {QColor(), t.shape(t.muted, under), TswGlyph::None, quiet, quiet};
