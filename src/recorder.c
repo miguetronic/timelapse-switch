@@ -124,6 +124,7 @@ static enum tsw_result open_feeds(struct tsw_recorder *recorder, const struct ob
 	if (audio_output_open(&recorder->audio, &audio) != AUDIO_OUTPUT_SUCCESS)
 		return TSW_E_START_FAILED;
 	recorder->format = ovi->output_format;
+	recorder->width = ovi->output_width;
 	recorder->height = ovi->output_height;
 	recorder->block_ns = AUDIO_OUTPUT_FRAMES * SECOND_NS / oai->samples_per_sec;
 	return TSW_OK;
@@ -391,6 +392,8 @@ static enum tsw_result reset_timeline(struct tsw_recorder *recorder, const struc
 	recorder->frames_in = recorder->frames_sent = recorder->frames_lost = 0;
 	recorder->blocks_sent = recorder->ring_full = recorder->ring_empty = 0;
 	recorder->feed_peak = 0;
+	recorder->input_repeats = recorder->gate_repeats = recorder->gate_skips = 0;
+	recorder->last_fingerprint = 0;
 	tsw_disk_meter_reset(&recorder->disk);
 	recorder->disk_checked_ns = 0;
 	recorder->disk_free_bytes = 0;
@@ -500,9 +503,12 @@ void tsw_recorder_stop(struct tsw_recorder *recorder)
 	const double lost = wanted > 0 ? 100.0 * (double)recorder->frames_lost / (double)wanted : 0.0;
 	tsw_log(LOG_INFO,
 		"recording stopped at %.6f s: frames in %ld, sent %ld, lost %.2f%% | audio blocks sent %ld, "
-		"ring full %ld, ring empty %ld | feed: at most %ld of %d frames waiting",
+		"ring full %ld, ring empty %ld | feed: at most %ld of %d frames waiting | smoothness: pictures OBS "
+		"repeated %ld, real-time frames sent twice %ld, skipped %ld",
 		real_s, recorder->frames_in, recorder->frames_sent, lost, recorder->blocks_sent, recorder->ring_full,
-		recorder->ring_empty, os_atomic_load_long(&recorder->feed_peak), (int)VIDEO_CACHE_FRAMES);
+		recorder->ring_empty, os_atomic_load_long(&recorder->feed_peak), (int)VIDEO_CACHE_FRAMES,
+		os_atomic_load_long(&recorder->input_repeats), os_atomic_load_long(&recorder->gate_repeats),
+		os_atomic_load_long(&recorder->gate_skips));
 	tsw_log(LOG_INFO,
 		"start: first frame %+.1f ms, first audio block %+.1f ms | data arrives late by: frames %.1f ms, audio %.1f ms",
 		((double)recorder->first_frame_ns - (double)recorder->start_ns) / 1e6,
