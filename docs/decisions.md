@@ -205,3 +205,40 @@ Details that keep it robust:
 **Consequences.**
 - Verified by unit tests (timeline, session, a 10-minute simulation with 410 pauses), and in a real OBS by the integration scenarios `pause` and `pauses` (40 quick pauses, each choosing how to resume, ending with Stop while paused): every pause is left out of the file exactly, sync holds, nothing is lost.
 
+
+---
+
+## ADR-012. Road C: the plugin copies the frame itself, off OBS's graphics thread
+
+*Date: 2026-10-17. Status: experimental, being built and tested; road B (ADR-003) stays the default until the checks below pass.*
+
+**Context.** On road B (ADR-003), OBS waits for each frame to come down from the card and copies it into its memory feed on its graphics thread, the thread that then draws the preview: 2.8 ms per 4K frame as a median, 5.9 ms for the worst 1 %, up to 13 ms, measured on 2026-10-17 with a phone camera and a busy computer. On a busy computer the preview then looks less smooth while the plugin records (`docs/performance.md`, section 9). The frame is then copied a second time, into the plugin's feed, and in timelapse OBS copies every frame even though most are not kept.
+
+**Decision.** Where it is supported, the plugin takes the frame from the card itself:
+
+```
+  graphics thread, every frame (OBS's "rendered" callback):
+     scene drawn  ->  convert to the output format, with OBS's own shader  ->  ask the card to copy it
+                      into a staging slot (it does not wait)  ->  hand the slot of the previous frame,
+                      now copied, to our copier thread  ->  OBS draws the preview
+
+  our copier thread:
+     the frame, straight from the slot into the plugin's feed (one copy, only the kept frames)
+```
+
+- **Same picture.** The conversion uses OBS's own `format_conversion.effect`, with the same technique, color matrix and parameters OBS uses for its memory feed; the input is OBS's main texture, as it is for OBS. A verification mode records through both roads at once and compares a hash of every whole frame: road C is adopted only if every frame is identical.
+- **Same timing.** Each frame keeps the time OBS drew it at, and covers as many intervals as OBS's own feed would give it (a late draw covers more); repeats are handed to the recorder exactly as OBS's feed hands them (`src/core/stage-ring.h`).
+- **Never a wait on the graphics thread.** Four staging slots, used in turn. If every slot is busy because the copier is behind, the frame is not staged, it is counted, and the frame before it covers its interval: a repeated picture, as when OBS's own feed is full.
+- **OBS's rendering state is left as it was:** render target, viewport, projection and blending are saved and restored around the plugin's work.
+- **When.** Only for the main canvas, unscaled output (base resolution equal to output resolution) and the SDR formats NV12, I420 and I444, and at first only on Linux, where it is tested. Anywhere else, road B, and the log says which road is used and why.
+
+**Alternatives.**
+- *Road B as it is* (ADR-003). It stays, as the fallback.
+- *Plan B of ADR-003, GPU only with two encoders.* Its costs are unchanged (fixed speed per recording, waits for keyframes, no Hybrid MP4).
+- *Mapping on the graphics thread and copying there.* No gain: the copy is the cost.
+
+**Consequences.**
+- Expected: on the graphics thread, a few tenths of a millisecond instead of 3 to 8 ms; one full-frame copy less (12.4 MB per 4K frame); in timelapse x4 only the kept frame of every 4 is copied; OBS no longer fills its own memory feed while only the plugin records (about 75 MB of RAM in 4K). To be measured before the status changes.
+- Frames reach the plugin about one frame later than on road B; the file is not affected, because every frame and audio block carries its own time.
+- More card memory: four staging slots and the conversion planes (about 62 MB in 4K NV12), partly offset by OBS's own staging surfaces no longer in use.
+- The checks before adoption: the unit tests of the slot ring, the verification mode (every frame identical), and every integration scenario (sync, rhythm, pauses, totals, lost frames, leaks) on road C, then the cost measured in 4K like ADR-003.

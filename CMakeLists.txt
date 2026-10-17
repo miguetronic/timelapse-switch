@@ -81,6 +81,7 @@ add_library(
   src/core/gate.c
   src/core/health.c
   src/core/session.c
+  src/core/stage-ring.c
   src/core/timeline.c
 )
 target_include_directories(tsw-core PUBLIC src)
