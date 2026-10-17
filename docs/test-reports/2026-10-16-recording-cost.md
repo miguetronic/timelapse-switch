@@ -99,7 +99,7 @@ Output 'timelapse-switch output': Total drawn frames: 9002
 
 ## Later the same day: how full the plugin's feed gets
 
-The plugin's summary line now says how many frames, at most, waited in its feed for the encoder (`docs/performance.md`, section 9). Integration test, HEVC on VAAPI, same reference PC, with a virtual machine and software builds running at the same time:
+The plugin's summary line now says how many frames, at most, waited in its feed for the encoder (`docs/performance.md`, section 10). Integration test, HEVC on VAAPI, same reference PC, with a virtual machine and software builds running at the same time:
 
 | Run | Result |
 |---|---|

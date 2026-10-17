@@ -26,7 +26,7 @@ probe (sync-probe.c: when OBS delivered each beep and each frame):
                   and paused, switches, pauses, final length) matches the sections
     lost frames   frames lost because the computer could not keep up
     feed          the plugin reports how many frames, at most, waited in its feed for the
-                  encoder (docs/performance.md, section 9)
+                  encoder (docs/performance.md, section 10)
 
 Prints one PASS or FAIL line per check; the exit status is the number of failures.
 Needs ffmpeg and ffprobe. Standard library only.

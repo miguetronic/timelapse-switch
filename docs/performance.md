@@ -139,13 +139,46 @@ The scene in this measurement is light (a small video scaled to 4K). That is on 
 ## 8. Measure it on your computer
 
 - **OBS's Stats dock** (Docks > Stats) shows OBS's CPU and memory, and frames missed while rendering or encoding. Compare it while idle and while the plugin records.
-- **The plugin's log line** when a recording stops (Help > Log Files > View Current Log) gives the frames it received, sent and lost, and how many frames, at most, waited in its feed for the encoder (section 9).
+- **The plugin's log line** when a recording stops (Help > Log Files > View Current Log) gives the frames it received, sent and lost, and how many frames, at most, waited in its feed for the encoder (section 10).
 - **For contributors:** `tests/integration/measure.sh` repeats the measurement of section 5 on a Linux computer with an AMD graphics card; see `tests/integration/README.md`, "Measuring the cost".
 
-## 9. Could it cost less?
+## 9. The preview while the plugin records
+
+**What you may notice.** On a busy computer, OBS's preview can look less smooth while the plugin records, even though the recording itself is as smooth as OBS's own.
+
+**Why.** OBS draws the preview on its graphics thread, the same thread that, on road B, waits for the frame to come down from the card (step 1) and copies it into OBS's memory feed (step 2), once per frame, before it draws the preview:
+
+```
+  every frame, OBS's graphics thread:
+     draw the scene  ->  (1) wait for the frame in RAM  ->  (2) copy 12.4 MB  ->  draw the preview
+                         \______________ only on road B, 3 to 8 ms in 4K _____________/
+```
+
+When the computer is busy, steps (1) and (2) take a different time on every frame, so the preview is presented at an uneven pace. The recording is not affected: its frames carry their own times.
+
+Think of a waiter who, on every round, first has to pass 12 MB of dishes through a hatch before serving the table: when the kitchen is crowded, some rounds take longer than others, and the table sees the dishes arrive unevenly. What goes into the fridge, the file, is complete and in order.
+
+**Measured on the reference PC**, 4K30 with a phone camera source and a virtual machine working at the same time (2026-10-17):
+
+| Step on OBS's graphics thread, per frame | Median | 99 % below | Worst |
+|---|---|---|---|
+| (1) wait for the frame in RAM (`download_frame`) | 0.12 ms | 0.75 ms | 4.9 ms |
+| (2) copy into OBS's memory feed (`output_video_data`) | 2.7 ms | 5.2 ms | 8.4 ms |
+
+In the same session, rendering the scene itself took up to 15 ms 1 % of the time. Comparing recordings made one after the other in the same conditions, the plugin's file had 1 repeated picture in 975 moving frames and OBS's own 1 in 700: the same smoothness. The plugin's summary line confirmed that its one repeat already came from OBS.
+
+**What helps.**
+- Lighten the computer's load (other programs, a virtual machine).
+- During long recordings, the preview can be turned off: right click on it, then untick **Enable Preview**. The recording does not need it.
+- Do not record with OBS's own Record button and the plugin at the same time (next point).
+
+**Two recordings at once.** Recording 4K with OBS's Record button and with the plugin at the same time asks the card's video encoder for twice the work. On the reference card one 4K30 recording already keeps it 61 to 76 % busy, so two overflow it: in a measured test (2026-10-17, with a virtual machine working too), OBS's own recording missed about half of its frames to rendering and encoding lag, and the plugin lost three quarters of its frames. The dock warns about it while it happens (TSW-E302).
+
+## 10. Could it cost less?
 
 Perhaps, and only with measurements to show it is worth it:
 
+- **Road C: our own copy, off the graphics thread.** OBS lets a plugin read the finished picture on the card and copy it down itself. Converted to NV12 on the card with OBS's own conversion shader, and copied into RAM by a thread of the plugin, the 3 to 8 ms of section 9 would leave OBS's graphics thread, one full-frame copy would disappear, and in timelapse only the frames that are kept would come down (1 in 4 at x4). It is a large change on the most delicate path, so it is studied as an experiment, adopted only if the sync, color and stability tests all pass and the measurements show the gain.
 - **A smaller plugin feed.** The plugin's feed is a waiting room with 16 seats between the valve and the encoder. If the encoder stalls for a moment, frames wait there; if all 16 seats are taken, the next frame is lost (nothing crashes, but that picture is missing, and the log says so). 16 is the most OBS allows: about half a second at 30 fps, a quarter of a second at 60 fps. OBS's own memory feed has 6.
 
   Fewer seats would save RAM (12.4 MB per seat in 4K) but leave less room for stalls. So the feed stays at 16, and it is **not a setting**: stability comes first, and the right number depends on encoder stalls that a user cannot see, so a wrong choice would show up later as lost frames, far from its cause. Instead, the plugin writes in its log how many frames, at most, waited:

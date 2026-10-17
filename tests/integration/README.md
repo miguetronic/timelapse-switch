@@ -62,7 +62,7 @@ Ending in timelapse matters: when you stop, the encoder still holds frames (x264
 | silence | timelapse sections are silent | REQ-006 |
 | pause | across each pause the picture jumps by exactly the paused time; after a pause that lasts until Stop, nothing | only scenarios with pauses run it; the jump is looked for within 0.2 s of where the log places the pause, with a margin of one step of each neighbouring section plus 3 frames |
 | lost frames | no frame was lost | |
-| feed | the plugin's summary line says how many frames, at most, waited in its feed for the encoder, between 1 and the feed's size | the number itself is information for `docs/performance.md`, section 9; only its absence fails |
+| feed | the plugin's summary line says how many frames, at most, waited in its feed for the encoder, between 1 and the feed's size | the number itself is information for `docs/performance.md`, section 10; only its absence fails |
 | memory leaks | OBS reports "Number of memory leaks: 0" when it closes | rule B2 |
 
 ## Why sync is measured against OBS, not against the clock

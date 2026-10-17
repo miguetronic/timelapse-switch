@@ -62,6 +62,7 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
 - In 4K30, 373 MB/s go from the card to memory and 373 MB/s back, and each kept frame is copied three times in memory. The download is the same OBS already does for every x264 recording.
 - Measured on the reference PC on 2026-10-16, 4K30 for 5 minutes, against OBS's own recording with a GPU encoder: 0.42 CPU cores more; 286 MB more RAM while recording, of which OBS keeps 75 MB (its own memory feed) until it closes; about 130 MB less memory on the card; 5 W more on the card; no lost frames (`docs/performance.md`, `docs/test-reports/2026-10-16-recording-cost.md`).
 - The cost is stated plainly to users, in the README and in `docs/performance.md` (REQ-018).
+- On OBS's graphics thread, steps (1) and (2) take 3 to 8 ms per 4K frame, which on a busy computer makes the preview less smooth while the plugin records (the recording is not affected; measured on 2026-10-17, `docs/performance.md`, section 9). A road that copies the frame off that thread (road C, section 10) is studied as an experiment.
 - REQ-014 holds with the test scene. If a real scene shows lost frames because of this road, plan B is implemented behind the same dock.
 - On this path each frame keeps its own time, as in OBS's own x264 recordings. OBS's GPU path labels each frame with the time of the one before, so the plugin's picture sits about one frame later than in OBS's own GPU-encoder recordings (measured 2026-10-16; `docs/architecture.md`, "Timing").
 

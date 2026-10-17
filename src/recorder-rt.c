@@ -25,7 +25,7 @@
 
 /* How many frames wait in our video feed for the encoder right now, kept if it is the most so far. The
  * feed holds 16 frames (VIDEO_CACHE_FRAMES in recorder.c); this tells whether that is too many or too
- * few (docs/performance.md, section 9). Frames sent minus frames OBS's feed thread has handed to the encoder; a lost frame is
+ * few (docs/performance.md, section 10). Frames sent minus frames OBS's feed thread has handed to the encoder; a lost frame is
  * still handed over (OBS repeats the previous picture), so it counts on both sides. */
 static void note_feed_waiting(struct tsw_recorder *recorder)
 {
