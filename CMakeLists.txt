@@ -77,6 +77,7 @@ add_library(
   src/core/audio-ring.c
   src/core/color.c
   src/core/dock-view.c
+  src/core/fingerprint.c
   src/core/gate.c
   src/core/health.c
   src/core/session.c

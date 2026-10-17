@@ -20,11 +20,12 @@
 #include <util/platform.h>
 
 #include "core/check.h"
+#include "core/fingerprint.h"
 #include "recorder-internal.h"
 
 /* How many frames wait in our video feed for the encoder right now, kept if it is the most so far. The
  * feed holds 16 frames (VIDEO_CACHE_FRAMES in recorder.c); this tells whether that is too many or too
- * few (docs/performance.md, section 9). Frames sent minus frames OBS's feed thread has handed to the encoder; a lost frame is
+ * few (docs/performance.md, section 10). Frames sent minus frames OBS's feed thread has handed to the encoder; a lost frame is
  * still handed over (OBS repeats the previous picture), so it counts on both sides. */
 static void note_feed_waiting(struct tsw_recorder *recorder)
 {
@@ -32,6 +33,24 @@ static void note_feed_waiting(struct tsw_recorder *recorder)
 	const long waiting = recorder->frames_sent + recorder->frames_lost - handed;
 	if (waiting > recorder->feed_peak)
 		os_atomic_set_long(&recorder->feed_peak, waiting);
+}
+
+/* Smoothness diagnostics (summary line at the stop): a picture equal to the previous one, and in real time a
+ * frame the gate sends twice or skips. Either shows in the file as a stutter. */
+static void note_smoothness(struct tsw_recorder *recorder, const struct video_data *frame, uint32_t speed,
+			    uint32_t copies)
+{
+	const uint64_t fingerprint =
+		tsw_fingerprint(frame->data[0], frame->linesize[0], recorder->width, recorder->height);
+	if (fingerprint != 0 && fingerprint == recorder->last_fingerprint)
+		os_atomic_set_long(&recorder->input_repeats, recorder->input_repeats + 1);
+	recorder->last_fingerprint = fingerprint;
+	if (speed != 1 || os_atomic_load_bool(&recorder->flushing))
+		return;
+	if (copies == 0)
+		os_atomic_set_long(&recorder->gate_skips, recorder->gate_skips + 1);
+	else if (copies > 1)
+		os_atomic_set_long(&recorder->gate_repeats, recorder->gate_repeats + (long)copies - 1);
 }
 
 /* OBS video thread, once per frame: send it 0, 1 or more times to our video feed. */
@@ -56,6 +75,7 @@ void tsw_recorder_receive_frame(void *param, struct video_data *frame)
 	else if (speed != TSW_SPEED_PAUSED)
 		copies = tsw_video_gate_copies(&recorder->video_gate, output_ns, speed);
 	os_atomic_set_long(&recorder->frames_in, recorder->frames_in + 1);
+	note_smoothness(recorder, frame, speed, copies);
 	if (copies == 0)
 		return;
 

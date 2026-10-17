@@ -61,4 +61,6 @@ void tsw_health_evaluate(const struct tsw_health_input *input, struct tsw_health
 		health->issues |= (uint32_t)TSW_HEALTH_LOST_FRAMES;
 	if (input->feed_size > 0 && input->feed_waiting * 2 >= input->feed_size)
 		health->issues |= (uint32_t)TSW_HEALTH_ENCODER_BEHIND;
+	if (input->obs_recording_active)
+		health->issues |= (uint32_t)TSW_HEALTH_BOTH_RECORDING;
 }

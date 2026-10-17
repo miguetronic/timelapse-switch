@@ -124,6 +124,7 @@ static enum tsw_result open_feeds(struct tsw_recorder *recorder, const struct ob
 	if (audio_output_open(&recorder->audio, &audio) != AUDIO_OUTPUT_SUCCESS)
 		return TSW_E_START_FAILED;
 	recorder->format = ovi->output_format;
+	recorder->width = ovi->output_width;
 	recorder->height = ovi->output_height;
 	recorder->block_ns = AUDIO_OUTPUT_FRAMES * SECOND_NS / oai->samples_per_sec;
 	return TSW_OK;
@@ -391,6 +392,8 @@ static enum tsw_result reset_timeline(struct tsw_recorder *recorder, const struc
 	recorder->frames_in = recorder->frames_sent = recorder->frames_lost = 0;
 	recorder->blocks_sent = recorder->ring_full = recorder->ring_empty = 0;
 	recorder->feed_peak = 0;
+	recorder->input_repeats = recorder->gate_repeats = recorder->gate_skips = 0;
+	recorder->last_fingerprint = 0;
 	tsw_disk_meter_reset(&recorder->disk);
 	recorder->disk_checked_ns = 0;
 	recorder->disk_free_bytes = 0;
@@ -444,6 +447,14 @@ enum tsw_result tsw_recorder_start(struct tsw_recorder *recorder, uint32_t speed
 	tsw_log(LOG_INFO, "recording started, speed x%u | file=\"%s\" | %ux%u at %u/%u fps", speed, recorder->path,
 		ovi.output_width, ovi.output_height, ovi.fps_num, ovi.fps_den);
 	return TSW_OK;
+}
+
+/* The most frames that waited in the feed, at most its size: while frames are being lost the raw count also
+ * includes the repeats OBS owes, which says nothing more than "full". */
+static long feed_peak(struct tsw_recorder *recorder)
+{
+	const long peak = os_atomic_load_long(&recorder->feed_peak);
+	return peak < VIDEO_CACHE_FRAMES ? peak : VIDEO_CACHE_FRAMES;
 }
 
 /* Where the time of the recording went, up to the stop (the dock shows the same; tests compare it). */
@@ -500,9 +511,12 @@ void tsw_recorder_stop(struct tsw_recorder *recorder)
 	const double lost = wanted > 0 ? 100.0 * (double)recorder->frames_lost / (double)wanted : 0.0;
 	tsw_log(LOG_INFO,
 		"recording stopped at %.6f s: frames in %ld, sent %ld, lost %.2f%% | audio blocks sent %ld, "
-		"ring full %ld, ring empty %ld | feed: at most %ld of %d frames waiting",
+		"ring full %ld, ring empty %ld | feed: at most %ld of %d frames waiting | smoothness: pictures OBS "
+		"repeated %ld, real-time frames sent twice %ld, skipped %ld",
 		real_s, recorder->frames_in, recorder->frames_sent, lost, recorder->blocks_sent, recorder->ring_full,
-		recorder->ring_empty, os_atomic_load_long(&recorder->feed_peak), (int)VIDEO_CACHE_FRAMES);
+		recorder->ring_empty, feed_peak(recorder), (int)VIDEO_CACHE_FRAMES,
+		os_atomic_load_long(&recorder->input_repeats), os_atomic_load_long(&recorder->gate_repeats),
+		os_atomic_load_long(&recorder->gate_skips));
 	tsw_log(LOG_INFO,
 		"start: first frame %+.1f ms, first audio block %+.1f ms | data arrives late by: frames %.1f ms, audio %.1f ms",
 		((double)recorder->first_frame_ns - (double)recorder->start_ns) / 1e6,
@@ -664,13 +678,17 @@ static void fill_monitoring(struct tsw_recorder *recorder, struct tsw_status *st
 		const long waiting = os_atomic_load_long(&recorder->frames_sent) +
 				     os_atomic_load_long(&recorder->frames_lost) -
 				     (long)video_output_get_total_frames(recorder->video);
-		status->feed_waiting = waiting > 0 ? (uint32_t)waiting : 0;
+		/* While frames are being lost OBS owes repeats to the last slot, so the count can exceed the feed:
+		 * it is reported as full, and the lost frames tell the rest. */
+		status->feed_waiting =
+			waiting <= 0 ? 0 : (waiting >= VIDEO_CACHE_FRAMES ? VIDEO_CACHE_FRAMES : (uint32_t)waiting);
 	}
 	if (!saving)
 		sample_disk(recorder, now);
 	status->file_bytes = recorder->file_bytes;
 	status->disk_free_bytes = recorder->disk_free_bytes;
 	status->bytes_per_second = tsw_disk_meter_rate(&recorder->disk);
+	status->obs_recording_active = obs_frontend_recording_active();
 }
 
 void tsw_recorder_get_status(struct tsw_recorder *recorder, struct tsw_status *status)

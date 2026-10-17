@@ -95,6 +95,17 @@ static void several_issues_are_all_kept(void)
 					     (uint32_t)TSW_HEALTH_ENCODER_BEHIND);
 }
 
+/* Break caught: OBS's own recording running at the same time without a word: two recordings double the
+ * encoder's work, which on a modest graphics card makes both lose frames (TSW-E302). */
+static void both_recordings_are_reported(void)
+{
+	struct tsw_health_input input = healthy();
+	input.obs_recording_active = true;
+	struct tsw_health health;
+	tsw_health_evaluate(&input, &health);
+	TSW_EXPECT_EQ(health.issues, TSW_HEALTH_BOTH_RECORDING);
+}
+
 /* Break caught: a wrong file growth rate, so the minutes of disk left are wrong. */
 static void disk_meter_measures_the_growth_rate(void)
 {
@@ -128,6 +139,7 @@ int main(void)
 	disk_low_under_ten_minutes();
 	unknown_disk_never_warns();
 	several_issues_are_all_kept();
+	both_recordings_are_reported();
 	disk_meter_measures_the_growth_rate();
 	disk_meter_forgets_old_samples();
 	return tsw_test_failures;

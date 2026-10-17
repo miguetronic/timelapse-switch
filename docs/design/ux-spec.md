@@ -569,7 +569,7 @@ Rules behind the table:
 | UX-131 | While paused, the user MUST be able to choose how to resume on one rail, "Resume in", that takes the speed chips' place and height: Real time, x2, x4, x8 and x16, the choice marked as armed (outlined and bold). Real time means resume in real time; a speed means resume in timelapse at that speed. The mode and speed hotkeys choose too. None of them resumes by itself. The choice starts from the mode and speed before the pause and lasts until that pause ends. At 300 and 260 px the five segments MUST show their words in both languages; where "Real time" cannot fit on the rail's one row, its play glyph stands for it, with the words in its tooltip and accessible name. | [CONTROL] |
 | UX-132 | While paused, RECORDED and FINAL VIDEO MUST stand still (paused time never counts in either), and the status line MUST show how long the pause has lasted ("Paused for 0:01:12"). | [TASK] [SELF] |
 | UX-133 | Pause and resume MUST act at once and as often as the user wants; only a second press within 400 ms of the previous pause or resume is taken as a double press and ignored (UX-046). Stopping while paused MUST save the file like any other stop. | [CONTROL] [ROBUST] |
-| UX-134 | Health MUST be silent while all is well. When an issue appears, zone F MUST show the most urgent one, in this order: disk low (TSW-E102, with the minutes left), frames lost (TSW-E201, with the count), encoder falling behind (TSW-E203); with an icon, words and the code, never color alone. It goes away when the condition ends, except lost frames, which stay with their count until the recording ends (3.17). | [SELF] [ROBUST] |
+| UX-134 | Health MUST be silent while all is well. When an issue appears, zone F MUST show the most urgent one, in this order: disk low (TSW-E102, with the minutes left), OBS's own recording running too (TSW-E302: the usual cause of the next two), frames lost (TSW-E201, with the count), encoder falling behind (TSW-E203); with an icon, words and the code, never color alone. It goes away when the condition ends, except lost frames, which stay with their count until the recording ends (3.17). | [SELF] [ROBUST] |
 | UX-135 | The dock MUST offer a "Details" section, closed by default and never opened by itself, that remembers whether it was open. While recording or paused it shows the values of 3.17; after a recording, the summary card shows waiting skipped and the speed map. | [TASK] [CONTROL] |
 | UX-136 | The speed map MUST be a thin strip of the session's recorded time cut into equal slices (48): real time plain, timelapse hatched more densely the faster it is, paused as a gap; never color alone; each slice has the speed that covers most of it (`tsw_timeline_map`). | [SELF] |
 | UX-137 | Monitoring MUST NOT cost anything measurable: values come from the recorder's counters and the timeline, and the disk is asked at most once per second. The dock MUST NOT show the computer's CPU, GPU or RAM (OBS's Stats dock does). | [ROBUST] |
@@ -583,7 +583,7 @@ Rules behind the table:
 | UX-020 | The plugin MUST NOT use OBS's strings "Start Recording" or "Stop Recording" (Spanish "Iniciar Grabación", "Detener Grabación") for its own controls [S7]. | [SELF] |
 | UX-021 | While idle, zone F MUST show the separate-file hint until the user has completed 3 TS recordings, then MAY collapse it to an info icon with the same tooltip. | [LEARN] |
 | UX-022 | If OBS's own recording starts while TS is idle, the dock MUST show TSW-E301 (info). | [ROBUST] |
-| UX-023 | If both recordings run, the dock MUST show TSW-E302 (warning) once per session and MUST still allow it. | [CONTROL] |
+| UX-023 | If both recordings run, the dock MUST show TSW-E302 (warning) in its health line while both run (UX-134), and MUST still allow it. | [CONTROL] |
 | UX-024 | Pressing the switch or a speed key while idle MUST pre-select the starting mode and say so in the banner; it MUST NOT silently do nothing. | [ROBUST] |
 | UX-025 | TS files MUST carry a distinct, configurable suffix (default `tswitch`) after the OBS filename pattern. | [ROBUST] |
 | UX-026 | All hotkey names MUST start with "Timelapse Switch:". | [SELF] |
@@ -629,6 +629,7 @@ The dock is used mid-recording, with busy hands, so every number competes for at
 ```
   always             RECORDED, FINAL VIDEO, this stretch          (zones A and B, as today)
   only when needed   one health line in zone F, the most urgent:  disk low (TSW-E102)
+                                                                   both recordings running (TSW-E302)
                                                                    frames lost (TSW-E201)
                                                                    encoder falling behind (TSW-E203)
   on request         a "Details" section, closed by default:

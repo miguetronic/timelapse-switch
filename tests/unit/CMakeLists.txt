@@ -41,3 +41,8 @@ add_executable(test-health test-health.c test-main.c)
 target_link_libraries(test-health PRIVATE tsw-core)
 tsw_strict_warnings(test-health)
 add_test(NAME health COMMAND test-health)
+
+add_executable(test-fingerprint test-fingerprint.c test-main.c)
+target_link_libraries(test-fingerprint PRIVATE tsw-core)
+tsw_strict_warnings(test-fingerprint)
+add_test(NAME fingerprint COMMAND test-fingerprint)

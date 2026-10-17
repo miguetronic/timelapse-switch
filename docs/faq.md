@@ -29,3 +29,14 @@ To fix it, add one frame to the microphone's offset: **33 ms at 30 fps, 17 ms at
 ### I record with OBS's Record button and with the plugin at the same time. Do the two files line up?
 
 Within one frame. If you edit them together, slide one of them by one frame (the OBS file one frame later) and they match exactly.
+
+## Performance
+
+### Why does OBS's preview look less smooth while Timelapse Switch records?
+
+To choose which frames go into the file, the plugin needs each frame in the computer's memory, and OBS copies it there on the same thread that draws the preview (3 to 8 ms per 4K frame). On a busy computer that copy takes a different time on every frame, so the preview can look uneven. **The recording is not affected**: it is as smooth as OBS's own. If the preview bothers you, lighten the computer's load, or turn the preview off during long recordings (right click on it, untick **Enable Preview**). The details and the measurements are in `docs/performance.md`, section 9.
+
+### Can I record with OBS's Record button and with Timelapse Switch at the same time?
+
+Yes, but in 4K it is best not to. Two recordings ask the graphics card's video encoder for twice the work; on a modest card both recordings then lose or repeat frames. The dock warns while both are running (TSW-E302). At lower resolutions the load is smaller; the dock's health line tells you if it is still too much.
+

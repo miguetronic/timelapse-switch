@@ -33,11 +33,16 @@ struct tsw_recorder {
 	struct tsw_audio_ring ring;       /* OBS audio thread to our audio thread */
 	uint64_t block_ns;                /* duration of one audio block */
 	enum video_format format;         /* frame layout, for the copy */
+	uint32_t width;
 	uint32_t height;
 
 	/* Counters for the summary line; each one has a single writer. */
 	volatile long frames_in, frames_sent, frames_lost, blocks_sent, ring_full, ring_empty;
 	volatile long feed_peak; /* most frames that waited in our video feed for the encoder */
+	/* Diagnostics of smoothness, OBS video thread only: pictures OBS delivered twice in a row (by their
+	 * fingerprint), and in real time the frames the gate sent twice or skipped. */
+	volatile long input_repeats, gate_repeats, gate_skips;
+	uint64_t last_fingerprint;
 	/* Diagnostics, written once by their real-time thread: first unit sent, and how late data arrives. */
 	uint64_t first_frame_ns, first_block_ns, frame_delay_ns, block_delay_ns;
 

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "core/timeline.h"
@@ -47,4 +48,5 @@ struct tsw_status {
 	uint64_t file_bytes;               /* size of the file so far; 0 = unknown */
 	uint64_t disk_free_bytes;          /* free space where it is written; 0 = unknown */
 	uint64_t bytes_per_second;         /* how fast the file grows; 0 = unknown or not growing */
+	bool obs_recording_active;         /* OBS's own Start Recording runs at the same time (TSW-E302) */
 };
