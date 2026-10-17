@@ -33,21 +33,24 @@ static const struct size_unit {
 	uint64_t bytes;
 	const char *key;
 } SIZE_UNITS[] = {
-	{1ull << 20, "Unit.MB"},
-	{1ull << 30, "Unit.GB"},
-	{1ull << 40, "Unit.TB"},
+	{1024ull * 1024, "Unit.MB"},
+	{1024ull * 1024 * 1024, "Unit.GB"},
+	{1024ull * 1024 * 1024 * 1024, "Unit.TB"},
 };
 enum { SIZE_UNIT_COUNT = sizeof(SIZE_UNITS) / sizeof(SIZE_UNITS[0]) };
 
-/* The health issues, most urgent first (UX-134), with their code and words. */
+/* The health issues, most urgent first (UX-134), with their code and words. OBS's own recording comes
+ * second: it is the usual cause of the two after it. */
 static const struct health_texts {
 	uint32_t issue; /* enum tsw_health_issue */
 	uint32_t code;  /* TSW-E number */
 	const char *text;
+	bool held; /* stays HEALTH_HOLD_NS after its condition ends; not what the user ends on purpose */
 } HEALTH[TSW_HEALTH_KINDS] = {
-	{TSW_HEALTH_DISK_LOW, 102, "Health.E102"},
-	{TSW_HEALTH_LOST_FRAMES, 201, "Health.E201"},
-	{TSW_HEALTH_ENCODER_BEHIND, 203, "Health.E203"},
+	{TSW_HEALTH_DISK_LOW, 102, "Health.E102", true},
+	{TSW_HEALTH_BOTH_RECORDING, 302, "Health.E302", false},
+	{TSW_HEALTH_LOST_FRAMES, 201, "Health.E201", true},
+	{TSW_HEALTH_ENCODER_BEHIND, 203, "Health.E203", true},
 };
 
 /* The error codes the dock has texts for (data/locale); any other one shows the E901 texts. */
@@ -522,7 +525,7 @@ static void show_details(const struct tsw_status *status, const struct tsw_healt
  * Health (UX-134): the most urgent issue, in zone F, while recording or paused (while saving, F says to
  * keep OBS open: UX-011). Each issue stays HEALTH_HOLD_NS of recorded time after its condition ends, so
  * a condition at its edge never makes the line blink (UX-063); lost frames never end, since they are
- * counted from the start.
+ * counted from the start; both recordings show exactly while both run (UX-023).
  */
 static void show_health(struct tsw_dock_model *model, const struct tsw_status *status, const struct tsw_health *health,
 			struct tsw_dock_view *view)
@@ -537,8 +540,8 @@ static void show_health(struct tsw_dock_model *model, const struct tsw_status *s
 	uint32_t issues = 0;
 	for (size_t i = 0; i < TSW_HEALTH_KINDS; i++) {
 		if ((health->issues & HEALTH[i].issue) != 0)
-			model->health_until_ns[i] = now + HEALTH_HOLD_NS;
-		if (now < model->health_until_ns[i])
+			model->health_until_ns[i] = now + (HEALTH[i].held ? HEALTH_HOLD_NS : 0);
+		if ((health->issues & HEALTH[i].issue) != 0 || now < model->health_until_ns[i])
 			issues |= HEALTH[i].issue;
 	}
 	if ((health->issues & (uint32_t)TSW_HEALTH_DISK_LOW) != 0)
@@ -579,8 +582,14 @@ void tsw_dock_view_build(struct tsw_dock_model *model, const struct tsw_session 
 	view->context_path = status->path != NULL ? status->path : "";
 
 	/* The recorder's counters, read once for the health line and the details. */
-	const struct tsw_health_input input = {status->frames_lost, status->feed_waiting, status->feed_size,
-					       status->disk_free_bytes, status->bytes_per_second};
+	const struct tsw_health_input input = {
+		.frames_lost = status->frames_lost,
+		.feed_waiting = status->feed_waiting,
+		.feed_size = status->feed_size,
+		.disk_free_bytes = status->disk_free_bytes,
+		.bytes_per_second = status->bytes_per_second,
+		.obs_recording_active = status->obs_recording_active,
+	};
 	struct tsw_health health;
 	tsw_health_evaluate(&input, &health);
 

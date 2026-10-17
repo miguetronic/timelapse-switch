@@ -793,8 +793,20 @@ static void health_shows_only_the_most_urgent_issue(void)
 	EXPECT_TEXT(view.health_text, "Health.E102");
 	EXPECT_AMOUNT(view.health_amount, "Unit.Minutes", "8", "");
 
+	/* OBS's own recording running too comes right after the disk: it is the usual cause of the two
+	 * below (UX-134, TSW-E302). */
+	status.obs_recording_active = true;
+	TSW_EXPECT_EQ(build(&model, &session, status).health, TSW_HEALTH_DISK_LOW);
 	tsw_dock_model_init(&model);
 	status.disk_free_bytes = 100 * 1024 * MIB;
+	view = build(&model, &session, status);
+	TSW_EXPECT_EQ(view.health, TSW_HEALTH_BOTH_RECORDING);
+	TSW_EXPECT_EQ(view.health_code, 302);
+	EXPECT_TEXT(view.health_text, "Health.E302");
+	TSW_EXPECT_TRUE(view.health_amount.unit == NULL);
+
+	tsw_dock_model_init(&model);
+	status.obs_recording_active = false;
 	view = build(&model, &session, status);
 	TSW_EXPECT_EQ(view.health, TSW_HEALTH_LOST_FRAMES);
 	TSW_EXPECT_EQ(view.health_code, 201);
@@ -918,6 +930,21 @@ static void the_summary_shows_the_map_of_the_recording(void)
 	TSW_EXPECT_TRUE(view.card_shown && !view.map_shown);
 }
 
+/* UX-023: both recordings are told exactly while both run; the user stopped OBS's own recording on
+ * purpose, so the line goes at once, never 30 s later. Break caught: a held, stale E302. */
+static void both_recordings_show_only_while_both_run(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = monitored(4);
+	status.obs_recording_active = true;
+	TSW_EXPECT_EQ(build(&model, &session, status).health, TSW_HEALTH_BOTH_RECORDING);
+	status.recorded_ns += SECOND_NS;
+	status.obs_recording_active = false;
+	TSW_EXPECT_EQ(build(&model, &session, status).health, 0);
+}
+
 int main(void)
 {
 	durations_read_as_hours_minutes_seconds();
@@ -957,5 +984,6 @@ int main(void)
 	saving_says_keep_obs_open_whatever_the_health();
 	a_new_issue_is_announced_once();
 	the_summary_shows_the_map_of_the_recording();
+	both_recordings_show_only_while_both_run();
 	return tsw_test_failures;
 }

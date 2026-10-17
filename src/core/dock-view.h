@@ -38,7 +38,7 @@ extern "C" {
 enum {
 	TSW_TIME_TEXT = 16,   /* room for "h:mm:ss" up to 9999 hours, and the final zero */
 	TSW_NUMBER_TEXT = 8,  /* room for a number up to 9999999, or "9.9", and the final zero */
-	TSW_HEALTH_KINDS = 3, /* disk low, frames lost, encoder behind (enum tsw_health_issue) */
+	TSW_HEALTH_KINDS = 4, /* disk low, both recording, frames lost, encoder behind (tsw_health_issue) */
 };
 
 /*
@@ -116,7 +116,7 @@ struct tsw_dock_view {
 	/* F. Health (UX-134): while recording or paused, the most urgent issue takes the context line's
 	 * place, with a warning glyph and its code; nothing when all is well. */
 	uint32_t health;                 /* one TSW_HEALTH_* bit, or 0 */
-	uint32_t health_code;            /* its TSW-E number: 102, 201 or 203 */
+	uint32_t health_code;            /* its TSW-E number: 102, 302, 201 or 203 */
 	const char *health_text;         /* key; "%1" = health_amount */
 	struct tsw_amount health_amount; /* E102: the time left; E201: the frames lost */
 
@@ -155,8 +155,9 @@ struct tsw_dock_model {
 	uint32_t told_speed;         /* and its speed */
 	uint32_t told_health;        /* the health issue they last heard about, 0 for none */
 
-	/* Health, held on screen a while after its condition ends, so it never blinks (UX-063). The clock
-	 * is the recorded time, which stands still while paused: an issue seen before a pause stays. */
+	/* Health, held on screen a while after its condition ends, so it never blinks (UX-063); not both
+	 * recordings, which the user ends on purpose. The clock is the recorded time, which stands still while
+	 * paused: an issue seen before a pause stays. */
 	uint64_t health_until_ns[TSW_HEALTH_KINDS]; /* per issue: the recorded time it stays until */
 	uint64_t health_clock_ns;                   /* the recorded time last seen; less means a new recording */
 	uint64_t disk_seconds_left;                 /* the last time left seen with the disk low, for a held warning */
