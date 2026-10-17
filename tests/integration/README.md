@@ -31,7 +31,11 @@ tests/integration/run.sh --scenario real                     25 s in real time, 
 tests/integration/run.sh --scenario pause                    pauses in real time and in timelapse
 tests/integration/run.sh --scenario pauses                   40 quick pauses, ends with Stop while paused
 tests/integration/run.sh --resolution 2160 --scenario long   4K, about 300 s: a load test
+tests/integration/run.sh --road C                            frames by road C (ADR-012)
+tests/integration/run.sh --road verify                       road C checked against road B, frame by frame
 ```
+
+`--road` chooses how frames reach the plugin (ADR-012): `B`, OBS copies them (the default); `C`, the plugin copies them itself, off OBS's graphics thread; `verify`, the recording runs on road C while road B runs only to be compared, and every frame of both is hashed whole.
 
 `--keep` keeps the sandbox folder (it is always kept when a check fails). It holds the OBS log (`config/obs-studio/logs/`) and the recording (`recordings/`).
 
@@ -63,6 +67,7 @@ Ending in timelapse matters: when you stop, the encoder still holds frames (x264
 | pause | across each pause the picture jumps by exactly the paused time; after a pause that lasts until Stop, nothing | only scenarios with pauses run it; the jump is looked for within 0.2 s of where the log places the pause, with a margin of one step of each neighbouring section plus 3 frames |
 | lost frames | no frame was lost | |
 | feed | the plugin's summary line says how many frames, at most, waited in its feed for the encoder, between 1 and the feed's size | the number itself is information for `docs/performance.md`, section 10; only its absence fails |
+| road | the log names the road asked for; on road C no staging slot failed to map; with `verify`, both roads handed over the same frames at the same times, byte for byte | the frames that found every slot busy are information: they show in the file as repeats, which rhythm and sync already check |
 | memory leaks | OBS reports "Number of memory leaks: 0" when it closes | rule B2 |
 
 ## Why sync is measured against OBS, not against the clock
@@ -73,16 +78,16 @@ OBS itself does not play the test media in perfect sync: its sound reaches OBS 3
 
 ## Measuring the cost
 
-`measure.sh` answers a different question: not "is the file right?" but "what does recording cost the computer?". It records the same scene twice, each time in a fresh sandbox OBS:
+`measure.sh` answers a different question: not "is the file right?" but "what does recording cost the computer?". It records the same scene with OBS's own Record button, with the plugin on road B and with the plugin on road C (`--modes` chooses), each time in a fresh sandbox OBS:
 
 ```
   OBS alone      +------------+-------------------------+------------------+
                  | 1 min idle | 5 min OBS's own Record  | 30 s, file saved |
                  +------------+-------------------------+------------------+
 
-  the plugin     +------------+-------------------------+------------------+
-                 | 1 min idle | 5 min plugin, real time | 30 s, file saved |
-                 +------------+-------------------------+------------------+
+  the plugin,    +------------+-------------------------+------------------+
+  road B, then   | 1 min idle | 5 min plugin, real time | 30 s, file saved |
+  road C         +------------+-------------------------+------------------+
 
   each recording is compared with its own idle minute, so whatever else the
   computer is doing cancels out; the last 30 s show what is given back
@@ -90,6 +95,7 @@ OBS itself does not play the test media in perfect sync: its sound reaches OBS 3
 
 ```
 tests/integration/measure.sh                         4K30, HEVC on VAAPI, about 7 min per mode
+tests/integration/measure.sh --modes "obs plugin-c"  only OBS's own recording and road C
 tests/integration/measure.sh --resolution 1080       the same in 1080p
 tests/integration/measure.sh --seconds 20 --idle 15  a quick try of the tool itself
 ```

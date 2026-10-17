@@ -210,7 +210,7 @@ Details that keep it robust:
 
 ## ADR-012. Road C: the plugin copies the frame itself, off OBS's graphics thread
 
-*Date: 2026-10-17. Status: experimental, being built and tested; road B (ADR-003) stays the default until the checks below pass.*
+*Date: 2026-10-17. Status: experimental, built and measured; road B (ADR-003) stays the default until road C is tried in a real session.*
 
 **Context.** On road B (ADR-003), OBS waits for each frame to come down from the card and copies it into its memory feed on its graphics thread, the thread that then draws the preview: 2.8 ms per 4K frame as a median, 5.9 ms for the worst 1 %, up to 13 ms, measured on 2026-10-17 with a phone camera and a busy computer. On a busy computer the preview then looks less smooth while the plugin records (`docs/performance.md`, section 9). The frame is then copied a second time, into the plugin's feed, and in timelapse OBS copies every frame even though most are not kept.
 
@@ -238,7 +238,7 @@ Details that keep it robust:
 - *Mapping on the graphics thread and copying there.* No gain: the copy is the cost.
 
 **Consequences.**
-- Expected: on the graphics thread, a few tenths of a millisecond instead of 3 to 8 ms; one full-frame copy less (12.4 MB per 4K frame); in timelapse x4 only the kept frame of every 4 is copied; OBS no longer fills its own memory feed while only the plugin records (about 75 MB of RAM in 4K). To be measured before the status changes.
+- Measured on 2026-10-17, 4K30 (`docs/test-reports/2026-10-17-road-c.md`): OBS's graphics thread took 0.80 ms per frame as a median on road C, against 3.31 ms on road B and 0.66 ms for OBS's own recording (worst 1 %: 1.57, 5.29 and 1.15 ms); road C's own step, 0.22 ms. Against road B, 0.37 CPU cores instead of 0.46 and 71 MB less RAM, all given back when the file is saved. In the verification mode every frame was identical to road B's, and every integration scenario passes on road C.
 - Frames reach the plugin about one frame later than on road B; the file is not affected, because every frame and audio block carries its own time.
-- More card memory: four staging slots and the conversion planes (about 62 MB in 4K NV12), partly offset by OBS's own staging surfaces no longer in use.
+- More card memory: four staging slots and the conversion planes (about 62 MB in 4K NV12; measured: 47 MB more in RAM (GTT) and 13 MB more video memory than road B).
 - The checks before adoption: the unit tests of the slot ring, the verification mode (every frame identical), and every integration scenario (sync, rhythm, pauses, totals, lost frames, leaks) on road C, then the cost measured in 4K like ADR-003.
