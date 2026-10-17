@@ -41,6 +41,17 @@ summary=()
 failed=0
 
 #######################################
+# Lists the project's files that match the patterns: the ones git tracks and
+# the new ones not added yet, but never ignored ones (build output). New
+# files are checked before their first commit, not after.
+# Arguments:
+#   Path patterns, as for git ls-files.
+#######################################
+project_files() {
+  git ls-files --cached --others --exclude-standard -- "$@" | sort -u
+}
+
+#######################################
 # Remembers the result of one check for the final summary.
 # Globals:
 #   summary, failed
@@ -103,7 +114,7 @@ check_format() {
   fi
   # The template's script checks src/ by default; tests/ follow the same style.
   local -a c_files
-  mapfile -t c_files < <(git ls-files 'src/*.[ch]' 'src/*.[ch]pp' \
+  mapfile -t c_files < <(project_files 'src/*.[ch]' 'src/*.[ch]pp' \
     'tests/*.[ch]' 'tests/*.[ch]pp')
   # --fail-error: without it the template's script always exits with 0.
   PATH="${PWD}/${VENV_BIN}:${PATH}" ./build-aux/run-clang-format \
@@ -139,7 +150,7 @@ check_unit_tests() {
 check_clang_tidy() {
   step '4. Static analysis: clang-tidy'
   local -a sources
-  mapfile -t sources < <(git ls-files 'src/*.c' 'src/*.cpp' \
+  mapfile -t sources < <(project_files 'src/*.c' 'src/*.cpp' \
     'tests/integration/*.c')
   sources+=("${BUILD_DIR}/plugin-support.c")
   clang-tidy -p "${BUILD_DIR}" --quiet \
@@ -178,7 +189,7 @@ check_shell() {
     return
   fi
   local -a scripts
-  mapfile -t scripts < <(git ls-files 'tools/*.sh' 'tools/git-hooks/*' \
+  mapfile -t scripts < <(project_files 'tools/*.sh' 'tools/git-hooks/*' \
     'tests/*.sh')
   "${VENV_BIN}/shellcheck" --shell=bash "${scripts[@]}"
   record 'shell: ShellCheck (zero warnings)' "$?"
@@ -199,7 +210,7 @@ check_shell() {
 # Step 7a: rules from docs/coding-rules.md that no tool checks.
 check_code_rules() {
   local -a code
-  mapfile -t code < <(git ls-files 'src/*.c' 'src/*.cpp' 'src/*.h' \
+  mapfile -t code < <(project_files 'src/*.c' 'src/*.cpp' 'src/*.h' \
     'src/*.hpp' 'src/*.c.in')
   rule_absent 'P10-1: no goto, setjmp or longjmp' \
     '\bgoto\b|\bsetjmp\b|\blongjmp\b' "${code[@]}"
@@ -218,7 +229,7 @@ check_code_rules() {
   fi
   # B1: the real-time files never allocate, log, lock, wait or touch files.
   local -a realtime
-  mapfile -t realtime < <(git ls-files 'src/*-rt.c')
+  mapfile -t realtime < <(project_files 'src/*-rt.c')
   local calls='b[mz]?alloc|brealloc|bstrdup|bfree|malloc|calloc|realloc|free'
   calls+='|da_[a-z_]+|dstr_[a-z_]+|tsw_log|blog|printf|fprintf'
   calls+='|pthread_mutex_lock|pthread_cond_wait|os_event_wait'
@@ -230,7 +241,7 @@ check_code_rules() {
 # Step 7b: no em dashes or en dashes in any tracked text file.
 check_text_rules() {
   local -a text
-  mapfile -t text < <(git ls-files \
+  mapfile -t text < <(project_files \
     | grep -vE '^LICENSE$|\.(png|jpg|gif|ico|icns|webp)$')
   rule_absent 'Style: no em dashes or en dashes in any file' \
     $'\u2014|\u2013' "${text[@]}"
