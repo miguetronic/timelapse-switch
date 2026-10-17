@@ -122,7 +122,7 @@ Two counters are kept in the samples but read with care:
 | File | Job |
 |---|---|
 | `run.sh` | builds, makes the media once, starts the sandbox OBS, runs the scenario, closes OBS, runs the analysis |
-| `sandbox.sh` | shared by `run.sh` and `measure.sh`: writes the sandbox configuration, starts and closes the sandbox OBS |
+| `sandbox.sh` | shared by `run.sh`, `measure.sh` and `tests/ui/obs-themes.sh`: writes the sandbox configuration, starts and closes the sandbox OBS |
 | `measure.sh`, `measure.py` | the cost measurement: samples once per second, then the side by side report |
 | `make-test-media.sh` | the test media |
 | `drive_obs.py` | presses the hotkeys on schedule through obs-websocket, waits for the file to be saved |

@@ -10,10 +10,13 @@
  *
  *   timer (100 ms) --> controller view --> dock draws it
  *   dock click -----> controller input --> recorder; then the dock draws the new view at once
+ *   theme, font size or density changed --> the dock reads the theme again (UX-016)
  */
 
 #include "ui/dock-obs.h"
 
+#include <QMainWindow>
+#include <QMetaObject>
 #include <QScrollArea>
 #include <QTimer>
 #include <obs-frontend-api.h>
@@ -31,6 +34,21 @@ const int REFRESH_MS = 100; /* UX-060: the banner follows the recorder within 10
 const char *moduleText(const char *key)
 {
 	return obs_module_text(key);
+}
+
+/* UI thread. OBS ends every theme, Font Size and Density change with this event; the dock reads
+ * the theme once the change is complete, after OBS's own restyle (queued). */
+void onFrontendEvent(enum obs_frontend_event event, void *data)
+{
+	if (event == OBS_FRONTEND_EVENT_THEME_CHANGED)
+		QMetaObject::invokeMethod(static_cast<TswDock *>(data), "scheduleRestyle", Qt::QueuedConnection);
+}
+
+/* The dock, found in OBS's main window by its object name: OBS owns it, so no pointer is kept. */
+TswDock *findDock()
+{
+	auto *window = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+	return window != nullptr ? window->findChild<TswDock *>("tswDock") : nullptr;
 }
 
 } // namespace
@@ -59,10 +77,16 @@ void tsw_dock_create(struct tsw_controller *controller)
 	if (!obs_frontend_add_dock_by_id(DOCK_ID, obs_module_text("Dock.Title"), area)) {
 		tsw_log(LOG_WARNING, "TSW-E901 warning | the dock could not be added | id=%s", DOCK_ID);
 		delete area;
+		return;
 	}
+	obs_frontend_add_event_callback(onFrontendEvent, dock);
 }
 
 void tsw_dock_destroy(void)
 {
+	/* The callback goes first: it must never reach a dock that OBS is about to delete. */
+	TswDock *dock = findDock();
+	if (dock != nullptr)
+		obs_frontend_remove_event_callback(onFrontendEvent, dock);
 	obs_frontend_remove_dock(DOCK_ID);
 }

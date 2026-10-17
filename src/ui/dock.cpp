@@ -5,157 +5,94 @@
  */
 
 /*
- * dock.cpp: see dock.hpp. Colors come only from the theme (QPalette and OBS's utility classes,
- * UX-016); every state has its own word, icon and frame style, never color alone (UX-003).
+ * dock.cpp: see dock.hpp. The dock builds its zones once, reads the theme (restyle), and then
+ * only changes what the view says. Colors come only from the theme through the contrast guard
+ * (UX-016); every state has its own word, glyph and shape, never color alone (UX-003).
  */
 
 #include "ui/dock.hpp"
 
 #include <QAccessible>
 #include <QApplication>
+#include <QBoxLayout>
 #include <QButtonGroup>
 #include <QClipboard>
 #include <QDesktopServices>
 #include <QEvent>
 #include <QFileInfo>
-#include <QHBoxLayout>
+#include <QFocusEvent>
 #include <QLabel>
-#include <QPainter>
-#include <QPushButton>
-#include <QRadioButton>
+#include <QRegularExpression>
 #include <QScrollArea>
-#include <QStyle>
-#include <QToolButton>
+#include <QShortcut>
+#include <QSpacerItem>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <cmath>
+#include <cstring>
+
+#include "ui/announce.hpp"
+#include "ui/dock-paint.hpp"
+#include "ui/dock-widgets.hpp"
 
 namespace {
 
-const int COMPACT_WIDTH = 260; /* UX-012: narrower than this, the dock uses shorter words */
+const int ENTER_NARROW = 260; /* px of visible width: narrower than this, the narrow layout (UX-012) */
+const int LEAVE_NARROW = 276; /* and back at this width: 16 px of hysteresis, so it never flickers */
 const int SPEEDS[] = {2, 4, 8, 16};
+const uint32_t WIDEST_SPEED = 16;
+const int START_REAL_TIME = 0; /* ids of the start-mode segments */
+const int START_TIMELAPSE = 1;
+const double MAIN_ROWS =
+	2.75; /* x L: the main button's height, above UX-107's 2.5: an easy target with paint on the hands */
+const double CONTROL_ROWS = 1.8; /* x L: Stop and the rails */
+const double SMALL_ROWS = 1.6;   /* x L: card pills and the dismiss button */
 const char ERROR_PAGE[] = "https://miguetronic.github.io/timelapse-switch/errors/TSW-E%1"; /* ADR-010 */
-
-/* An OBS theme utility class (UX-016): set it, then let the style apply it again. */
-void setThemeClass(QWidget *widget, const char *name)
-{
-	widget->setProperty("class", name);
-	widget->style()->unpolish(widget);
-	widget->style()->polish(widget);
-}
-
-/* The theme's danger color, read from a label with OBS's "text-danger" class (the text color outside OBS). */
-QColor dangerColor(const QWidget *reference)
-{
-	QLabel probe;
-	probe.setPalette(reference->palette());
-	probe.setProperty("class", "text-danger");
-	probe.ensurePolished();
-	return probe.palette().color(QPalette::WindowText);
-}
-
-/* A larger, bold copy of a font, whether it is sized in points or pixels. */
-QFont scaledFont(QFont font, double factor)
-{
-	if (font.pointSizeF() > 0)
-		font.setPointSizeF(font.pointSizeF() * factor);
-	else
-		font.setPixelSize(static_cast<int>(font.pixelSize() * factor));
-	font.setBold(true);
-	return font;
-}
-
-/* The banner icon in one color, so it follows the theme (UX-018); none while idle. */
-QPixmap drawBannerIcon(enum tsw_banner banner, const QColor &color, int size, qreal ratio)
-{
-	if (banner == TSW_BANNER_READY)
-		return {};
-	QPixmap pixmap(QSize(size, size) * ratio);
-	pixmap.setDevicePixelRatio(ratio);
-	pixmap.fill(Qt::transparent);
-	QPainter painter(&pixmap);
-	painter.setRenderHint(QPainter::Antialiasing);
-	painter.setPen(QPen(color, size / 8.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-	painter.setBrush(color);
-	const double s = size;
-	switch (banner) {
-	case TSW_BANNER_REAL_TIME: /* the record dot */
-		painter.drawEllipse(QRectF(s * 0.2, s * 0.2, s * 0.6, s * 0.6));
-		break;
-	case TSW_BANNER_TIMELAPSE: /* fast forward: two triangles */
-		for (const double left : {0.1, 0.5}) {
-			const QPointF triangle[] = {{s * left, s * 0.2},
-						    {s * (left + 0.4), s * 0.5},
-						    {s * left, s * 0.8}};
-			painter.drawPolygon(triangle, 3);
-		}
-		break;
-	case TSW_BANNER_SAVED: { /* a check mark */
-		const QPointF check[] = {{s * 0.2, s * 0.55}, {s * 0.42, s * 0.75}, {s * 0.8, s * 0.28}};
-		painter.drawPolyline(check, 3);
-		break;
-	}
-	case TSW_BANNER_ERROR: /* a cross in a circle */
-		painter.setBrush(Qt::NoBrush);
-		painter.drawEllipse(QRectF(s * 0.1, s * 0.1, s * 0.8, s * 0.8));
-		painter.drawLine(QPointF(s * 0.35, s * 0.35), QPointF(s * 0.65, s * 0.65));
-		painter.drawLine(QPointF(s * 0.65, s * 0.35), QPointF(s * 0.35, s * 0.65));
-		break;
-	case TSW_BANNER_BUSY: /* three dots */
-		for (const double x : {0.2, 0.5, 0.8})
-			painter.drawEllipse(QPointF(s * x, s * 0.5), s * 0.07, s * 0.07);
-		break;
-	case TSW_BANNER_READY:
-		break;
-	}
-	return pixmap;
-}
-
-/* The codes the dock has texts for; any other one is shown as the unexpected-error message. */
-uint32_t knownError(uint32_t code)
-{
-	return (code == 1 || code == 2 || code == 103) ? code : 901;
-}
+const char ARROW[] = " \u2192 ";
 
 QString threeDigits(uint32_t code)
 {
 	return QString("%1").arg(code, 3, 10, QChar('0'));
 }
 
+bool isKey(const char *key, const char *expected)
+{
+	return key != nullptr && std::strcmp(key, expected) == 0;
+}
+
+/* Sets a widget's own style sheet only when it changes: a new sheet repolishes the widget. */
+void setSheet(QWidget *widget, const QString &sheet)
+{
+	if (widget->styleSheet() != sheet)
+		widget->setStyleSheet(sheet);
+}
+
+int rows(const TswTheme &theme, double factor)
+{
+	return std::max(static_cast<int>(std::lround(factor * theme.L)), theme.hC);
+}
+
+/* "READY" read aloud as "Ready": all-capital words are sometimes spelled out by screen readers. */
+QString sentence(const QString &word)
+{
+	return word.isEmpty() ? word : word.left(1).toUpper() + word.mid(1).toLower();
+}
+
 } // namespace
 
-TswDock::TswDock(TswText translate, QWidget *parent) : QFrame(parent), lookup(translate)
+TswDock::TswDock(TswText translate, QWidget *parent) : QFrame(parent), lookup(translate), probes(this)
 {
 	setObjectName("tswDock");
-	buildBanner();
-	buildCounters();
-	buildCard();
-	buildButtons();
-	buildSpeedRow();
-	context = new QLabel(this);
-	context->setWordWrap(true);
-	setThemeClass(context, "text-muted");
-
-	/* Names of the zones, for the UI test and for themes that want to style them. */
-	counters->setObjectName("tswCounters");
-	section->setObjectName("tswSection");
-	card->setObjectName("tswCard");
-	mainButton->setObjectName("tswMain");
-	speedRow->setObjectName("tswSpeeds");
-	stopButton->setObjectName("tswStop");
-	context->setObjectName("tswContext");
-
-	/* The zones, top to bottom; they never change places (UX-002). Stop sits one row apart (UX-107). */
-	auto *zones = new QVBoxLayout(this);
-	zones->addWidget(banner);
-	zones->addWidget(counters);
-	zones->addWidget(section);
-	zones->addWidget(card);
-	zones->addWidget(mainButton);
-	zones->addWidget(speedRow);
-	zones->addSpacing(fontMetrics().height());
-	zones->addWidget(stopButton, 0, Qt::AlignLeft);
-	zones->addWidget(context);
-	zones->addStretch();
+	buildZones();
+	connectInputs();
+	watchKeyFocus();
+	auto *escape = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+	escape->setContext(Qt::WidgetWithChildrenShortcut);
+	connect(escape, &QShortcut::activated, this, [this]() {
+		if (view.card_shown)
+			emit dismissRequested(); /* UX-102 */
+	});
 }
 
 QString TswDock::text(const char *key) const
@@ -165,121 +102,258 @@ QString TswDock::text(const char *key) const
 
 QString TswDock::text(const char *key, const QString &argument) const
 {
-	return text(key).replace("%1", argument);
+	/* A speed stays with its word when a label wraps: "timelapse ×4", never "×4" alone. */
+	return text(key)
+		.replace("%1", argument)
+		.replace(QString::fromUtf8(" \u00d7"), QString::fromUtf8("\u00a0\u00d7"));
 }
 
-void TswDock::buildBanner()
+QString TswDock::speedText(uint32_t speed) const
 {
-	banner = new QFrame(this);
-	banner->setObjectName("tswBanner");
-	bannerIcon = new QLabel(banner);
-	bannerText = new QLabel(banner);
-	bannerText->setFont(scaledFont(bannerText->font(), 1.8)); /* about 2x the base font (UX spec 3.6) */
-	bannerText->setWordWrap(true);
-	bannerDetail = new QLabel(banner);
-	bannerDetail->setWordWrap(true);
-	auto *line = new QHBoxLayout;
-	line->addWidget(bannerIcon, 0, Qt::AlignVCenter);
-	line->addWidget(bannerText, 1);
-	auto *column = new QVBoxLayout(banner);
-	column->addLayout(line);
-	column->addWidget(bannerDetail);
+	return text("Speed.Value", QString::number(speed));
 }
 
-void TswDock::buildCounters()
+/* Words for a screen reader: "Switch to timelapse ×4" becomes "..., 4 times faster" (UX-125). */
+QString TswDock::spoken(const QString &words) const
 {
-	QFont digits = font();
-	digits.setFeature(QFont::Tag("tnum"), 1); /* digits of equal width, so counters do not jitter (UX-006) */
-	counters = new QLabel(this);
-	counters->setFont(digits);
-	counters->setWordWrap(true);
-	section = new QLabel(this);
-	section->setFont(digits);
-	section->setWordWrap(true);
+	static const QRegularExpression speed(QString::fromUtf8("[\\s\u00a0]*\u00d7(\\d+)"));
+	const QRegularExpressionMatch match = speed.match(words);
+	if (!match.hasMatch())
+		return words;
+	QString out = words;
+	return out.replace(match.capturedStart(), match.capturedLength(),
+			   ", " + text("A11y.Faster", match.captured(1)));
+}
+
+/* "0:31:40" or "52:35" as "31 minutes 40 seconds", never with the arrow sign (UX-103). */
+QString TswDock::spokenDuration(const QString &clock) const
+{
+	QStringList parts = clock.split(':');
+	if (parts.size() == 2)
+		parts.prepend("0"); /* m:ss: no hours */
+	if (parts.size() != 3)
+		return clock;
+	const char *const one[] = {"A11y.Hour.One", "A11y.Minute.One", "A11y.Second.One"};
+	const char *const many[] = {"A11y.Hour.Many", "A11y.Minute.Many", "A11y.Second.Many"};
+	QStringList words;
+	for (int i = 0; i < 3; i++) {
+		const int value = parts[i].toInt();
+		if (value > 0 || (i == 2 && words.isEmpty()))
+			words << (value == 1 ? text(one[i]) : text(many[i], QString::number(value)));
+	}
+	return words.join(' ');
+}
+
+void TswDock::buildZones()
+{
+	status = new TswStatusCard(this, &style);
+	mainButton = new TswButton(this, &style);
+	mainButton->setObjectName("tswMain");
+	buildRails();
+	stopButton = new TswButton(this, &style);
+	stopButton->setObjectName("tswStop");
+	stopButton->setShape(TswButton::Shape::Pill);
+	buildCard();
+	buildContext();
+
+	/* The zones, top to bottom; they never change places (UX-002). Each gap is a spacer that the
+	 * dock sizes by state and width (updateGaps), so a hidden zone leaves no hole. */
+	zones = new QVBoxLayout(this);
+	zones->setSpacing(0);
+	const auto gap = []() {
+		return new QSpacerItem(0, 0, QSizePolicy::Minimum, QSizePolicy::Fixed);
+	};
+	gapMain = gap();
+	gapCard = gap();
+	gapSpeeds = gap();
+	gapStop = gap();
+	gapContext = gap();
+	zones->addWidget(status);
+	zones->addSpacerItem(gapMain);
+	zones->addWidget(mainButton);
+	zones->addSpacerItem(gapCard);
+	zones->addWidget(card);
+	zones->addSpacerItem(gapSpeeds);
+	zones->addWidget(speeds);
+	zones->addSpacerItem(gapStop);
+	zones->addWidget(stopButton);
+	zones->addSpacerItem(gapContext);
+	zones->addWidget(contextRow);
+	zones->addStretch();
+}
+
+void TswDock::buildRails()
+{
+	speeds = new QWidget(this);
+	speeds->setObjectName("tswSpeeds");
+	startGroup = new QWidget(speeds);
+	startCaption = new TswReservedLabel(startGroup);
+	startCaption->setText(text("Label.StartIn").toUpper());
+	startRail = new TswRail(startGroup, &style);
+	startRail->setMode(TswRail::Mode::Start);
+	/* Object names let a theme author or the UI test pick one control (UX-015, tests/ui). */
+	TswSegment *realTime = startRail->addSegment(START_REAL_TIME, TswGlyph::Play, text("Label.RealTime"));
+	realTime->setObjectName("tswStartRealTime");
+	realTime->setAccessibleName(text("Label.RealTime"));
+	TswSegment *timelapse = startRail->addSegment(START_TIMELAPSE, TswGlyph::FastForward, text("Label.Timelapse"));
+	timelapse->setObjectName("tswStartTimelapse");
+	timelapse->setAccessibleName(text("Label.Timelapse"));
+	speedGroup = new QWidget(speeds);
+	speedCaption = new TswReservedLabel(speedGroup);
+	speedRail = new TswRail(speedGroup, &style);
+	for (const int speed : SPEEDS) {
+		TswSegment *segment =
+			speedRail->addSegment(speed, TswGlyph::None, speedText(static_cast<uint32_t>(speed)));
+		segment->setObjectName(QString("tswSpeed%1").arg(speed));
+		segment->setAccessibleName(text("A11y.Speed", QString::number(speed)));
+	}
+	for (QWidget *group : {startGroup, speedGroup}) {
+		auto *column = new QVBoxLayout(group);
+		column->setContentsMargins(0, 0, 0, 0);
+	}
+	startGroup->layout()->addWidget(startCaption);
+	startGroup->layout()->addWidget(startRail);
+	speedGroup->layout()->addWidget(speedCaption);
+	speedGroup->layout()->addWidget(speedRail);
+	speedsLayout = new QVBoxLayout(speeds);
+	speedsLayout->setContentsMargins(0, 0, 0, 0);
+	speedsLayout->addWidget(startGroup);
+	speedsLayout->addWidget(speedGroup);
 }
 
 void TswDock::buildCard()
 {
-	card = new QFrame(this);
-	card->setFrameShape(QFrame::StyledPanel);
+	card = new TswCard(this, &style);
+	card->setObjectName("tswCard");
+	cardHeader = new QLabel(card);
+	cardHeader->setTextFormat(Qt::PlainText);
+	cardHeader->setWordWrap(true);
+	dismiss = new TswButton(card, &style);
+	dismiss->setObjectName("tswDismiss");
+	dismiss->setShape(TswButton::Shape::Pill);
+	dismiss->setContent(TswGlyph::Close, QString());
+	dismiss->setAccessibleName(text("Button.Close"));
+	dismiss->setToolTip(text("Button.Close"));
+	figureBox = new QWidget(card);
+	figure = new QLabel(figureBox);
+	figure->setTextFormat(Qt::PlainText);
+	figureCaption = new QLabel(figureBox);
+	figureCaption->setTextFormat(Qt::PlainText);
+	figureCaption->setWordWrap(true);
+	figureCaption->setText(text("Summary.Skipped.Caption").toUpper());
+	auto *figureColumn = new QVBoxLayout(figureBox);
+	figureColumn->setContentsMargins(0, 0, 0, 0);
+	figureColumn->setSpacing(0);
+	figureColumn->addWidget(figure);
+	figureColumn->addWidget(figureCaption);
 	cardTitle = new QLabel(card);
-	cardTitle->setFont(scaledFont(cardTitle->font(), 1.0));
 	cardTitle->setWordWrap(true);
-	setThemeClass(cardTitle, "text-danger");
+	cardTitle->setTextFormat(Qt::PlainText);
 	cardBody = new QLabel(card);
 	cardBody->setWordWrap(true);
-	cardBody->setTextFormat(Qt::PlainText);
-	openFolder = new QPushButton(text("Button.OpenFolder"), card);
-	play = new QPushButton(text("Button.Play"), card);
-	copyDetails = new QPushButton(text("Button.CopyDetails"), card);
-	learnMore = new QPushButton(text("Button.LearnMore"), card);
-	closeCard = new QPushButton(text("Button.Close"), card);
-	cardActions = new QBoxLayout(QBoxLayout::LeftToRight);
-	for (QPushButton *button : {openFolder, play, copyDetails, learnMore})
-		cardActions->addWidget(button);
-	auto *column = new QVBoxLayout(card);
-	column->addWidget(cardTitle);
-	column->addWidget(cardBody);
-	column->addLayout(cardActions);
-	column->addWidget(closeCard, 0, Qt::AlignRight);
+	cardTodo = new QLabel(card);
+	cardTodo->setWordWrap(true);
+	buildCardActions();
 
-	connect(openFolder, &QPushButton::clicked, this,
-		[this]() { QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath())); });
-	connect(play, &QPushButton::clicked, this, [this]() { QDesktopServices::openUrl(QUrl::fromLocalFile(path)); });
-	connect(copyDetails, &QPushButton::clicked, this, [this]() { copyErrorDetails(); });
-	connect(learnMore, &QPushButton::clicked, this, [this]() {
-		QDesktopServices::openUrl(QUrl(QString(ERROR_PAGE).arg(threeDigits(knownError(view.error_code)))));
-	});
-	connect(closeCard, &QPushButton::clicked, this, [this]() { emit dismissRequested(); });
+	/* The ticket, top to bottom: a small caption and the dismiss button, the content, the actions. */
+	auto *header = new QHBoxLayout;
+	header->setContentsMargins(0, 0, 0, 0);
+	header->addWidget(cardHeader, 1, Qt::AlignVCenter);
+	header->addWidget(dismiss, 0, Qt::AlignVCenter);
+	cardLayout = new QVBoxLayout(card);
+	cardLayout->addLayout(header);
+	cardLayout->addWidget(figureBox);
+	cardLayout->addWidget(cardTitle);
+	cardLayout->addWidget(cardBody);
+	cardLayout->addWidget(cardTodo);
+	cardLayout->addLayout(cardActions);
+	cardLayout->addWidget(linkRow);
 }
 
-void TswDock::buildButtons()
+/* Open folder and Play, then the links Copy details and Learn more. */
+void TswDock::buildCardActions()
 {
-	mainButton = new QPushButton(this);
-	mainButton->setFont(scaledFont(mainButton->font(), 1.0));
-	mainButton->setMinimumHeight(fontMetrics().height() * 5 / 2); /* UX-107 */
-	connect(mainButton, &QPushButton::clicked, this, [this]() { emit inputRequested(TSW_INPUT_MAIN, 0); });
-	stopButton = new QPushButton(this);
-	connect(stopButton, &QPushButton::clicked, this, [this]() { emit inputRequested(TSW_INPUT_STOP, 0); });
-}
-
-void TswDock::buildSpeedRow()
-{
-	speedRow = new QWidget(this);
-	startRow = new QWidget(speedRow);
-	startRealTime = new QRadioButton(text("Label.RealTime"), startRow);
-	startTimelapse = new QRadioButton(text("Label.Timelapse"), startRow);
-	startLayout = new QBoxLayout(QBoxLayout::LeftToRight, startRow);
-	startLayout->setContentsMargins(0, 0, 0, 0);
-	startLayout->addWidget(new QLabel(text("Label.StartIn"), startRow));
-	startLayout->addWidget(startRealTime);
-	startLayout->addWidget(startTimelapse);
-	startLayout->addStretch();
-	connect(startRealTime, &QRadioButton::clicked, this,
-		[this]() { emit inputRequested(TSW_INPUT_START_REAL_TIME, 0); });
-	connect(startTimelapse, &QRadioButton::clicked, this,
-		[this]() { emit inputRequested(TSW_INPUT_START_TIMELAPSE, 0); });
-
-	speedLabel = new QLabel(speedRow);
-	chips = new QButtonGroup(this);
-	auto *chipLine = new QHBoxLayout;
-	chipLine->addWidget(speedLabel);
-	for (const int speed : SPEEDS) {
-		auto *chip = new QToolButton(speedRow);
-		chip->setText(QString::fromUtf8("×%1").arg(speed));
-		chip->setCheckable(true);
-		chip->setMinimumHeight(fontMetrics().height() * 9 / 5); /* UX-107 */
-		chip->setAccessibleName(text("A11y.Speed", QString::number(speed)));
-		chips->addButton(chip, speed);
-		chipLine->addWidget(chip, 1);
+	openFolder = new TswButton(card, &style);
+	openFolder->setObjectName("tswOpenFolder");
+	play = new TswButton(card, &style);
+	play->setObjectName("tswPlay");
+	for (TswButton *pill : {openFolder, play}) {
+		pill->setShape(TswButton::Shape::Pill);
+		/* Side by side only when they fit at the visible width (updateCardRows); so they never make
+		 * the dock wider than what shows (3.10). */
+		QSizePolicy policy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+		policy.setHeightForWidth(true);
+		pill->setSizePolicy(policy);
 	}
-	connect(chips, &QButtonGroup::idClicked, this,
-		[this](int speed) { emit inputRequested(TSW_INPUT_SPEED_CHIP, static_cast<unsigned>(speed)); });
+	openFolder->setContent(TswGlyph::Folder, text("Button.OpenFolder"));
+	openFolder->setAccessibleName(text("Button.OpenFolder"));
+	play->setContent(TswGlyph::Play, text("Button.Play"));
+	play->setAccessibleName(text("Button.Play"));
+	cardActions = new QBoxLayout(QBoxLayout::LeftToRight);
+	cardActions->addWidget(openFolder);
+	cardActions->addWidget(play);
+	linkRow = new QWidget(card);
+	copyDetails = new TswLink(linkRow, &style, TswGlyph::Copy);
+	copyDetails->setObjectName("tswCopyDetails");
+	copyDetails->setLabel(text("Button.CopyDetails"));
+	learnMore = new TswLink(linkRow, &style, TswGlyph::LinkOut);
+	learnMore->setObjectName("tswLearnMore");
+	learnMore->setLabel(text("Button.LearnMore"));
+	auto *links = new QBoxLayout(QBoxLayout::LeftToRight, linkRow);
+	links->setContentsMargins(0, 0, 0, 0);
+	/* At their own width, also one under the other: a link is its words, not the row. */
+	links->addWidget(copyDetails, 0, Qt::AlignLeft);
+	links->addWidget(learnMore, 0, Qt::AlignLeft);
+	links->addStretch();
+}
 
-	auto *column = new QVBoxLayout(speedRow);
-	column->setContentsMargins(0, 0, 0, 0);
-	column->addWidget(startRow);
-	column->addLayout(chipLine);
+void TswDock::buildContext()
+{
+	contextRow = new QWidget(this);
+	contextRow->setObjectName("tswContext");
+	contextIcon = new TswGlyphIcon(contextRow);
+	context = new QLabel(contextRow);
+	context->setWordWrap(true);
+	context->setTextFormat(Qt::PlainText);
+	auto *line = new QHBoxLayout(contextRow);
+	line->setContentsMargins(0, 0, 0, 0);
+	line->addWidget(contextIcon, 0, Qt::AlignTop);
+	line->addWidget(context, 1);
+}
+
+void TswDock::connectInputs()
+{
+	connect(mainButton, &QAbstractButton::clicked, this, [this]() { emit inputRequested(TSW_INPUT_MAIN, 0); });
+	connect(stopButton, &QAbstractButton::clicked, this, [this]() { emit inputRequested(TSW_INPUT_STOP, 0); });
+	connect(speedRail->group(), &QButtonGroup::idClicked, this,
+		[this](int speed) { emit inputRequested(TSW_INPUT_SPEED_CHIP, static_cast<unsigned>(speed)); });
+	connect(startRail->group(), &QButtonGroup::idClicked, this, [this](int id) {
+		emit inputRequested(id == START_TIMELAPSE ? TSW_INPUT_START_TIMELAPSE : TSW_INPUT_START_REAL_TIME, 0);
+	});
+	connect(dismiss, &QAbstractButton::clicked, this, [this]() { emit dismissRequested(); });
+	connect(openFolder, &QAbstractButton::clicked, this,
+		[this]() { QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath())); });
+	connect(play, &QAbstractButton::clicked, this,
+		[this]() { QDesktopServices::openUrl(QUrl::fromLocalFile(path)); });
+	connect(copyDetails, &QAbstractButton::clicked, this, [this]() { copyErrorDetails(); });
+	connect(learnMore, &QAbstractButton::clicked, this,
+		[this]() { QDesktopServices::openUrl(QUrl(QString(ERROR_PAGE).arg(threeDigits(view.error_texts)))); });
+}
+
+/* The keyboard focus ring shows only for keyboard focus (UX-110); Tab follows the eye (UX-102). */
+void TswDock::watchKeyFocus()
+{
+	QList<QWidget *> order{mainButton, dismiss, openFolder, play, copyDetails, learnMore};
+	for (QAbstractButton *segment : startRail->group()->buttons())
+		order << segment;
+	for (QAbstractButton *segment : speedRail->group()->buttons())
+		order << segment;
+	order << stopButton;
+	for (int i = 0; i < order.size(); i++) {
+		order[i]->installEventFilter(this);
+		if (i > 0)
+			setTabOrder(order[i - 1], order[i]);
+	}
 }
 
 QScrollArea *TswDock::inScrollArea(TswDock *dock)
@@ -289,90 +363,442 @@ QScrollArea *TswDock::inScrollArea(TswDock *dock)
 	area->setWidgetResizable(true);
 	area->setFrameShape(QFrame::NoFrame);
 	area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	/* Narrow or wide follows what is visible, never the dock's own width (UX-012). */
+	area->viewport()->installEventFilter(dock);
 	return area;
 }
+
+void TswDock::setReduceMotion(bool reduce)
+{
+	reduceMotion = reduce;
+	if (!reduce)
+		return;
+	for (TswRail *rail : {startRail, speedRail})
+		rail->finishMotion(); /* one under way ends at once */
+}
+
+const TswTheme &TswDock::theme() const
+{
+	return style;
+}
+
+bool TswDock::isNarrow() const
+{
+	return narrow;
+}
+
+/* --- Theme author hooks (UX-015) --- */
+
+QColor TswDock::accentColor() const
+{
+	return hooks.accent;
+}
+
+void TswDock::setAccentColor(const QColor &color)
+{
+	hooks.accent = color;
+	scheduleRestyle();
+}
+
+QColor TswDock::dangerColor() const
+{
+	return hooks.danger;
+}
+
+void TswDock::setDangerColor(const QColor &color)
+{
+	hooks.danger = color;
+	scheduleRestyle();
+}
+
+QColor TswDock::successColor() const
+{
+	return hooks.success;
+}
+
+void TswDock::setSuccessColor(const QColor &color)
+{
+	hooks.success = color;
+	scheduleRestyle();
+}
+
+QColor TswDock::warningColor() const
+{
+	return hooks.warning;
+}
+
+void TswDock::setWarningColor(const QColor &color)
+{
+	hooks.warning = color;
+	scheduleRestyle();
+}
+
+QColor TswDock::surfaceColor() const
+{
+	return hooks.surface;
+}
+
+void TswDock::setSurfaceColor(const QColor &color)
+{
+	hooks.surface = color;
+	scheduleRestyle();
+}
+
+/* --- Following the theme (3.4) --- */
+
+bool TswDock::event(QEvent *event)
+{
+	const bool handled = QFrame::event(event);
+	/* OBS sends no theme event for the theme it starts with: the first pass runs on first polish,
+	 * in place, so the first paint already has the theme's colors. */
+	if (event->type() == QEvent::Polish && !styled && status != nullptr)
+		restyle();
+	else if (event->type() == QEvent::ParentChange || event->type() == QEvent::Show)
+		scheduleRestyle(); /* now inside OBS's dock: what is behind it may have changed */
+	return handled;
+}
+
+void TswDock::changeEvent(QEvent *event)
+{
+	QFrame::changeEvent(event);
+	switch (event->type()) {
+	case QEvent::StyleChange:
+	case QEvent::PaletteChange:
+	case QEvent::FontChange:
+	case QEvent::ApplicationPaletteChange:
+		scheduleRestyle(); /* nothing else here: one switch brings about seven of these */
+		break;
+	default:
+		break;
+	}
+}
+
+void TswDock::scheduleRestyle()
+{
+	if (restyling || restylePending)
+		return;
+	restylePending = true;
+	QTimer::singleShot(0, this, &TswDock::restyle);
+}
+
+bool TswDock::eventFilter(QObject *watched, QEvent *event)
+{
+	if (watched == parentWidget() && event->type() == QEvent::Resize)
+		updateNarrow(parentWidget()->width());
+	if (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut) {
+		const auto *focus = static_cast<QFocusEvent *>(event);
+		const Qt::FocusReason reason = focus->reason();
+		const bool byKey = event->type() == QEvent::FocusIn &&
+				   (reason == Qt::TabFocusReason || reason == Qt::BacktabFocusReason ||
+				    reason == Qt::ShortcutFocusReason);
+		auto *widget = static_cast<QWidget *>(watched);
+		widget->setProperty("tswKeyFocus", byKey);
+		widget->update();
+	}
+	return QFrame::eventFilter(watched, event);
+}
+
+/*
+ * One pass over the theme: read the probes, derive tokens and sizes, apply them. Events that
+ * arrive meanwhile are ignored; nothing here reads back a color the dock set itself (3.4).
+ */
+void TswDock::restyle()
+{
+	restylePending = false;
+	if (restyling)
+		return; /* reading the probes can polish the dock again: one pass at a time */
+	restyling = true;
+	style = probes.read(parentWidget(), hooks);
+	styled = true;
+	applyReserves();
+	applyStyleSheets();
+	applyMetrics();
+	if (parentWidget() != nullptr)
+		updateNarrow(parentWidget()->width());
+	updateCardRows(); /* the fonts may have changed */
+	refresh(false);
+	update();
+	restyling = false;
+}
+
+/* Every text a zone may show, so each zone is as tall as its tallest (UX-002). */
+void TswDock::applyReserves()
+{
+	const QString widest = QString::number(WIDEST_SPEED);
+	TswStatusReserve reserve;
+	reserve.realTimeHero = text("State.Hero.RealTime");
+	reserve.timelapseHero = text("State.Hero.Timelapse");
+	reserve.quietHeroes = {text("State.Hero.StartsRealTime"), text("State.Hero.StartsTimelapse", widest),
+			       text("State.Hero.Starting"), text("State.Hero.Saving"), text("State.Hero.Saved")};
+	reserve.headlines = {text("Error.E001.Headline"), text("Error.E002.Headline"), text("Error.E103.Headline"),
+			     text("Error.E901.Headline")};
+	reserve.widestSpeed = speedText(WIDEST_SPEED);
+	reserve.stretchLabel = text("Counter.Stretch") + " " + speedText(WIDEST_SPEED);
+	reserve.stretchValues = QString("0:00:00") + QString::fromUtf8(ARROW) + "0:00:00";
+	status->setReserve(reserve);
+	mainButton->setReserve({text("Action.Record"), text("Action.ToTimelapse", widest), text("Action.ToRealTime")});
+	speedCaption->setReserve(
+		{text("Label.Speed").toUpper(), text("Label.NextSpeed").toUpper(), text("Label.SpeedNow").toUpper()});
+}
+
+/* Sizes of the labels that are not painted, through their own style sheets (3.6): setFont would
+ * lose against Yami's "QWidget { font-size }". Text colors pass the contrast guard (UX-111). */
+void TswDock::applyStyleSheets()
+{
+	const TswTheme &t = style;
+	const QString caption = QString("font-size: %1pt; font-weight: 700; color: %2;")
+					.arg(t.pointsAt(TswType::CAPTION))
+					.arg(t.muted.name());
+	setSheet(startCaption, caption);
+	setSheet(speedCaption, caption);
+	setSheet(context, QString("font-size: %1pt; color: %2;").arg(t.pointsAt(TswType::CONTEXT)).arg(t.muted.name()));
+	const QString onCard = t.ink(t.text, t.surface).name();
+	const QString cardCaption = QString("font-size: %1pt; font-weight: 700; color: %2;")
+					    .arg(t.pointsAt(TswType::CAPTION))
+					    .arg(t.ink(t.muted, t.surface).name());
+	setSheet(cardHeader, cardCaption);
+	setSheet(figureCaption, cardCaption);
+	setSheet(figure, QString("font-size: %1pt; font-weight: 700; color: %2;")
+				 .arg(t.pointsAt(TswType::FIGURE))
+				 .arg(t.ink(t.accent, t.surface).name()));
+	for (QLabel *body : {cardTitle, cardBody, cardTodo})
+		setSheet(body, QString("font-size: %1pt; color: %2;").arg(t.pointsAt(TswType::BODY)).arg(onCard));
+}
+
+/* Margins, gaps and control sizes from the theme's font and density, wide or narrow (3.7, 4.2). */
+void TswDock::applyMetrics()
+{
+	const TswTheme &t = style;
+	const int margin = narrow ? t.s2 : t.s3;
+	zones->setContentsMargins(margin, margin, margin, margin);
+	status->setNarrow(narrow);
+	status->updateGeometry();
+	mainButton->setLabelFont(t.fontAt(TswType::MAIN, true));
+	mainButton->setMinimumRow(static_cast<int>(std::lround(MAIN_ROWS * t.L)));
+	stopButton->setLabelFont(t.fontAt(TswType::STOP, false));
+	stopButton->setMinimumRow(rows(t, CONTROL_ROWS));
+	for (TswButton *pill : {openFolder, play}) {
+		pill->setLabelFont(t.fontAt(TswType::BODY, false));
+		pill->setMinimumRow(rows(t, SMALL_ROWS));
+	}
+	/* Narrow: tighter sides, so labels keep their words on fewer lines at 220 px. */
+	for (TswButton *button : {mainButton, stopButton, openFolder, play})
+		button->setPadding(narrow ? t.s3 : t.s4);
+	const int circle = static_cast<int>(std::lround(SMALL_ROWS * t.L));
+	dismiss->setLabelFont(t.fontAt(TswType::BODY, false));
+	dismiss->setMinimumRow(circle);
+	dismiss->setFixedSize(circle, circle);
+	for (TswLink *link : {copyDetails, learnMore})
+		link->setLinkFont(t.fontAt(TswType::LINK, false));
+	for (QWidget *group : {startGroup, speedGroup})
+		static_cast<QVBoxLayout *>(group->layout())->setSpacing(t.s2);
+	speedsLayout->setSpacing(narrow ? t.s3 : t.s4);
+	const int padding = narrow ? t.s3 : t.s4;
+	cardLayout->setContentsMargins(padding, padding - t.s1, padding - t.s1, padding);
+	cardLayout->setSpacing(t.s3);
+	cardActions->setSpacing(t.s3);
+	figureBox->layout()->setSpacing(t.s1);
+
+	contextRow->layout()->setSpacing(t.s2);
+	const int line = QFontMetrics(t.fontAt(TswType::CONTEXT, false)).height();
+	contextIcon->setGlyph(TswGlyph::Info, t.muted, QSize(tswGlyphSize(t.fontAt(TswType::CONTEXT, false)), line));
+	for (TswRail *rail : {startRail, speedRail})
+		rail->updateGeometry();
+	updateGaps();
+}
+
+/* Narrow when the visible width is under 260 px, wide again from 276 px (UX-012). */
+void TswDock::updateNarrow(int viewportWidth)
+{
+	const bool next = narrow ? viewportWidth < LEAVE_NARROW : viewportWidth < ENTER_NARROW;
+	if (next == narrow)
+		return;
+	narrow = next;
+	applyMetrics();
+	updateCardRows();
+}
+
+/*
+ * The scroll area asks the dock's height for the viewport's width, but some themes then give the
+ * dock less width than that (Classic: 8 px less, from the scroll area's style-sheet frame), and a
+ * narrower dock may need more height (columns that stack, labels that wrap). So the dock holds its
+ * minimum height at what its real width needs; the scroll area then scrolls instead of squeezing
+ * (UX-121: nothing cut).
+ */
+void TswDock::resizeEvent(QResizeEvent *event)
+{
+	QFrame::resizeEvent(event);
+	updateCardRows();
+	const int needed = heightForWidth(width());
+	if (needed > 0 && minimumHeight() != needed)
+		setMinimumHeight(needed);
+}
+
+/*
+ * Card rows go one under the other when they do not fit side by side at the dock's width (some
+ * themes inset the dock inside the visible area: Classic by 8 px). The two pills share the row
+ * equally, so each must fit half of it: a label that would wrap in its half stacks both, full
+ * width, instead (3.10).
+ */
+void TswDock::updateCardRows()
+{
+	const int margin = narrow ? style.s2 : style.s3;
+	const int padding = narrow ? style.s3 : style.s4;
+	const int room = width() - 2 * margin - 2 * padding + style.s1;
+	const int half = (room - style.s3) / 2;
+	const bool pillsFit = !narrow && openFolder->labelLines(half) == 1 && play->labelLines(half) == 1;
+	cardActions->setDirection(pillsFit ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom);
+	const int links = copyDetails->sizeHint().width() + style.s3 + learnMore->sizeHint().width();
+	auto *linkLayout = static_cast<QBoxLayout *>(linkRow->layout());
+	linkLayout->setDirection(links > room ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+	linkLayout->setSpacing(links > room ? 0 : style.s3); /* one under the other: a list, not islands */
+}
+
+void TswDock::updateGaps()
+{
+	const int group = narrow ? style.s3 : style.s4;
+	const auto setGap = [](QSpacerItem *gap, int height) {
+		gap->changeSize(0, height, QSizePolicy::Minimum, QSizePolicy::Fixed);
+	};
+	setGap(gapMain, group);
+	setGap(gapCard, card->isHidden() ? 0 : group);
+	setGap(gapSpeeds, speeds->isHidden() ? 0 : group);
+	/* Stop sits at least one row away from the rails: the separation of UX-107, without a rule. */
+	setGap(gapStop, stopButton->isHidden() ? 0 : std::max(style.L, group));
+	setGap(gapContext, contextRow->isHidden() ? 0 : style.s3);
+	zones->invalidate();
+}
+
+/* --- Showing a view --- */
 
 void TswDock::showView(const tsw_dock_view &next)
 {
 	view = next;
 	path = QString::fromUtf8(next.context_path != nullptr ? next.context_path : "");
-	view.context_path = nullptr; /* borrowed from the recorder: only the copy above is kept */
-	refresh();
+	view.context_path = nullptr;                     /* borrowed from the recorder: only the copy above is kept */
+	const bool animate = viewShown && !reduceMotion; /* only changes the user caused, never the first view */
+	refresh(animate);
+	announce();
+	viewShown = true;
 }
 
-void TswDock::refresh()
+void TswDock::refresh(bool animate)
 {
-	/* Narrow dock: rows of choices become columns, so every function stays (UX-012). */
-	const QBoxLayout::Direction direction = compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
-	startLayout->setDirection(direction);
-	cardActions->setDirection(direction);
-	showBanner();
-	showCounters();
+	showStatus();
+	showMain();
+	showRails(animate);
+	showStop();
 	showCard();
-	showButtons();
-	showSpeedRow();
 	showContext();
+	updateGaps();
 }
 
-void TswDock::applyBannerStyle()
+void TswDock::showStatus()
 {
-	styled = true;
-	styledBanner = view.banner;
-	const QColor danger = dangerColor(this);
-	QString frame = "border: 1px solid palette(mid);";
-	QString words = "palette(window-text)";
-	QColor iconColor = palette().color(QPalette::WindowText);
-	if (view.banner == TSW_BANNER_BUSY) {
-		frame = "border: 1px dashed palette(mid);";
-	} else if (view.banner == TSW_BANNER_REAL_TIME) {
-		frame = "border: 2px solid palette(window-text);"; /* outlined */
-	} else if (view.banner == TSW_BANNER_TIMELAPSE) {
-		frame = "border: 3px solid palette(highlight); background: palette(highlight);"; /* filled */
-		words = "palette(highlighted-text)";
-		iconColor = palette().color(QPalette::HighlightedText);
-	} else if (view.banner == TSW_BANNER_ERROR) {
-		frame = QString("border: 2px dashed %1;").arg(danger.name()); /* danger frame */
-		iconColor = danger;
+	TswStatusContent content;
+	content.banner = view.banner;
+	content.tally = text(view.tally_text);
+	content.hero = text(view.hero_text, QString::number(view.hero_speed));
+	content.quiet = view.hero_quiet;
+	content.boldQuiet = view.banner == TSW_BANNER_ERROR;
+	if (view.banner == TSW_BANNER_TIMELAPSE) {
+		content.speed = speedText(view.hero_speed);
+		content.speedValue = view.hero_speed;
 	}
-	banner->setStyleSheet(QString("QFrame#tswBanner { %1 border-radius: 4px; }"
-				      " QFrame#tswBanner QLabel { color: %2; background: transparent; border: none; }")
-				      .arg(frame, words));
-	const QPixmap icon =
-		drawBannerIcon(view.banner, iconColor, bannerText->fontMetrics().height(), devicePixelRatioF());
-	bannerIcon->setPixmap(icon);
-	bannerIcon->setVisible(!icon.isNull());
+	if (view.banner == TSW_BANNER_READY)
+		content.heroGlyph = view.start_in_timelapse ? TswGlyph::FastForward : TswGlyph::Play;
+	else if (view.banner == TSW_BANNER_REAL_TIME)
+		content.heroGlyph = TswGlyph::Play;
+	else if (view.banner == TSW_BANNER_TIMELAPSE)
+		content.heroGlyph = TswGlyph::FastForward;
+	content.recordedCaption = text("Counter.Recorded.Caption");
+	content.finalCaption = text("Counter.Final.Caption");
+	content.recorded = QString::fromUtf8(view.recorded);
+	content.finalLength = QString::fromUtf8(view.final_length);
+	content.dimmed = view.counters_dimmed;
+	if (view.section_shown) {
+		const bool sped = view.section_speed > 1;
+		content.stretchLabel =
+			text("Counter.Stretch") + (sped ? " " + speedText(view.section_speed) : QString());
+		content.stretchValues = QString::fromUtf8(view.section_recorded);
+		if (sped)
+			content.stretchValues += QString::fromUtf8(ARROW) + QString::fromUtf8(view.section_final);
+	} else if (view.card_shown && !path.isEmpty()) {
+		/* After a take, the status line names its file: the card below acts on it. The words before
+		 * "%1" ("File:") are its label; the name, its value. */
+		const QString hint = text("Hint.File");
+		content.stretchLabel = hint.left(hint.indexOf("%1")).trimmed();
+		content.stretchValues = QFileInfo(path).fileName();
+	}
+	status->setContent(content);
+
+	/* For screen readers: the state block's name is the tally and the hero; its description the
+	 * readout in words, updated without announcing it (3.11). */
+	QString hero = spoken(content.hero);
+	if (view.banner == TSW_BANNER_REAL_TIME)
+		hero = text("Label.RealTime");
+	else if (view.banner == TSW_BANNER_TIMELAPSE)
+		hero = text("Label.Timelapse") + ", " + text("A11y.Faster", QString::number(view.hero_speed));
+	const bool recording = view.banner == TSW_BANNER_REAL_TIME || view.banner == TSW_BANNER_TIMELAPSE;
+	const QString name = (recording ? text("A11y.Recording") : sentence(content.tally)) + ", " + hero;
+	const QString description = text("A11y.Counters", spokenDuration(content.recorded))
+					    .replace("%2", spokenDuration(content.finalLength));
+	if (status->accessibleName() != name)
+		status->setAccessibleName(name);
+	if (status->accessibleDescription() != description)
+		status->setAccessibleDescription(description);
 }
 
-void TswDock::showBanner()
+void TswDock::showMain()
 {
-	if (!styled || styledBanner != view.banner)
-		applyBannerStyle();
-	const QString speed = QString::number(view.banner_speed);
-	const QString words = text(view.banner_text, speed);
-	const bool error = view.banner == TSW_BANNER_ERROR;
-	const QString detail = error ? "TSW-E" + threeDigits(view.error_code) : text(view.banner_detail, speed);
-	bannerDetail->setVisible(!detail.isEmpty());
-	if (bannerText->text() == words && bannerDetail->text() == detail)
-		return;
-	bannerText->setText(words);
-	bannerDetail->setText(detail);
-
-	/* Screen readers hear every change of state (UX-104). */
-	banner->setAccessibleName(detail.isEmpty() ? words : words + ". " + detail);
-	QAccessibleEvent event(banner, QAccessible::NameChanged);
-	QAccessible::updateAccessibility(&event);
+	const TswTheme &t = style;
+	const QString words = text(view.main_text, QString::number(view.main_speed));
+	TswButtonLook look{t.raised, t.panel, QColor(), 0.0, t.text, t.ink(t.text, t.raised)};
+	TswGlyph glyph = TswGlyph::Record;
+	if (isKey(view.main_text, "Action.ToTimelapse")) {
+		/* Outlined means next: the switch is drawn like the armed speed (4.2). */
+		look = {t.panel, t.panel, t.accent, 2.0, t.ink(t.accent, t.panel), t.accentText};
+		glyph = TswGlyph::FastForward;
+	} else if (isKey(view.main_text, "Action.ToRealTime")) {
+		glyph = TswGlyph::Play;
+	} else {
+		look.glyph = t.shape(t.danger, t.raised);
+	}
+	mainButton->setLook(look);
+	mainButton->setContent(glyph, words);
+	mainButton->setEnabled(view.main_enabled);
+	if (mainButton->accessibleName() != spoken(words))
+		mainButton->setAccessibleName(spoken(words));
 }
 
-void TswDock::showCounters()
+void TswDock::showRails(bool animate)
 {
-	counters->setEnabled(!view.counters_dimmed); /* dimmed while idle */
-	const QString recorded = QString::fromUtf8(view.recorded) + " " + text("Counter.Recorded");
-	const QString final = QString::fromUtf8(view.final_length) + " " + text("Counter.Final");
-	counters->setText(compact ? recorded + "\n" + final : recorded + QString::fromUtf8("  →  ") + final);
-	section->setVisible(view.section_shown);
-	if (view.section_shown)
-		section->setText(text("Counter.Section") + "  " + QString::fromUtf8(view.section_recorded) +
-				 QString::fromUtf8("  →  ") + QString::fromUtf8(view.section_final));
+	speeds->setVisible(view.speeds_shown);
+	startGroup->setVisible(view.start_mode_shown);
+	speedCaption->setText(text(view.speed_label).toUpper());
+	const bool engaged = view.banner == TSW_BANNER_TIMELAPSE;
+	speedRail->setEnabled(view.speeds_enabled);
+	speedRail->setMode(engaged ? TswRail::Mode::Engaged : TswRail::Mode::Armed);
+	speedRail->select(static_cast<int>(view.speed_selected), animate);
+	startRail->select(view.start_in_timelapse ? START_TIMELAPSE : START_REAL_TIME, animate);
+	/* The selected speed says whether it is the next one or the one running now (UX-103). */
+	const QString role = text(engaged ? "A11y.Engaged" : "A11y.Armed");
+	for (QAbstractButton *segment : speedRail->group()->buttons()) {
+		const QString description = segment->isChecked() ? role : QString();
+		if (segment->accessibleDescription() != description)
+			segment->setAccessibleDescription(description);
+	}
+}
+
+void TswDock::showStop()
+{
+	const TswTheme &t = style;
+	stopButton->setLook({QColor(), t.panel, t.edge, 1.0, t.text, t.text});
+	stopButton->setContent(TswGlyph::Stop, text("Action.Stop"));
+	if (stopButton->accessibleName() != text("Action.Stop"))
+		stopButton->setAccessibleName(text("Action.Stop"));
+	stopButton->setVisible(view.stop_shown);
+	stopButton->setEnabled(view.stop_enabled);
 }
 
 void TswDock::showCard()
@@ -380,63 +806,95 @@ void TswDock::showCard()
 	card->setVisible(view.card_shown);
 	if (!view.card_shown)
 		return;
-	const bool failed = view.error_code != 0;
-	openFolder->setVisible(!failed && !path.isEmpty());
-	play->setVisible(!failed && !path.isEmpty());
-	copyDetails->setVisible(failed);
-	learnMore->setVisible(failed);
-	cardTitle->setVisible(failed);
-	if (!failed) {
-		QString body = text("Summary.Skipped", QString::fromUtf8(view.skipped));
-		if (view.thank_user)
-			body += " " + text("Summary.Thanks"); /* once per OBS session (UX-072) */
-		cardBody->setText(body);
-		return;
-	}
+	const TswTheme &t = style;
+	const TswButtonLook pill{t.raised, t.surface, QColor(), 0.0, t.ink(t.text, t.raised), t.ink(t.text, t.raised)};
+	openFolder->setLook(pill);
+	play->setLook(pill);
+	dismiss->setLook({QColor(), t.surface, QColor(), 0.0, t.ink(t.muted, t.surface), t.text});
+	/* The error's reassurance is Bold (what is safe comes first); the summary's file name is not. */
+	const bool error = view.error_code != 0;
+	setSheet(cardTitle, QString("font-size: %1pt; font-weight: %2; color: %3;")
+				    .arg(t.pointsAt(TswType::BODY))
+				    .arg(error ? 700 : 400)
+				    .arg(t.ink(t.text, t.surface).name()));
+	if (error)
+		showErrorCard();
+	else
+		showSummaryCard();
+}
 
-	/* What happened, what is safe, what to do (UX-082). */
-	const QByteArray prefix = "Error.E" + threeDigits(knownError(view.error_code)).toUtf8();
-	cardTitle->setText(text(QByteArray(prefix + ".What").constData()));
+/*
+ * The summary, as a ticket: the waiting the timelapse skipped as one big figure, the file, the one
+ * warm line of the session (UX-072), and what to do with the file. A recording that never sped up
+ * skipped nothing, so it shows no figure.
+ */
+void TswDock::showSummaryCard()
+{
+	cardHeader->setText(text("Card.Session").toUpper());
+	const QString skipped = QString::fromUtf8(view.skipped);
+	figureBox->setVisible(!skipped.isEmpty());
+	figure->setText(skipped);
+	const QString spokenSkipped = text("Summary.Skipped", spokenDuration(skipped));
+	if (figure->accessibleName() != spokenSkipped)
+		figure->setAccessibleName(spokenSkipped);
+	cardTitle->hide(); /* the file is named in the status line, above */
+	cardBody->setTextFormat(Qt::PlainText);
+	cardBody->setText(text("Summary.Thanks"));
+	cardBody->setVisible(view.thank_user);
+	cardTodo->hide();
+	openFolder->setVisible(!path.isEmpty());
+	play->setVisible(!path.isEmpty());
+	linkRow->hide();
+}
+
+/* What is safe first, then why, what to do, one fix and the links; the code is in the header, so it
+ * costs no row of its own (4.2). */
+void TswDock::showErrorCard()
+{
+	cardHeader->setText(text("Card.Error", "TSW-E" + threeDigits(view.error_code)).toUpper());
+	figureBox->hide();
+	const QByteArray prefix = "Error.E" + threeDigits(view.error_texts).toUtf8();
 	const QString saved = text(QByteArray(prefix + ".Saved").constData())
 				      .replace("%1", QString::fromUtf8(view.recorded))
 				      .replace("%2", QString::fromUtf8(view.final_length));
-	cardBody->setText(saved + "\n" + text("Error.WhatToDo") + " " + text(QByteArray(prefix + ".Todo").constData()));
-}
-
-void TswDock::showButtons()
-{
-	const QString speed = QString::number(view.main_speed);
-	const QString main = text(view.main_text, speed);
-	const QByteArray shortKey = QByteArray(view.main_text) + ".Short";
-	mainButton->setText(compact ? text(shortKey.constData(), speed) : main);
-	mainButton->setToolTip(main); /* the full words stay reachable (UX-012, UX-103) */
-	mainButton->setAccessibleName(main);
-	mainButton->setEnabled(view.main_enabled);
-	const QString stop = text("Action.Stop");
-	stopButton->setText(compact ? text("Action.Stop.Short") : stop);
-	stopButton->setToolTip(stop);
-	stopButton->setAccessibleName(stop);
-	stopButton->setVisible(view.stop_shown);
-	stopButton->setEnabled(view.stop_enabled);
-}
-
-void TswDock::showSpeedRow()
-{
-	speedRow->setVisible(view.speeds_shown);
-	speedRow->setEnabled(view.speeds_enabled);
-	speedLabel->setText(text(view.speed_label));
-	speedLabel->setVisible(!compact && view.speed_label != nullptr);
-	if (QAbstractButton *chip = chips->button(static_cast<int>(view.speed_selected)))
-		chip->setChecked(true);
-	startRow->setVisible(view.start_mode_shown);
-	startRealTime->setChecked(!view.start_in_timelapse);
-	startTimelapse->setChecked(view.start_in_timelapse);
+	cardTitle->setText(saved);
+	cardTitle->show();
+	const auto labelled = [](const QString &label, const QString &words) {
+		return "<b>" + label.toHtmlEscaped() + "</b> " + words.toHtmlEscaped();
+	};
+	cardBody->setTextFormat(Qt::RichText);
+	cardBody->setText(labelled(text("Error.Why"), text(QByteArray(prefix + ".What").constData())));
+	cardBody->show();
+	cardTodo->setTextFormat(Qt::RichText);
+	cardTodo->setText(labelled(text("Error.WhatToDo"), text(QByteArray(prefix + ".Todo").constData())));
+	cardTodo->show();
+	openFolder->setVisible(view.error_texts == 103 && !path.isEmpty()); /* the one fix: see the file */
+	play->hide();
+	linkRow->show();
 }
 
 void TswDock::showContext()
 {
-	context->setVisible(view.context_text != nullptr);
+	contextRow->setVisible(view.context_text != nullptr);
+	if (view.context_text == nullptr)
+		return;
 	context->setText(text(view.context_text, QFileInfo(path).fileName()));
+}
+
+/* Start, every switch, saved and errors are announced once each (UX-104). */
+void TswDock::announce()
+{
+	if (view.announce_text == nullptr)
+		return;
+	QString mode = text("Label.RealTime");
+	if (view.banner == TSW_BANNER_TIMELAPSE)
+		mode = text("Label.Timelapse") + ", " + text("A11y.Faster", QString::number(view.hero_speed));
+	QString words = text(view.announce_text, mode.left(1).toLower() + mode.mid(1));
+	if (view.banner == TSW_BANNER_SAVED)
+		words = text(view.announce_text, spokenDuration(QString::fromUtf8(view.final_length)));
+	if (view.banner == TSW_BANNER_ERROR)
+		words = text(view.announce_text, text(view.hero_text)).replace("%2", cardTitle->text());
+	tswAnnounce(status, words, view.banner == TSW_BANNER_ERROR);
 }
 
 void TswDock::copyErrorDetails()
@@ -446,23 +904,4 @@ void TswDock::copyErrorDetails()
 			"of the OBS log (Help > Log Files)")
 			.arg(threeDigits(view.error_code), path);
 	QApplication::clipboard()->setText(details);
-}
-
-void TswDock::changeEvent(QEvent *event)
-{
-	QFrame::changeEvent(event);
-	if (event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange) {
-		styled = false; /* the OBS theme changed: draw the banner again with its colors (UX-016) */
-		showBanner();
-	}
-}
-
-void TswDock::resizeEvent(QResizeEvent *event)
-{
-	QFrame::resizeEvent(event);
-	const bool narrow = width() < COMPACT_WIDTH;
-	if (narrow != compact) {
-		compact = narrow;
-		refresh();
-	}
 }

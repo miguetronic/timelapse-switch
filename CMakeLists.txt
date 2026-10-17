@@ -75,6 +75,7 @@ add_library(
   tsw-core
   STATIC
   src/core/audio-ring.c
+  src/core/color.c
   src/core/dock-view.c
   src/core/gate.c
   src/core/session.c
@@ -84,10 +85,29 @@ target_include_directories(tsw-core PUBLIC src)
 # Header-only parts of OBS (portable atomics); the core never links libobs, so tests run without OBS.
 target_include_directories(tsw-core SYSTEM PUBLIC $<TARGET_PROPERTY:OBS::libobs,INTERFACE_INCLUDE_DIRECTORIES>)
 set_target_properties(tsw-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(UNIX AND NOT APPLE)
+  target_link_libraries(tsw-core PUBLIC m) # pow (color.c) lives in libm on Linux
+endif()
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE tsw-core)
 
 # The dock's widgets: Qt only, no OBS, so the UI test can draw them (tests/ui).
-add_library(tsw-dock STATIC src/ui/dock.cpp)
+# Screen reader announcements need Qt 6.8; older Qt gets the fallback (rule P10-8: a file, not #if).
+if(Qt6_VERSION VERSION_GREATER_EQUAL 6.8)
+  set(_tsw_announce src/ui/announce-qt68.cpp)
+else()
+  set(_tsw_announce src/ui/announce-legacy.cpp)
+endif()
+add_library(
+  tsw-dock
+  STATIC
+  src/ui/dock.cpp
+  src/ui/dock-glyph.cpp
+  src/ui/dock-paint.cpp
+  src/ui/dock-status.cpp
+  src/ui/dock-theme.cpp
+  src/ui/dock-widgets.cpp
+  ${_tsw_announce}
+)
 target_link_libraries(tsw-dock PUBLIC tsw-core Qt6::Widgets)
 set_target_properties(tsw-dock PROPERTIES AUTOMOC ON POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE tsw-dock)
@@ -97,6 +117,7 @@ foreach(_tsw_target IN ITEMS ${CMAKE_PROJECT_NAME} plugin-support tsw-core tsw-d
 endforeach()
 
 option(ENABLE_UNIT_TESTS "Build the unit tests (run them with ctest)" ON)
+option(ENABLE_THEME_PROBE "Build the test-only OBS module used by tests/ui/obs-themes.sh" ON)
 if(ENABLE_UNIT_TESTS)
   enable_testing()
   add_subdirectory(tests/unit)

@@ -80,6 +80,20 @@ static void durations_read_as_hours_minutes_seconds(void)
 	EXPECT_TEXT(text, "9999:59:59");
 }
 
+/* The status line is short: "19:37" under an hour, "1:02:03" from an hour on. */
+static void short_durations_drop_the_hours_under_an_hour(void)
+{
+	char text[TSW_TIME_TEXT];
+	tsw_format_short_duration(0, text);
+	EXPECT_TEXT(text, "0:00");
+	tsw_format_short_duration(294 * SECOND_NS, text);
+	EXPECT_TEXT(text, "4:54");
+	tsw_format_short_duration(1177 * SECOND_NS, text);
+	EXPECT_TEXT(text, "19:37");
+	tsw_format_short_duration(3723 * SECOND_NS, text);
+	EXPECT_TEXT(text, "1:02:03");
+}
+
 static void idle_offers_record_and_the_starting_mode(void)
 {
 	struct tsw_dock_model model;
@@ -88,24 +102,41 @@ static void idle_offers_record_and_the_starting_mode(void)
 	struct tsw_status status = {0};
 	struct tsw_dock_view view = build(&model, &session, status);
 	TSW_EXPECT_EQ(view.banner, TSW_BANNER_READY);
-	EXPECT_TEXT(view.banner_text, "State.Idle");
-	EXPECT_TEXT(view.banner_detail, "State.WillStartRealTime");
+	EXPECT_TEXT(view.tally_text, "State.Tally.Ready");
+	EXPECT_TEXT(view.hero_text, "State.Hero.StartsRealTime");
+	TSW_EXPECT_TRUE(view.hero_quiet);
 	TSW_EXPECT_TRUE(view.counters_dimmed);
-	EXPECT_TEXT(view.recorded, "-:--:--");
+	EXPECT_TEXT(view.recorded, "0:00:00"); /* UX-006: a dimmed 0:00:00 */
+	EXPECT_TEXT(view.final_length, "0:00:00");
 	EXPECT_TEXT(view.main_text, "Action.Record");
 	TSW_EXPECT_TRUE(view.main_enabled);
 	TSW_EXPECT_TRUE(view.speeds_shown && view.speeds_enabled && view.start_mode_shown);
 	EXPECT_TEXT(view.speed_label, "Label.Speed");
 	TSW_EXPECT_EQ(view.speed_selected, 4);
 	TSW_EXPECT_TRUE(!view.stop_shown);
-	TSW_EXPECT_TRUE(!view.card_shown && !view.section_shown);
+	TSW_EXPECT_TRUE(!view.card_shown);
 	EXPECT_TEXT(view.context_text, "Hint.Separate");
+	TSW_EXPECT_TRUE(view.announce_text == NULL);
 
 	session.start_in_timelapse = true;
 	view = build(&model, &session, status);
-	EXPECT_TEXT(view.banner_detail, "State.WillStartTimelapse");
-	TSW_EXPECT_EQ(view.banner_speed, 4);
+	EXPECT_TEXT(view.hero_text, "State.Hero.StartsTimelapse");
+	TSW_EXPECT_EQ(view.hero_speed, 4);
 	TSW_EXPECT_TRUE(view.start_in_timelapse);
+}
+
+/* The status line is never an empty hole: idle shows the stretch at zero, dimmed like the counters. */
+static void idle_shows_the_stretch_at_zero(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = {0};
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.section_shown);
+	TSW_EXPECT_EQ(view.section_speed, 1);
+	EXPECT_TEXT(view.section_recorded, "0:00");
+	TSW_EXPECT_TRUE(view.counters_dimmed);
 }
 
 static void real_time_offers_the_switch(void)
@@ -115,9 +146,10 @@ static void real_time_offers_the_switch(void)
 	struct tsw_session session = new_session();
 	struct tsw_dock_view view = build(&model, &session, recording(1));
 	TSW_EXPECT_EQ(view.banner, TSW_BANNER_REAL_TIME);
-	EXPECT_TEXT(view.banner_text, "State.RealTime");
-	TSW_EXPECT_TRUE(view.banner_detail == NULL);
-	TSW_EXPECT_TRUE(!view.counters_dimmed && !view.section_shown);
+	EXPECT_TEXT(view.tally_text, "State.Tally.Rec");
+	EXPECT_TEXT(view.hero_text, "State.Hero.RealTime");
+	TSW_EXPECT_TRUE(!view.hero_quiet);
+	TSW_EXPECT_TRUE(!view.counters_dimmed);
 	EXPECT_TEXT(view.recorded, "0:12:34");
 	EXPECT_TEXT(view.final_length, "0:06:40");
 	EXPECT_TEXT(view.main_text, "Action.ToTimelapse");
@@ -129,6 +161,18 @@ static void real_time_offers_the_switch(void)
 	EXPECT_TEXT(view.context_path, "/videos/2026-10-16 10-00-00 tswitch.mp4");
 }
 
+/* UX-007: the status line shows the current stretch in real time too, at speed 1. */
+static void real_time_shows_the_current_stretch(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, recording(1));
+	TSW_EXPECT_TRUE(view.section_shown);
+	TSW_EXPECT_EQ(view.section_speed, 1);
+	EXPECT_TEXT(view.section_recorded, "2:00");
+}
+
 static void timelapse_offers_the_way_back_and_shows_the_section(void)
 {
 	struct tsw_dock_model model;
@@ -136,11 +180,14 @@ static void timelapse_offers_the_way_back_and_shows_the_section(void)
 	struct tsw_session session = new_session();
 	struct tsw_dock_view view = build(&model, &session, recording(8));
 	TSW_EXPECT_EQ(view.banner, TSW_BANNER_TIMELAPSE);
-	EXPECT_TEXT(view.banner_text, "State.Timelapse");
-	TSW_EXPECT_EQ(view.banner_speed, 8);
+	EXPECT_TEXT(view.tally_text, "State.Tally.Rec");
+	EXPECT_TEXT(view.hero_text, "State.Hero.Timelapse");
+	TSW_EXPECT_TRUE(!view.hero_quiet);
+	TSW_EXPECT_EQ(view.hero_speed, 8);
 	TSW_EXPECT_TRUE(view.section_shown);
-	EXPECT_TEXT(view.section_recorded, "0:02:00");
-	EXPECT_TEXT(view.section_final, "0:00:30");
+	TSW_EXPECT_EQ(view.section_speed, 8);
+	EXPECT_TEXT(view.section_recorded, "2:00");
+	EXPECT_TEXT(view.section_final, "0:30");
 	EXPECT_TEXT(view.main_text, "Action.ToRealTime");
 	EXPECT_TEXT(view.speed_label, "Label.SpeedNow");
 	TSW_EXPECT_EQ(view.speed_selected, 8); /* the speed in use, whatever chip was chosen before */
@@ -158,12 +205,31 @@ static void saving_disables_what_cannot_act(void)
 	status.phase = TSW_PHASE_SAVING;
 	struct tsw_dock_view view = build(&model, &session, status);
 	TSW_EXPECT_EQ(view.banner, TSW_BANNER_BUSY);
-	EXPECT_TEXT(view.banner_text, "State.Saving");
+	EXPECT_TEXT(view.tally_text, "State.Tally.Saving");
+	EXPECT_TEXT(view.hero_text, "State.Hero.Saving");
+	TSW_EXPECT_TRUE(view.hero_quiet);
+	EXPECT_TEXT(view.context_text, "Hint.Saving");
 	EXPECT_TEXT(view.main_text, "Action.Record");
 	TSW_EXPECT_TRUE(!view.main_enabled);
 	TSW_EXPECT_TRUE(view.speeds_shown && !view.speeds_enabled);
 	TSW_EXPECT_TRUE(view.stop_shown && !view.stop_enabled);
 	EXPECT_TEXT(view.recorded, "0:12:34");
+}
+
+/* While saving, the counters stay where Stop was pressed, and so does the last stretch. */
+static void saving_keeps_the_last_stretch_frozen(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = recording(8);
+	status.phase = TSW_PHASE_SAVING;
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.section_shown);
+	TSW_EXPECT_EQ(view.section_speed, 8);
+	EXPECT_TEXT(view.section_recorded, "2:00");
+	EXPECT_TEXT(view.section_final, "0:30");
+	TSW_EXPECT_TRUE(!view.counters_dimmed);
 }
 
 static void a_saved_recording_opens_the_summary(void)
@@ -175,15 +241,18 @@ static void a_saved_recording_opens_the_summary(void)
 	TSW_EXPECT_TRUE(view.card_shown);
 	TSW_EXPECT_EQ(view.error_code, 0);
 	TSW_EXPECT_EQ(view.banner, TSW_BANNER_SAVED);
-	EXPECT_TEXT(view.banner_text, "State.Saved");
+	EXPECT_TEXT(view.tally_text, "State.Tally.Saved");
+	EXPECT_TEXT(view.hero_text, "State.Hero.Saved");
+	TSW_EXPECT_TRUE(view.hero_quiet);
 	TSW_EXPECT_TRUE(!view.counters_dimmed);
 	EXPECT_TEXT(view.recorded, "1:23:45");
 	EXPECT_TEXT(view.final_length, "0:31:10");
-	EXPECT_TEXT(view.skipped, "0:52:35");
+	EXPECT_TEXT(view.skipped, "52:35"); /* one big figure: no empty hours (UX-070) */
 	TSW_EXPECT_TRUE(view.thank_user);
 	EXPECT_TEXT(view.main_text, "Action.Record");
 	TSW_EXPECT_TRUE(view.main_enabled && !view.speeds_shown && !view.stop_shown);
-	EXPECT_TEXT(view.context_text, "Hint.File");
+	TSW_EXPECT_TRUE(view.context_text == NULL); /* the file name is in the card */
+	EXPECT_TEXT(view.context_path, "/videos/2026-10-16 10-00-00 tswitch.mp4");
 
 	/* The card stays until dismissed; the warm line is used once per OBS session. */
 	view = build(&model, &session, ended(1, 0));
@@ -196,6 +265,19 @@ static void a_saved_recording_opens_the_summary(void)
 	TSW_EXPECT_TRUE(view.card_shown && !view.thank_user);
 }
 
+/* A recording that never sped up skipped no waiting: the summary shows no figure for it. */
+static void a_recording_that_never_sped_up_skips_nothing(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = ended(1, 0);
+	status.last_final_ns = status.last_recorded_ns;
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.card_shown);
+	EXPECT_TEXT(view.skipped, "");
+}
+
 static void a_failure_opens_the_error_card(void)
 {
 	struct tsw_dock_model model;
@@ -205,8 +287,11 @@ static void a_failure_opens_the_error_card(void)
 	TSW_EXPECT_TRUE(view.card_shown);
 	TSW_EXPECT_EQ(view.error_code, 103);
 	TSW_EXPECT_EQ(view.banner, TSW_BANNER_ERROR);
-	EXPECT_TEXT(view.banner_text, "State.Error");
+	EXPECT_TEXT(view.tally_text, "State.Tally.Error");
+	EXPECT_TEXT(view.hero_text, "Error.E103.Headline"); /* a plain headline, in Bold (UX-081) */
+	TSW_EXPECT_EQ(view.error_texts, 103);
 	TSW_EXPECT_TRUE(!view.thank_user); /* never in errors (UX-072) */
+	TSW_EXPECT_TRUE(view.context_text == NULL);
 	EXPECT_TEXT(view.main_text, "Action.Record");
 	TSW_EXPECT_TRUE(view.main_enabled);
 }
@@ -224,9 +309,78 @@ static void a_failed_start_shows_no_times(void)
 	struct tsw_dock_view view = build(&model, &session, status);
 	TSW_EXPECT_TRUE(view.card_shown);
 	TSW_EXPECT_TRUE(view.counters_dimmed);
-	EXPECT_TEXT(view.recorded, "-:--:--");
-	EXPECT_TEXT(view.final_length, "-:--:--");
+	EXPECT_TEXT(view.recorded, "0:00:00");
+	EXPECT_TEXT(view.final_length, "0:00:00");
+	EXPECT_TEXT(view.hero_text, "Error.E001.Headline");
 	TSW_EXPECT_TRUE(view.context_text == NULL);
+}
+
+/* A failed start has no file to name, so its status line shows the stretch at zero, dimmed like
+ * the counters, as idle does: never an empty hole. */
+static void a_failed_start_shows_the_stretch_at_zero(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_status status = ended(1, 1);
+	status.last_recorded_ns = 0;
+	status.last_final_ns = 0;
+	status.path = "";
+	struct tsw_dock_view view = build(&model, &session, status);
+	TSW_EXPECT_TRUE(view.section_shown);
+	TSW_EXPECT_EQ(view.section_speed, 1);
+	EXPECT_TEXT(view.section_recorded, "0:00");
+	TSW_EXPECT_TRUE(view.counters_dimmed);
+}
+
+/* After a take, the status line is the file's (the dock names it there), not a stretch. */
+static void a_saved_take_shows_no_stretch(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, ended(1, 0));
+	TSW_EXPECT_TRUE(view.card_shown && !view.section_shown);
+}
+
+/* A code the dock has no texts for is shown as the unexpected error, TSW-E901. */
+static void an_unknown_error_uses_the_unexpected_error_texts(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, ended(1, 777));
+	TSW_EXPECT_EQ(view.error_code, 777);
+	TSW_EXPECT_EQ(view.error_texts, 901);
+	EXPECT_TEXT(view.hero_text, "Error.E901.Headline");
+}
+
+/* UX-104: start, every switch and speed change, saved and errors are announced once each. */
+static void changes_of_state_are_announced_once(void)
+{
+	struct tsw_dock_model model;
+	tsw_dock_model_init(&model);
+	struct tsw_session session = new_session();
+	struct tsw_dock_view view = build(&model, &session, recording(1));
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Start");
+	view = build(&model, &session, recording(1));
+	TSW_EXPECT_TRUE(view.announce_text == NULL);
+	view = build(&model, &session, recording(4));
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Switch");
+	view = build(&model, &session, recording(8));
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Switch");
+	view = build(&model, &session, recording(1));
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Switch");
+	struct tsw_status saving = recording(1);
+	saving.phase = TSW_PHASE_SAVING;
+	view = build(&model, &session, saving);
+	TSW_EXPECT_TRUE(view.announce_text == NULL);
+	view = build(&model, &session, ended(1, 0));
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Saved");
+	view = build(&model, &session, ended(1, 0));
+	TSW_EXPECT_TRUE(view.announce_text == NULL);
+	view = build(&model, &session, ended(2, 103));
+	EXPECT_TEXT(view.announce_text, "A11y.Announce.Error");
 }
 
 static void a_new_recording_closes_the_card(void)
@@ -249,13 +403,22 @@ static void a_new_recording_closes_the_card(void)
 int main(void)
 {
 	durations_read_as_hours_minutes_seconds();
+	short_durations_drop_the_hours_under_an_hour();
 	idle_offers_record_and_the_starting_mode();
+	idle_shows_the_stretch_at_zero();
 	real_time_offers_the_switch();
+	real_time_shows_the_current_stretch();
 	timelapse_offers_the_way_back_and_shows_the_section();
 	saving_disables_what_cannot_act();
+	saving_keeps_the_last_stretch_frozen();
 	a_saved_recording_opens_the_summary();
+	a_recording_that_never_sped_up_skips_nothing();
 	a_failure_opens_the_error_card();
 	a_failed_start_shows_no_times();
+	a_failed_start_shows_the_stretch_at_zero();
+	a_saved_take_shows_no_stretch();
+	an_unknown_error_uses_the_unexpected_error_texts();
+	changes_of_state_are_announced_once();
 	a_new_recording_closes_the_card();
 	return tsw_test_failures;
 }

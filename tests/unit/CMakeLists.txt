@@ -31,3 +31,8 @@ add_executable(test-dock-view test-dock-view.c test-main.c)
 target_link_libraries(test-dock-view PRIVATE tsw-core)
 tsw_strict_warnings(test-dock-view)
 add_test(NAME dock-view COMMAND test-dock-view)
+
+add_executable(test-color test-color.c test-main.c)
+target_link_libraries(test-color PRIVATE tsw-core)
+tsw_strict_warnings(test-color)
+add_test(NAME color COMMAND test-color)

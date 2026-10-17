@@ -50,7 +50,9 @@ Only the two valves are new logic. The encoding and the file writing are OBS's o
 | Recorder | `src/recorder.c` | C | Creates the encoders, feeds and file writer from the user's OBS settings; starts, switches speed, adds chapters (Hybrid MP4), stops (emptying the encoder first); reports its status to the dock. **Exists.** |
 | Fault log | `src/fault.c` | C | `TSW_CHECK` failures, safe to note from real-time threads, written to the log by the UI thread. **Exists.** |
 | Platform | `src/platform/{linux,windows,macos}.c` | C | Small OS differences, picked by CMake (no `#ifdef`). |
-| Dock | `src/ui/dock.cpp` | C++ / Qt | The panel described in `docs/design/ux-spec.md`: draws a dock view, reports clicks; no OBS, so `tests/ui` draws it alone. **Exists.** |
+| Dock | `src/ui/dock.cpp` | C++ / Qt | The panel described in `docs/design/ux-spec.md`, drawn as in `docs/design/visual-design.md`: draws a dock view, reports clicks; no OBS, so `tests/ui` draws it alone. **Exists.** |
+| Dock theme and painting | `src/ui/dock-theme.cpp`, `dock-status.cpp`, `dock-widgets.cpp`, `dock-glyph.cpp`, `dock-paint.cpp` | C++ / Qt | Reads the OBS theme through hidden probe widgets, mixes the dock's colors with the contrast guard, paints the status card, buttons, rails and glyphs. **Exists.** |
+| Color math | `src/core/color.c` | C | Pure, no OBS or Qt: WCAG contrast, mixing, and the contrast guard. **Exists**, unit tested. |
 | Dock in OBS | `src/ui/dock-obs.cpp` | C++ / Qt | Adds the dock to OBS's Docks menu, in a scroll area; a timer shows the controller's view 10 times per second. **Exists.** |
 
 ## Threads
@@ -90,6 +92,8 @@ Function pointers are allowed only where OBS or Qt require a callback. Every one
 | End of recording (`finish`) | `recorder.c` via `obs_queue_task` | OBS UI | UI | exists |
 | Qt signals of the dock's buttons and chips | `src/ui/dock.cpp` via `connect`; they emit `inputRequested` or `dismissRequested` | Qt event loop | UI | exists |
 | Dock signals and refresh timer (100 ms) | `src/ui/dock-obs.cpp` via `connect`; they call the controller | Qt event loop | UI | exists |
+| Theme changes (`onFrontendEvent`: `OBS_FRONTEND_EVENT_THEME_CHANGED`) | `src/ui/dock-obs.cpp` via `obs_frontend_add_event_callback`; it queues the dock's `scheduleRestyle` | OBS UI, after every theme, Font Size or Density change | UI | exists |
+| Dock animations (thumb slide, card cross-fade, saving sweep) | `src/ui/dock-status.cpp`, `src/ui/dock-widgets.cpp` via `connect` on `QVariantAnimation` | Qt event loop, only while an animation runs (at most 5 s) | UI | exists |
 
 The sync probe of the integration test (`tests/integration/sync-probe.c`) is a separate module that is never shipped, so it is not listed.
 
