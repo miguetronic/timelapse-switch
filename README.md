@@ -25,6 +25,36 @@
 
 Timelapse Switch is a plugin for OBS Studio that lets you switch between real time and timelapse **during** a recording, without pausing. When you press Stop, the file is already finished: the parts you sped up play at x2, x4, x8 or x16, the rest plays at normal speed, and there is nothing left to edit.
 
+## The dock
+
+Everything happens in one dock inside OBS, in the light and dark themes.
+
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="site/src/assets/dock/dock-real-time-dark.png">
+        <img src="site/src/assets/dock/dock-real-time-light.png" alt="The dock while recording in real time" width="240">
+      </picture>
+      <br><b>Recording</b><br>One button switches to timelapse.
+    </td>
+    <td align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="site/src/assets/dock/dock-timelapse-dark.png">
+        <img src="site/src/assets/dock/dock-timelapse-light.png" alt="The dock in timelapse x4: recorded time and final video length side by side" width="240">
+      </picture>
+      <br><b>Timelapse</b><br>Pick the speed while you record.
+    </td>
+    <td align="center" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="site/src/assets/dock/dock-summary-dark.png">
+        <img src="site/src/assets/dock/dock-summary-light.png" alt="The dock after Stop: the file is ready, with the waiting time skipped and a map of the speeds" width="240">
+      </picture>
+      <br><b>Done</b><br>The file is ready, nothing to edit.
+    </td>
+  </tr>
+</table>
+
 ## Download
 
 | System | Status | |
