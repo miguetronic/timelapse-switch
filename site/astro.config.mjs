@@ -16,7 +16,7 @@ export default defineConfig({
       favicon: '/favicon.svg',
       social: [
         { icon: 'github', label: 'GitHub', href: repo },
-        { icon: 'heart', label: 'Sponsor', href: 'https://github.com/sponsors/miguetronic' },
+        { icon: 'heart', label: 'Support on Ko-fi', href: 'https://ko-fi.com/miguetronic' },
       ],
       customCss: ['@fontsource-variable/instrument-sans', './src/styles/brand.css'],
       head: [

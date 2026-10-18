@@ -142,9 +142,8 @@ Every step, the numbers for each resolution and how to measure on your own compu
 
 Timelapse Switch is free and open source, and it will stay that way. If it saves you editing time, you can help it grow:
 
-- **[GitHub Sponsors](https://github.com/sponsors/miguetronic)**: a monthly amount, or a one-time one of your choice.
-- **[Ko-fi](https://ko-fi.com/miguetronic)**: a one-off tip, no GitHub account needed.
-- **Fund a piece of work**: testing and polishing Windows or macOS, or a feature you need. Sponsors can also arrange priority support. Ask through GitHub Sponsors or by email (on the maintainer's GitHub profile).
+- **[Ko-fi](https://ko-fi.com/miguetronic)**: a one-off tip or a monthly one, no account needed.
+- **Fund a piece of work**: testing and polishing Windows or macOS, or a feature you need. Priority support can be arranged too. Ask in [Discussions](https://github.com/miguetronic/timelapse-switch/discussions) or with a message on Ko-fi.
 
 Starring the repository, reporting problems and sharing the plugin help too. The plugin itself never asks for money.
 

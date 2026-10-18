@@ -21,7 +21,7 @@ Not goals for 1.0.0: the welcome card, the settings dialog, the checks before re
 | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1, contact by email |
 | `.github/ISSUE_TEMPLATE/` | Bug report (asks for the OBS log), feature idea, Windows or macOS report (beta feedback); `config.yml` points questions to Discussions |
 | `.github/pull_request_template.md` | Checklist: `tools/check.sh`, tests, Conventional Commit title |
-| `.github/FUNDING.yml` | GitHub Sponsors and Ko-fi |
+| `.github/FUNDING.yml` | Ko-fi |
 | release-please | Config, manifest and workflow (ADR-008); first release forced with `Release-As: 1.0.0`; the build job attaches the three systems' packages, checksums and the SBOM (`tools/make-sbom.sh`, ADR-009) |
 | `CHANGELOG.md` | Written by release-please from Conventional Commits |
 | Status line | The README's "early development" note is replaced by the support status per system |
@@ -40,9 +40,9 @@ Not goals for 1.0.0: the welcome card, the settings dialog, the checks before re
 
 ## 4. Support (public part)
 
-- **GitHub Sponsors:** monthly tiers and one-time amounts chosen by the sponsor. The tiers shown are examples; the maintainer sets the real ones when enrolling.
-- **Ko-fi:** one-off donations without a GitHub account.
-- **Sponsoring work:** a section explaining that a feature or a platform (for example, testing and polishing Windows or macOS) can be funded, and that priority support can be arranged, by GitHub Sponsors or by email.
+- **Ko-fi:** one-off or monthly tips, without an account.
+- **GitHub Sponsors: dropped (18-oct-2026).** Enrolling needs a Stripe account, and Stripe does not serve the maintainer's country yet. If that changes, add `github: miguetronic` back to `FUNDING.yml` and the link to the README and the support page.
+- **Sponsoring work:** a section explaining that a feature or a platform (for example, testing and polishing Windows or macOS) can be funded, and that priority support can be arranged, asked in Discussions or through Ko-fi.
 - Shown in the README, the website's support page, and the "Sponsor" button GitHub builds from `FUNDING.yml`. Nothing in the plugin itself asks for money.
 
 ## 5. Demo and release material
@@ -55,7 +55,7 @@ Not goals for 1.0.0: the welcome card, the settings dialog, the checks before re
 In this order, so that every link and workflow works from the first push:
 
 1. Show an email address on the GitHub profile: the Code of Conduct and the support page point to it.
-2. Claim the Ko-fi page `miguetronic` and enroll in GitHub Sponsors, before their links are public.
+2. Claim the Ko-fi page `miguetronic` before its links are public (GitHub Sponsors dropped, see section 4).
 3. Create the GitHub repository `miguetronic/timelapse-switch`, empty.
 4. In its settings, before the first push: Actions may read and write and may create pull requests (release-please needs both); Discussions on; Pages from GitHub Actions; private vulnerability reporting on.
 5. Review the local commits, then push `main` (or authorize the push). Only `main`: never local backup branches.
