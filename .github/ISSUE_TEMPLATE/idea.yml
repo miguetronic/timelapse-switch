@@ -1,0 +1,15 @@
+name: Idea for a feature
+description: Something Timelapse Switch could do better or do new.
+labels: [idea]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you are trying to do
+      description: The situation and the need, before the solution. It helps to know why.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea

@@ -2,6 +2,8 @@
 
 Thank you for helping. This page explains how we work, in five minutes of reading. The details live in the documents linked below, so you only read them when you need them.
 
+Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Our five promises
 
 Everything in this project serves these promises to the people who use it:

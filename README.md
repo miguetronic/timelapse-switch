@@ -1,10 +1,35 @@
-# Timelapse Switch
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
+    <img src="docs/images/logo.svg" alt="Timelapse Switch" width="420">
+  </picture>
+</p>
 
-**Speed up the slow parts. While you record.**
+<p align="center"><strong>Speed up the slow parts. While you record.</strong></p>
 
-Timelapse Switch is a plugin for OBS Studio (Windows, macOS and Linux) that lets you switch between real time and timelapse **during** a recording, without pausing. When you press Stop, the file is already finished: the parts you sped up play at x2, x4 or x8, the rest plays at normal speed, and there is nothing left to edit.
+<p align="center">
+  <a href="https://github.com/miguetronic/timelapse-switch/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/miguetronic/timelapse-switch"></a>
+  <a href="LICENSE"><img alt="License: GPL-2.0-or-later" src="https://img.shields.io/badge/license-GPL--2.0--or--later-blue"></a>
+  <a href="https://github.com/miguetronic/timelapse-switch/actions/workflows/push.yaml"><img alt="Build" src="https://github.com/miguetronic/timelapse-switch/actions/workflows/push.yaml/badge.svg"></a>
+</p>
 
-> **Status: early development (0.1.0).** It already records at mixed speeds, with chapters and its dock, and it is tested inside a real OBS on Linux. Still missing before the first release: the settings dialog, the welcome card, the checks before recording, and testing on Windows and macOS. Watch the repository to know when the first version is ready.
+<p align="center">
+  <a href="https://miguetronic.github.io/timelapse-switch/">Website and guide</a> ·
+  <a href="https://github.com/miguetronic/timelapse-switch/releases/latest">Download</a> ·
+  <a href="#support-the-project">Support the project</a>
+</p>
+
+Timelapse Switch is a plugin for OBS Studio that lets you switch between real time and timelapse **during** a recording, without pausing. When you press Stop, the file is already finished: the parts you sped up play at x2, x4, x8 or x16, the rest plays at normal speed, and there is nothing left to edit.
+
+## Download
+
+| System | Status | |
+|---|---|---|
+| Linux (x86_64) | **Tested** on every release | [Latest release](https://github.com/miguetronic/timelapse-switch/releases/latest) |
+| Windows 10 and 11 (x64) | **Beta**: built on every release, not tested yet. Please [report how it works](https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml) | [Latest release](https://github.com/miguetronic/timelapse-switch/releases/latest) |
+| macOS 12 or later | **Beta**: built on every release, not tested yet. Please [report how it works](https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml) | [Latest release](https://github.com/miguetronic/timelapse-switch/releases/latest) |
+
+Needs OBS Studio 31.1 or later. How to install and uninstall, cleanly: `docs/install.md` and the [website](https://miguetronic.github.io/timelapse-switch/).
 
 ## Who it is for
 
@@ -78,6 +103,16 @@ Every step, the numbers for each resolution and how to measure on your own compu
 - `docs/decisions.md`: why it is built this way
 - `docs/building.md`: how to build it
 - `CONTRIBUTING.md`: how we work, including the coding rules (based on NASA/JPL's "The Power of Ten")
+
+## Support the project
+
+Timelapse Switch is free and open source, and it will stay that way. If it saves you editing time, you can help it grow:
+
+- **[GitHub Sponsors](https://github.com/sponsors/miguetronic)**: a monthly amount, or a one-time one of your choice.
+- **[Ko-fi](https://ko-fi.com/miguetronic)**: a one-off tip, no GitHub account needed.
+- **Fund a piece of work**: testing and polishing Windows or macOS, or a feature you need. Sponsors can also arrange priority support. Ask through GitHub Sponsors or by email (on the maintainer's GitHub profile).
+
+Starring the repository, reporting problems and sharing the plugin help too. The plugin itself never asks for money.
 
 ## How this project is made
 

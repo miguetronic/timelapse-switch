@@ -1,0 +1,31 @@
+name: Windows or macOS report (beta)
+description: Tell us how Timelapse Switch works on Windows or macOS, good or bad.
+labels: [beta-platform]
+body:
+  - type: markdown
+    attributes:
+      value: Windows and macOS builds are published but not tested yet by the maintainer. A report that "it works" is as useful as one that it does not.
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options: [Windows, macOS (Apple silicon), macOS (Intel)]
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options: [It works, It works with problems, It does not work]
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What you recorded (resolution, frame rate, encoder), and anything that went wrong.
+  - type: textarea
+    id: log
+    attributes:
+      label: OBS log
+      description: Help > Log Files > Upload Current Log File, then paste the link here.
