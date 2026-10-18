@@ -29,11 +29,11 @@ Timelapse Switch is a plugin for OBS Studio that lets you switch between real ti
 
 | System | Status | |
 |---|---|---|
-| Linux (x86_64) | **Tested** on every release | [Latest release](https://github.com/miguetronic/timelapse-switch/releases/latest) |
+| Linux (x86_64) | **Tested** on the maintainer's computer. The `.deb` package (Ubuntu 24.04 or later, with OBS from the OBS PPA) is new in 1.0.0 | [Latest release](https://github.com/miguetronic/timelapse-switch/releases/latest) |
 | Windows 10 and 11 (x64) | **Beta**: built on every release, not tested yet. Please [report how it works](https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml) | [Latest release](https://github.com/miguetronic/timelapse-switch/releases/latest) |
 | macOS 12 or later | **Beta**: built on every release, not tested yet. Please [report how it works](https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml) | [Latest release](https://github.com/miguetronic/timelapse-switch/releases/latest) |
 
-Needs OBS Studio 31.1 or later. How to install and uninstall, cleanly: `docs/install.md` and the [website](https://miguetronic.github.io/timelapse-switch/).
+Needs OBS Studio 31.1 or later. How to install and uninstall each package: the [install guide](https://miguetronic.github.io/timelapse-switch/guide/install/). From a build: `docs/install.md`.
 
 ## Who it is for
 
@@ -99,7 +99,7 @@ Every step, the numbers for each resolution and how to measure on your own compu
 ## Documentation
 
 - `docs/architecture.md`: how it works inside OBS
-- `docs/install.md`: install and uninstall, cleanly
+- `docs/install.md`: install and uninstall a build, cleanly (releases: the website's install guide)
 - `docs/performance.md`: what it costs your computer, and why
 - `docs/faq.md`: questions and answers, such as sound and picture timing
 - `docs/design/ux-spec.md`: the dock and installation

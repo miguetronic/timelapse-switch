@@ -33,4 +33,4 @@ No. No analytics, no update checks; it only opens a web page when you click a li
 
 ## Something went wrong. What do I do?
 
-Every message in the dock has a code such as TSW-E103 and a "Learn more" link to its page in [Messages](/timelapse-switch/errors/). If it is a bug, [report it](https://github.com/miguetronic/timelapse-switch/issues/new?template=bug.yml) with your OBS log (Help > Log Files > Upload Current Log File).
+Every message has a code such as TSW-E103, in the dock or in the OBS log; its page in [Messages](/timelapse-switch/errors/) says what it means and what to do. Error cards link to it with "Learn more". If it is a bug, [report it](https://github.com/miguetronic/timelapse-switch/issues/new?template=bug.yml) with your OBS log (Help > Log Files > Upload Current Log File).

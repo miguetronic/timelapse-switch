@@ -16,7 +16,7 @@ Bind keys in **Settings > Hotkeys**. Every action starts with "Timelapse Switch:
 | Pause or resume | Pauses, or resumes in the mode chosen while paused |
 | Add chapter marker | Adds a chapter at this moment (Hybrid MP4) |
 
-A second press within 0.4 seconds counts as a double press and is ignored, so a bouncing key never switches twice.
+A second press of a mode switch (to timelapse or back to real time) within 0.4 seconds of the last one counts as a double press and is ignored, so a bouncing key never switches twice; Pause has the same guard, with its own clock. Changing the speed while already in timelapse always applies.
 
 **Linux with Wayland:** hotkeys work only while OBS has the focus; this is a limit of Wayland, not of the plugin. On X11 they work from any window.
 

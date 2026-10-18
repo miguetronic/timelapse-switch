@@ -696,7 +696,7 @@ Codes share one namespace, `TSW-Exxx`, for every condition users might search fo
 | TSW-E101 | Error | Storage: the disk filled up; recording stopped and saved. |
 | TSW-E102 | Warning | Storage: about N minutes of space left at the current speed. |
 | TSW-E103 | Error | Encoder failed during the recording; stopped and saved. |
-| TSW-E104 | Info | OBS closed during a TS recording; the file was saved (shown at next start). |
+| TSW-E104 | Error | OBS closed during a TS recording before the file was finished (logged; the file may be incomplete). |
 | TSW-E105 | Warning | Too many speed changes and pauses in one recording; further changes are ignored. |
 | TSW-E106 | Warning | Settings were not saved when OBS closed. |
 | TSW-E201 | Warning | Performance: frames lost because the computer could not keep up. |

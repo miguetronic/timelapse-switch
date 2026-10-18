@@ -33,7 +33,7 @@ Not goals for 1.0.0: the welcome card, the settings dialog, the checks before re
 - **Pages:**
   - Home: value line, demo animation, how it works (the fast-forward pedal), download buttons per system, support.
   - Guide: install and uninstall, first steps, hotkeys, pause, performance, questions and answers. Written from `docs/` (install, performance, faq) so the two never disagree; the website is the user's version, `docs/` the maintainer's.
-  - Errors: one page per `TSW-Exxx` code at `/errors/TSW-Exxx` (the addresses the plugin links to; case kept).
+  - Errors: one page per `TSW-Exxx` code at `/errors/tsw-exxx/` (lowercase, as Astro builds them; the plugin's link matches, ADR-010).
   - Support the project.
   - About: Miguetronic, license, non-affiliation with the OBS Project.
 - **Rules:** no cookies, no analytics, no third-party scripts; search with Pagefind; light and dark themes; brand colors and logo from the brand kit.
@@ -52,11 +52,14 @@ Not goals for 1.0.0: the welcome card, the settings dialog, the checks before re
 
 ## 6. What the maintainer does
 
-1. Create the GitHub repository `miguetronic/timelapse-switch`.
-2. Review the local commits, then push (or authorize the push).
-3. Enroll in GitHub Sponsors and Ko-fi; set the real tiers.
-4. Enable GitHub Pages (source: GitHub Actions) and private vulnerability reporting.
-5. Merge the release pull request that release-please opens.
+In this order, so that every link and workflow works from the first push:
+
+1. Show an email address on the GitHub profile: the Code of Conduct and the support page point to it.
+2. Claim the Ko-fi page `miguetronic` and enroll in GitHub Sponsors, before their links are public.
+3. Create the GitHub repository `miguetronic/timelapse-switch`, empty.
+4. In its settings, before the first push: Actions may read and write and may create pull requests (release-please needs both); Discussions on; Pages from GitHub Actions; private vulnerability reporting on.
+5. Review the local commits, then push `main` (or authorize the push). Only `main`: never local backup branches.
+6. Push the commit with the footer `Release-As: 1.0.0`, merge the release pull request, check the draft release and its files, and publish it.
 
 ## 7. Kept outside the repository
 
