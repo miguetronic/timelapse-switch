@@ -1,8 +1,9 @@
 name: Release Please
 run-name: Release check after ${{ github.ref_name }} push
-# Keeps one release pull request open (docs/releasing.md). When it is merged, this workflow builds the
-# plugin itself and attaches every file to the release: a tag created by release-please with the
-# default token does not start push.yaml.
+# Keeps one release pull request open (docs/releasing.md). When it is merged, release-please creates
+# the tag and a DRAFT release; this workflow then builds the plugin itself (a tag created with the
+# default token does not start push.yaml) and attaches every file. The maintainer checks the draft and
+# publishes it, so "latest release" never shows a release without its files.
 on:
   push:
     branches:
@@ -30,6 +31,8 @@ jobs:
     needs: release-please
     if: needs.release-please.outputs.created == 'true'
     uses: ./.github/workflows/build-project.yaml
+    with:
+      release: true
     secrets: inherit
     permissions:
       contents: read
@@ -61,8 +64,16 @@ jobs:
           : Collect, Checksums and SBOM 🪪
           shopt -s extglob nullglob
           mkdir release
-          for file in artifacts/*/@(*.exe|*.zip|*.pkg|*.deb|*.ddeb|*.tar.xz); do
+          for file in artifacts/*/@(*.zip|*.pkg|*.deb|*.ddeb|*.tar.xz); do
             mv "${file}" release/
+          done
+          # Every system must be there: a release without one of them is not published.
+          for kind in zip pkg deb; do
+            files=(release/*."${kind}")
+            if ((${#files[@]} == 0)); then
+              echo "::error::no .${kind} package was built"
+              exit 1
+            fi
           done
           tools/make-sbom.sh "release/timelapse-switch-${TAG}.cdx.json"
           (cd release && sha256sum -- * > CHECKSUMS.txt)
@@ -72,6 +83,11 @@ jobs:
         run: |
           : Attach Files and Notes 🛫
           gh release view "${TAG}" --json body --jq .body > changes.md
+          # Run again, the notes already start with the downloads: keep only the changes.
+          if grep -q '^## Changes' changes.md; then
+            sed -i '1,/^## Changes/d' changes.md
+            sed -i '/^## Checksums/,$d' changes.md
+          fi
           {
             echo '## Downloads'
             echo
@@ -81,6 +97,8 @@ jobs:
               'https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml'
             echo
             echo 'Install guide: https://miguetronic.github.io/timelapse-switch/guide/install/'
+            echo
+            echo '## Changes'
             echo
             cat changes.md
             echo
