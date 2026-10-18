@@ -41,6 +41,13 @@
 .site-title img {
   height: 2rem;
 }
+.tsw-by {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: var(--sl-text-xl);
+  font-weight: 400;
+  color: var(--sl-color-gray-2);
+}
 .hero img {
   filter: drop-shadow(0 1rem 2rem rgb(0 0 0 / 0.35));
 }
