@@ -6,6 +6,10 @@
 
     images.py --screenshots build_x86_64/ui-screenshots --logo <logo-dark PNG> --font <ttf>
               --out site/src/assets/dock --social docs/images/social-preview.png
+    images.py --dock site/src/assets/dock/dock-timelapse-dark.png --logo <logo-dark PNG> --font <ttf>
+              --social docs/images/social-preview.png
+
+The second form makes only the social preview, from a dock picture made earlier.
 
 The dock pictures come from tests/ui/obs-themes.sh (plus a square version for the website's hero) (the dock as OBS draws it, in OBS's own themes),
 cropped to the dock's height. The social preview (1280 x 640, the size GitHub asks for) puts the
@@ -66,13 +70,13 @@ def social_preview(logo_path: str, font_path: str, dock: Image.Image, out: str) 
     logo = Image.open(logo_path).convert("RGBA")
     logo = logo.crop(logo.getbbox())  # the PNG has a transparent margin around the logo
     logo = logo.resize((560, int(560 * logo.height / logo.width)), Image.LANCZOS)
-    image.paste(logo, (80, 130), logo)
+    image.paste(logo, (80, 110), logo)
     draw = ImageDraw.Draw(image)
-    title = ImageFont.truetype(font_path, 50)
+    title = ImageFont.truetype(font_path, 46)
     small = ImageFont.truetype(font_path, 26)
-    draw.text((80, 130 + logo.height + 70), "Speed up the slow parts.\nWhile you record.", font=title,
-              fill=CANVAS, spacing=12)
-    draw.text((80, 548), "Free plugin for OBS Studio  ·  GPL-2.0-or-later", font=small, fill=MUTED)
+    draw.text((80, 110 + logo.height + 56), "Speed up the slow parts\nof your OBS Studio recordings.\nWhile you record.",
+              font=title, fill=CANVAS, spacing=12)
+    draw.text((80, 548), "Free and open source  ·  GPL-2.0-or-later", font=small, fill=MUTED)
     dock = dock.convert("RGBA")
     dock = dock.resize((int(dock.width * 1.25), int(dock.height * 1.25)), Image.LANCZOS)
     top = max(40, (640 - dock.height) // 2)
@@ -82,12 +86,21 @@ def social_preview(logo_path: str, font_path: str, dock: Image.Image, out: str) 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    for name in ("screenshots", "logo", "font", "out", "social"):
+    for name in ("logo", "font", "social"):
         parser.add_argument(f"--{name}", required=True)
+    parser.add_argument("--screenshots", help="with --out: make the dock pictures too")
+    parser.add_argument("--out")
+    parser.add_argument("--dock", help="instead of --screenshots: the dark timelapse dock picture")
     args = parser.parse_args()
-    dock = dock_pictures(args.screenshots, args.out)
+    if args.dock:
+        dock = Image.open(args.dock)
+    elif args.screenshots and args.out:
+        dock = dock_pictures(args.screenshots, args.out)
+        print(f"dock pictures in {args.out}")
+    else:
+        parser.error("give --dock, or --screenshots and --out")
     social_preview(args.logo, args.font, dock, args.social)
-    print(f"dock pictures in {args.out}, social preview in {args.social}")
+    print(f"social preview in {args.social}")
     return 0
 
 
