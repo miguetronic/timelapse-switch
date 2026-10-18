@@ -1,0 +1,65 @@
+---
+title: Timelapse Switch
+description: Switch between real time and timelapse while you record in OBS Studio. When you press Stop, the file is already finished.
+template: splash
+hero:
+  image:
+    dark: ../../assets/dock/hero-dock-dark.png
+    light: ../../assets/dock/hero-dock-light.png
+    alt: The Timelapse Switch dock in OBS, recording in timelapse x4
+  tagline: "Speed up the slow parts. While you record. A free plugin for OBS Studio that switches between real time and timelapse during a recording, so the file is finished when you press Stop. Linux: tested. Windows and macOS: beta."
+  actions:
+    - text: Download
+      link: https://github.com/miguetronic/timelapse-switch/releases/latest
+      icon: download
+    - text: Read the guide
+      link: /timelapse-switch/guide/install/
+      variant: secondary
+      icon: right-arrow
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import poster from '../../assets/demo/demo-poster.png';
+import demo from '../../assets/demo/demo.webm?url';
+import dockPaused from '../../assets/dock/dock-paused-choice-dark.png';
+
+<video class="tsw-demo" src={demo} poster={poster.src} autoplay loop muted playsinline aria-label="A clock recorded with Timelapse Switch: real time, then timelapse x8, then real time again"></video>
+
+## One recording, two speeds
+
+<CardGrid>
+  <Card title="Switch while you record" icon="rocket">
+    Press a key or click the dock: the slow parts go into the file at x2, x4, x8 or x16, the rest at normal speed.
+  </Card>
+  <Card title="Nothing left to edit" icon="approve-check">
+    When you press Stop, the video is finished, with chapters at each change of speed in Hybrid MP4.
+  </Card>
+  <Card title="Your settings, your quality" icon="setting">
+    It records with the encoder and settings of your OBS profile. Pause and resume in either mode.
+  </Card>
+  <Card title="Open source" icon="open-book">
+    GPL-2.0-or-later, built in the open with strict, machine-checked coding rules.
+  </Card>
+</CardGrid>
+
+## How it works
+
+Think of a tape recorder with a fast-forward pedal: while you hold the pedal, the tape records only 1 of every 4 moments, so that part plays 4 times faster. OBS encoders count frames instead of looking at the clock, so a section with fewer frames simply plays faster. In timelapse the sound is silent, so sped-up audio never squeaks.
+
+<Image src={dockPaused} alt="The dock while paused: the speed buttons choose how to resume" width={300} />
+
+## Download
+
+| System | Status |
+|---|---|
+| Linux (x86_64) | Tested on the maintainer's computer; the Ubuntu `.deb` is new in 1.0.0 |
+| Windows 10 and 11 (x64) | Beta: built on every release, not tested yet |
+| macOS 12 or later | Beta: built on every release, not tested yet |
+
+<p class="tsw-beta">Windows and macOS builds are published so you can try them; please <a href="https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml">tell us how they work</a>. Needs OBS Studio 31.1 or later.</p>
+
+<CardGrid>
+  <LinkCard title="Install and uninstall" href="/timelapse-switch/guide/install/" description="Cleanly, on each system." />
+  <LinkCard title="Support the project" href="/timelapse-switch/support/" description="Sponsor it, or fund a piece of work." />
+</CardGrid>

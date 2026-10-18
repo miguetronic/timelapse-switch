@@ -1,0 +1,112 @@
+name: Release Please
+run-name: Release check after ${{ github.ref_name }} push
+# Keeps one release pull request open (docs/releasing.md). When it is merged, release-please creates
+# the tag and a DRAFT release; this workflow then builds the plugin itself (a tag created with the
+# default token does not start push.yaml) and attaches every file. The maintainer checks the draft and
+# publishes it, so "latest release" never shows a release without its files.
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  release-please:
+    name: Release Pull Request 📝
+    runs-on: ubuntu-24.04
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Release Please 📝
+        id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build-project:
+    name: Build Project 🧱
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    uses: ./.github/workflows/build-project.yaml
+    with:
+      release: true
+    secrets: inherit
+    permissions:
+      contents: read
+
+  release-assets:
+    name: Release Files 📦
+    needs: [release-please, build-project]
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.release-please.outputs.tag }}
+    steps:
+      - name: Check Out 🛒
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+
+      - name: Download Build Artifacts 📥
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect, Checksums and SBOM 🪪
+        run: |
+          : Collect, Checksums and SBOM 🪪
+          shopt -s extglob nullglob
+          mkdir release
+          for file in artifacts/*/@(*.zip|*.pkg|*.deb|*.ddeb|*.tar.xz); do
+            mv "${file}" release/
+          done
+          # Every system must be there: a release without one of them is not published.
+          for kind in zip pkg deb; do
+            files=(release/*."${kind}")
+            if ((${#files[@]} == 0)); then
+              echo "::error::no .${kind} package was built"
+              exit 1
+            fi
+          done
+          tools/make-sbom.sh "release/timelapse-switch-${TAG}.cdx.json"
+          (cd release && sha256sum -- * > CHECKSUMS.txt)
+          cat release/CHECKSUMS.txt
+
+      - name: Attach Files and Notes 🛫
+        run: |
+          : Attach Files and Notes 🛫
+          gh release view "${TAG}" --json body --jq .body > changes.md
+          # Run again, the notes already start with the downloads: keep only the changes.
+          if grep -q '^## Changes' changes.md; then
+            sed -i '1,/^## Changes/d' changes.md
+            sed -i '/^## Checksums/,$d' changes.md
+          fi
+          {
+            echo '## Downloads'
+            echo
+            echo '- **Linux (x86_64):** tested.'
+            echo '- **Windows and macOS:** beta, built but not tested yet.' \
+              'Please tell us how it works:' \
+              'https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml'
+            echo
+            echo 'Install guide: https://miguetronic.github.io/timelapse-switch/guide/install/'
+            echo
+            echo '## Changes'
+            echo
+            cat changes.md
+            echo
+            echo '## Checksums (SHA-256)'
+            echo
+            echo '```'
+            cat release/CHECKSUMS.txt
+            echo '```'
+          } > notes.md
+          gh release upload "${TAG}" release/* --clobber
+          gh release edit "${TAG}" --notes-file notes.md

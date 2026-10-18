@@ -1,9 +1,11 @@
 # Development tools, pinned. clang-format and gersemi: the exact versions used by the OBS CI
 # (obsproject/homebrew-tools). ShellCheck and shfmt: shell scripts, Google Shell Style Guide.
 # websocket-client: the integration tests drive OBS through obs-websocket.
+# actionlint-py: checks the GitHub Actions workflows.
 # Install once:  python3 -m venv .venv && .venv/bin/pip install -r tools/requirements-dev.txt
 clang-format==19.1.1
 gersemi==0.21.0
 shellcheck-py==0.11.0.1
 shfmt-py==4.2.0
 websocket-client==1.9.2
+actionlint-py==1.7.12.25

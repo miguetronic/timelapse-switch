@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 224">
+  <title>Timelapse Switch</title>
+  <g id="icon">
+    <path fill="#D2603A" d="M28 52L148 52L196 28L244 76L292 52L484 52L484 172L292 172L244 196L196 148L148 172L28 172Z"/>
+    <path fill="#8A442C" d="M148 52L196 28L196 148L148 172ZM244 76L292 52L292 172L244 196Z"/>
+  </g>
+</svg>

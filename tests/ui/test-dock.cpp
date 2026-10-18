@@ -44,6 +44,7 @@
 
 #include <QAbstractButton>
 #include <QApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFontInfo>
@@ -54,6 +55,7 @@
 #include <QRegularExpression>
 #include <QScreen>
 #include <QToolButton>
+#include <QUrl>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <cmath>
@@ -866,8 +868,45 @@ void checkQuickPauses(const QString &locale)
 	delete area;
 }
 
+/* Catches the links the dock opens, instead of opening a browser. */
+class UrlCatcher : public QObject {
+	Q_OBJECT
+public:
+	QUrl last;
+public slots:
+	void open(const QUrl &url) { last = url; }
+};
+
+/* Break caught: "Learn more" opening another code's page (any code without texts of its own fell back to
+ * TSW-E901's), or an address the website does not have (it builds them in lowercase, with a slash). */
+void checkLearnMore(const QString &locale)
+{
+	UrlCatcher catcher;
+	QDesktopServices::setUrlHandler("https", &catcher, "open");
+	for (const uint32_t code : {3u, 103u, 901u}) {
+		auto *dock = new TswDock(lookup);
+		dock->showView(viewOf(Case{"error", status(TSW_PHASE_IDLE, 1, 1, code), false}));
+		auto *learnMore = dock->findChild<QAbstractButton *>("tswLearnMore");
+		const QString expected = QString("https://miguetronic.github.io/timelapse-switch/errors/tsw-e%1/")
+						 .arg(code, 3, 10, QChar('0'));
+		catcher.last = QUrl();
+		if (learnMore == nullptr)
+			fail(locale + ": no Learn more link on the error card");
+		else
+			learnMore->click();
+		if (learnMore != nullptr && catcher.last.toString() != expected)
+			fail(QString("%1: Learn more for %2 opens %3, expected %4")
+				     .arg(locale)
+				     .arg(code)
+				     .arg(catcher.last.toString(), expected));
+		delete dock;
+	}
+	QDesktopServices::unsetUrlHandler("https");
+}
+
 void checkLocale(const QString &locale, const QString &pictures)
 {
+	checkLearnMore(locale);
 	checkResize(locale);
 	checkThemeHooks();
 	checkReduceMotion();
@@ -1290,3 +1329,5 @@ int main(int argc, char **argv)
 		    qPrintable(pictures));
 	return failures;
 }
+
+#include "test-dock.moc"

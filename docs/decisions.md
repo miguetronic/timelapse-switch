@@ -149,16 +149,18 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
 
 ## ADR-010. User documentation site on GitHub Pages
 
-*Date: 2026-10-16. Status: accepted; the site is published together with version 1.0.0.*
+*Date: 2026-10-16. Status: accepted; amended on 2026-10-18 (English only, lowercase error addresses); the site is published together with version 1.0.0.*
 
 **Context.** Every error message in the dock has a "Learn more" link (`docs/design/ux-spec.md`, UX-085), and users need an install and usage guide in English and Spanish. Those links are built into the plugin, so their address must never change.
 
-**Decision.** The user documentation lives at `https://miguetronic.github.io/timelapse-switch/`, served by GitHub Pages. Error pages follow the pattern `https://miguetronic.github.io/timelapse-switch/errors/TSW-Exxx`. No cookies, no analytics.
+**Decision.** The user documentation lives at `https://miguetronic.github.io/timelapse-switch/`, served by GitHub Pages. Error pages follow the pattern `https://miguetronic.github.io/timelapse-switch/errors/tsw-exxx/` (lowercase, with a final slash, as Astro builds them; amended on 2026-10-18 before any release, together with the plugin's link). No cookies, no analytics.
 
-The site is built with **Astro** and its documentation theme **Starlight** (amended on 2026-10-16), and GitHub Actions publishes it to GitHub Pages with Astro's official action. Pages are written in Markdown; Astro turns them into static HTML and CSS. Visitors get almost no JavaScript: only the search box, the light and dark switch, and small interactive "islands" where a page needs one (for example a demo of the dock), never a framework running the whole page. Starlight brings what a documentation site needs: English and Spanish, search that runs in the browser with no outside service (Pagefind), accessible navigation, and light and dark themes.
+**The site is in English only** (amended on 2026-10-18, the maintainer's decision): one language keeps every page right and up to date; the plugin itself stays in English and Spanish.
+
+The site is built with **Astro** and its documentation theme **Starlight** (amended on 2026-10-16), and GitHub Actions publishes it to GitHub Pages with Astro's official action. Pages are written in Markdown; Astro turns them into static HTML and CSS. Visitors get almost no JavaScript: only the search box, the light and dark switch, and small interactive "islands" where a page needs one (for example a demo of the dock), never a framework running the whole page. Starlight brings what a documentation site needs: search that runs in the browser with no outside service (Pagefind), accessible navigation, and light and dark themes.
 
 ```
-  Markdown pages (English, Spanish)                                   GitHub Pages
+  Markdown pages (English)                                            GitHub Pages
   + Starlight theme   --> Astro (GitHub Actions) --> static HTML, CSS --> visitors
   + islands (demo)                                   and a little JS
 ```
@@ -174,7 +176,7 @@ The site is built with **Astro** and its documentation theme **Starlight** (amen
 **Consequences.**
 - The site is published with 1.0.0, when there is a working plugin and a real demo to show.
 - Building it needs Node.js and npm packages. They run only in GitHub Actions and on the maintainer's machine, never reach visitors and are not part of the plugin, so they do not enter its SBOM. They are pinned with a lock file and watched by Dependabot.
-- By default Astro turns file names into lowercase addresses. The error pages must keep the exact pattern above (or the plugin's link changes before 1.0.0), and a check opens every error link the plugin builds, in both languages.
+- Astro builds lowercase addresses, so the plugin's link was changed to match before 1.0.0 (`src/ui/dock.cpp`, `ERROR_PAGE`). `tools/check-site.sh` checks that every code the plugin uses or the UX spec lists has its page, and the dock's UI test checks the address "Learn more" opens.
 
 ---
 

@@ -1,0 +1,29 @@
+name: Something does not work
+description: The plugin does something wrong, or does not do what the guide says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for reporting it. The OBS log is what makes a problem possible to fix, so please attach it.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. An error code (TSW-Exxx) from the dock helps.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Timelapse Switch, OBS Studio and your operating system.
+      placeholder: Timelapse Switch 1.0.0, OBS 32.2.2, Ubuntu 24.04
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: OBS log
+      description: In OBS, Help > Log Files > Upload Current Log File, then paste the link here. Or attach the file.
+    validations:
+      required: true

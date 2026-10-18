@@ -17,12 +17,17 @@
 !LICENSE
 !README.md
 !CONTRIBUTING.md
+!CODE_OF_CONDUCT.md
+!release-please-config.json
+!.release-please-manifest.json
+!version.txt
 !CHANGELOG.md
 !SECURITY.md
 !.gitattributes
 !/docs
 !/tests
 !/tools
+!/site
 
 # Exclude lock files
 *.lock.json
@@ -35,3 +40,8 @@
 
 # Exclude Python caches
 __pycache__/
+
+# The website: packages and build output (tools/check-site.sh makes them)
+/site/node_modules
+/site/dist
+/site/.astro

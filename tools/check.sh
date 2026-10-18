@@ -18,8 +18,12 @@
 #   4. clang-tidy      static analyzer #1                           (P10-10)
 #   5. GCC analyzer    static analyzer #2, gcc -fanalyzer           (P10-10)
 #   6. Shell scripts   ShellCheck, shfmt and line length (Google style)
+#   6b. Workflows      actionlint on .github/workflows
 #   7. Project rules   checks no tool covers: P10-1, P10-8, B1, no dashes,
 #                      commit messages, version format
+#   8. Website         tools/check-site.sh, where npm is installed
+#   9. Private words   the maintainer's private list, over the repository
+#                      and the built website (skipped where there is none)
 
 set -u
 
@@ -207,6 +211,46 @@ check_shell() {
   fi
 }
 
+#######################################
+# Step 6b: the GitHub Actions workflows, with actionlint (it also runs
+# ShellCheck on their shell steps).
+#######################################
+check_workflows() {
+  step '6b. GitHub Actions workflows (actionlint)'
+  if [[ ! -x "${VENV_BIN}/actionlint" ]]; then
+    err 'actionlint missing. Install it once with:'
+    err '  .venv/bin/pip install -r tools/requirements-dev.txt'
+    record 'workflows (tool not installed)' 1
+    return
+  fi
+  PATH="${PWD}/${VENV_BIN}:${PATH}" "${VENV_BIN}/actionlint"
+  record 'workflows: actionlint (zero findings)' "$?"
+}
+
+#######################################
+# Step 8: the website (tools/check-site.sh), where Node.js is installed.
+#######################################
+check_site() {
+  step '8. Website (Astro + Starlight)'
+  if ! command -v npm >/dev/null; then
+    echo 'npm not installed: website not checked'
+    record 'website (npm not installed: skipped)' 0
+    return
+  fi
+  tools/check-site.sh
+  record 'website: builds, links work, a page per message' "$?"
+}
+
+#######################################
+# Step 9: words that must never be published, in the repository's files,
+# its commit messages and the built website (tools/check-private-words.sh).
+#######################################
+check_private_words() {
+  step '9. Private words'
+  tools/check-private-words.sh
+  record 'private words: none in files, commit messages or the website' "$?"
+}
+
 # Step 7a: rules from docs/coding-rules.md that no tool checks.
 check_code_rules() {
   local -a code
@@ -291,11 +335,14 @@ main() {
   check_clang_tidy
   check_analyzer
   check_shell
+  check_workflows
   step '7. Project rules'
   check_code_rules
   check_text_rules
   check_commits
   check_version
+  check_site
+  check_private_words
   printf '\n%sSummary%s\n' "${BOLD}" "${RESET}"
   printf '  %s\n' "${summary[@]}"
   exit "${failed}"

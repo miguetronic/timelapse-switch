@@ -1,8 +1,8 @@
 # Install and uninstall
 
-How to put Timelapse Switch into OBS Studio and how to take it out again, cleanly. The plugin lives in **one folder of its own**: installing it adds that folder, uninstalling removes it. Nothing of OBS itself, of other plugins or of your system is changed.
+How to put Timelapse Switch into OBS Studio from a build, and how to take it out again, cleanly.
 
-> **Status:** until the first release there are no installers yet. Today you install it from a build on Linux (section 3). The installers for Windows, macOS and Linux arrive with version 1.0; how they will work is in `docs/design/ux-spec.md`, section 5.
+> **Installing a release?** The packages of each release (Windows `.zip`, macOS `.pkg`, Ubuntu `.deb`) are explained, system by system, in the website's guide: https://miguetronic.github.io/timelapse-switch/guide/install/. This page is about the install tool for builds (`tools/dev-install.sh`), which puts the plugin in **one folder of its own** in your user account: installing adds that folder, uninstalling removes it, and nothing of OBS itself, of other plugins or of your system is changed.
 
 ## 1. Where it lives
 
@@ -74,9 +74,11 @@ The tool removes only those two folders, and checks the exact path before it rem
 
 ## 5. What it never does
 
-- It never writes into OBS's own folders (`/usr/lib/obs-plugins`, `/usr/share/obs`) or anywhere else in the system.
-- It never changes OBS's settings, scenes, profiles or other plugins. The plugin reads your profile's recording settings, and never writes them (REQ-010).
-- It never sends anything over the network.
+The install tool, and the plugin itself:
+
+- The tool never writes into OBS's own folders (`/usr/lib/obs-plugins`, `/usr/share/obs`) or anywhere else in the system.
+- The plugin never changes OBS's settings, scenes, profiles or other plugins. The plugin reads your profile's recording settings, and never writes them (REQ-010).
+- The plugin never sends anything over the network.
 
 ## 6. For contributors: how this is checked
 

@@ -50,7 +50,8 @@ const double MAIN_ROWS =
 	2.75; /* x L: the main button's height, above UX-107's 2.5: an easy target with paint on the hands */
 const double CONTROL_ROWS = 1.8; /* x L: Stop and the rails */
 const double SMALL_ROWS = 1.6;   /* x L: card pills and the dismiss button */
-const char ERROR_PAGE[] = "https://miguetronic.github.io/timelapse-switch/errors/TSW-E%1"; /* ADR-010 */
+/* The website builds its addresses in lowercase, with a final slash (ADR-010). */
+const char ERROR_PAGE[] = "https://miguetronic.github.io/timelapse-switch/errors/tsw-e%1/";
 const char ARROW[] = " \u2192 ";
 
 QString threeDigits(uint32_t code)
@@ -455,7 +456,7 @@ void TswDock::connectInputs()
 		[this]() { QDesktopServices::openUrl(QUrl::fromLocalFile(path)); });
 	connect(copyDetails, &QAbstractButton::clicked, this, [this]() { copyErrorDetails(); });
 	connect(learnMore, &QAbstractButton::clicked, this,
-		[this]() { QDesktopServices::openUrl(QUrl(QString(ERROR_PAGE).arg(threeDigits(view.error_texts)))); });
+		[this]() { QDesktopServices::openUrl(QUrl(QString(ERROR_PAGE).arg(threeDigits(view.error_code)))); });
 	connect(details, &TswDetails::openChanged, this, [this](bool open) {
 		updateGaps();
 		emit detailsOpenChanged(open);

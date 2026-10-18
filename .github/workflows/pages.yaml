@@ -1,0 +1,45 @@
+name: Website
+run-name: Website after ${{ github.ref_name }} push
+# Builds site/ (Astro + Starlight, ADR-010) and publishes it to GitHub Pages:
+# https://miguetronic.github.io/timelapse-switch/
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yaml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    name: Build Website 🧱
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check Out 🛒
+        uses: actions/checkout@v7
+
+      - name: Build with Astro 🚀
+        uses: withastro/action@v6
+        with:
+          path: site
+          node-version: 22
+          package-manager: npm
+
+  deploy:
+    name: Publish Website 🌐
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages 🌐
+        id: deployment
+        uses: actions/deploy-pages@v5

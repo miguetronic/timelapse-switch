@@ -95,6 +95,9 @@ def connect(port: int, wait_s: float) -> Obs:
 
 
 # Pause and resume in real time, then in timelapse x4; then back to real time.
+# The demo (tools/make-demo.sh): 5 s in real time, 32 s at x8, 7 s in real time again.
+DEMO = [(5, "Speed8"), (37, "RealTime")]
+DEMO_LENGTH = 44
 PAUSES = [(8, "Pause"), (14, "Pause"), (20, "Speed4"), (26, "Pause"), (31, "Pause"), (36, "RealTime")]
 
 
@@ -116,6 +119,8 @@ def scenario(name: str) -> tuple[list, float]:
         return PAUSES, 42
     if name == "pauses":
         return quick_pauses()
+    if name == "demo":
+        return DEMO, DEMO_LENGTH
     passes = 1 if name == "standard" else 3
     schedule = [(t + p * STANDARD_LENGTH, key) for p in range(passes) for t, key in STANDARD]
     length_s = passes * STANDARD_LENGTH
@@ -138,7 +143,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--log", required=True, help="OBS log file of this run")
-    parser.add_argument("--scenario", choices=("standard", "long", "real", "pause", "pauses"),
+    parser.add_argument("--scenario", choices=("standard", "long", "real", "pause", "pauses", "demo"),
                         default="standard")
     args = parser.parse_args()
 
