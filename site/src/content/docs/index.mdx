@@ -1,13 +1,14 @@
 ---
-title: Timelapse Switch
-description: Switch between real time and timelapse while you record in OBS Studio. When you press Stop, the file is already finished.
+title: Timelapse plugin for OBS Studio
+description: A free OBS Studio plugin to switch between real time and timelapse while you record. When you press Stop, the file is already finished, with no editing.
 template: splash
 hero:
+  title: Timelapse Switch
   image:
     dark: ../../assets/dock/hero-dock-dark.png
     light: ../../assets/dock/hero-dock-light.png
     alt: The Timelapse Switch dock in OBS, recording in timelapse x4
-  tagline: "Speed up the slow parts. While you record. A free plugin for OBS Studio that switches between real time and timelapse during a recording, so the file is finished when you press Stop. Linux: tested. Windows and macOS: beta."
+  tagline: "Speed up the slow parts of your OBS Studio recordings. While you record. A free plugin for OBS Studio that switches between real time and timelapse during a recording, so the file is finished when you press Stop. Linux: tested. Windows and macOS: beta."
   actions:
     - text: Download
       link: https://github.com/miguetronic/timelapse-switch/releases/latest
@@ -24,7 +25,7 @@ import poster from '../../assets/demo/demo-poster.png';
 import demo from '../../assets/demo/demo.webm?url';
 import dockPaused from '../../assets/dock/dock-paused-choice-dark.png';
 
-<video class="tsw-demo" src={demo} poster={poster.src} autoplay loop muted playsinline aria-label="A clock recorded with Timelapse Switch: real time, then timelapse x8, then real time again"></video>
+<video class="tsw-demo" src={demo} poster={poster.src} autoplay loop muted playsinline aria-label="OBS Studio with the Timelapse Switch dock: one click switches the recording of a clock from real time to timelapse x8 and back, and after Stop the file is ready"></video>
 
 ## One recording, two speeds
 
@@ -61,5 +62,6 @@ Think of a tape recorder with a fast-forward pedal: while you hold the pedal, th
 
 <CardGrid>
   <LinkCard title="Install and uninstall" href="/timelapse-switch/guide/install/" description="Cleanly, on each system." />
+  <LinkCard title="Timelapse in OBS: three ways" href="/timelapse-switch/guide/timelapse-in-obs/" description="Lower the frame rate, edit later, or switch while you record." />
   <LinkCard title="Support the project" href="/timelapse-switch/support/" description="Leave a tip, or fund a piece of work." />
 </CardGrid>

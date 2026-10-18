@@ -24,7 +24,7 @@ export default defineConfig({
         { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
       ],
       sidebar: [
-        { label: 'Start here', items: ['guide/install', 'guide/first-steps'] },
+        { label: 'Start here', items: ['guide/install', 'guide/first-steps', 'guide/timelapse-in-obs'] },
         { label: 'Using it', items: ['guide/hotkeys', 'guide/pause', 'guide/performance', 'guide/faq'] },
         { label: 'Messages', items: ['errors'] },
         { label: 'Project', items: ['support', 'about'] },

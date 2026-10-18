@@ -1,11 +1,11 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
-    <img src="docs/images/logo.svg" alt="Timelapse Switch" width="420">
+    <img src="docs/images/logo.svg" alt="Timelapse Switch" width="440">
   </picture>
 </p>
 
-<p align="center"><strong>Speed up the slow parts. While you record.</strong></p>
+<p align="center"><strong>Speed up the slow parts of your OBS Studio recordings. While you record.</strong></p>
 
 <p align="center">
   <a href="https://github.com/miguetronic/timelapse-switch/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/miguetronic/timelapse-switch"></a>
@@ -20,10 +20,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/demo.gif" alt="A clock recorded with Timelapse Switch: real time, then timelapse x8, then real time again" width="720">
+  <img src="docs/images/demo.gif" alt="OBS Studio with the Timelapse Switch dock: one click switches the recording of a clock from real time to timelapse x8 and back, and after Stop the file is ready" width="820">
 </p>
 
-Timelapse Switch is a plugin for OBS Studio that lets you switch between real time and timelapse **during** a recording, without pausing. When you press Stop, the file is already finished: the parts you sped up play at x2, x4, x8 or x16, the rest plays at normal speed, and there is nothing left to edit.
+Timelapse Switch is a free timelapse plugin for OBS Studio: it lets you switch between real time and timelapse **during** a recording, without pausing. When you press Stop, the file is already finished: the parts you sped up play at x2, x4, x8 or x16, the rest plays at normal speed, and there is nothing left to edit.
 
 ## The dock
 
@@ -74,6 +74,10 @@ Anyone whose recordings have long, slow stretches:
 - a developer coding live.
 
 Today you record everything and speed it up later in an editor. With Timelapse Switch, you press a button while recording.
+
+## Why not just lower the frame rate?
+
+It is the usual advice for a timelapse in OBS ([the three ways, compared](https://miguetronic.github.io/timelapse-switch/guide/timelapse-in-obs/)), and it works for a recording that is all timelapse. But OBS cannot change the frame rate in the middle of a recording, so the whole file becomes a timelapse and you still speed it up in an editor afterwards. Timelapse Switch keeps your normal frame rate and decides, frame by frame, which ones go into the file: real time when something happens, timelapse x2, x4, x8 or x16 when it does not, in the same file and with no editing.
 
 ## How it works, in one picture
 
