@@ -2,7 +2,7 @@
 
 How Timelapse Switch is numbered, and how a version goes from `main` to a download on GitHub.
 
-> **Status:** the release automation (release-please) is switched on when the repository is published on GitHub. Until then, nothing is released; commits already follow the format it needs.
+> **Status:** release-please is configured (`release-please-config.json`, `.release-please-manifest.json`, `.github/workflows/release-please.yaml`) and starts working once the repository is on GitHub. The first release is forced to 1.0.0 (see "The first release" below).
 
 ## Version numbers: Semantic Versioning
 
@@ -76,7 +76,20 @@ In one place only: the `version` field of `buildspec.json`, written by release-p
 | File | What it is | How it is made |
 |---|---|---|
 | Installers (`.exe`, `.pkg`, `.deb`, archives) | The plugin for each operating system | CI, from the release tag |
-| `CHECKSUMS.txt` | SHA-256 of every file | CI (from the OBS template) |
-| `timelapse-switch-X.Y.Z.cdx.json` | SBOM, CycloneDX 1.6 | `tools/make-sbom.sh` |
+| `CHECKSUMS.txt` | SHA-256 of every file, also in the release notes | CI |
+| `timelapse-switch-X.Y.Z.cdx.json` | SBOM, CycloneDX 1.6 | `tools/make-sbom.sh`, run by CI |
+
+The release notes start with the support status per system (Linux tested; Windows and macOS beta until they are tested), then the changes, then the checksums.
+
+## Two ways a release is built
+
+- **The usual way, release-please:** merging the release pull request makes release-please create the tag and the release. A tag created with GitHub's default token does not start other workflows, so `release-please.yaml` builds the plugin itself (`build-project.yaml`) and attaches the files, the checksums and the SBOM.
+- **By hand, a tag pushed by a person** (for example a pre-release `1.1.0-beta1`): `push.yaml` builds it and creates a draft release with the same files.
+
+## The first release
+
+1. Push the repository to GitHub with the release-please files in place.
+2. Push one commit with the footer `Release-As: 1.0.0` (for example `chore: release 1.0.0` with that footer); release-please opens the pull request "release 1.0.0".
+3. Review it and merge it: the tag `1.0.0` and the release appear, and the files are attached a few minutes later.
 
 The SBOM can be generated locally at any time with `tools/make-sbom.sh`; the same commit always gives the same file.

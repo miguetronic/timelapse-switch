@@ -207,6 +207,22 @@ check_shell() {
   fi
 }
 
+#######################################
+# Step 6b: the GitHub Actions workflows, with actionlint (it also runs
+# ShellCheck on their shell steps).
+#######################################
+check_workflows() {
+  step '6b. GitHub Actions workflows (actionlint)'
+  if [[ ! -x "${VENV_BIN}/actionlint" ]]; then
+    err 'actionlint missing. Install it once with:'
+    err '  .venv/bin/pip install -r tools/requirements-dev.txt'
+    record 'workflows (tool not installed)' 1
+    return
+  fi
+  PATH="${PWD}/${VENV_BIN}:${PATH}" "${VENV_BIN}/actionlint"
+  record 'workflows: actionlint (zero findings)' "$?"
+}
+
 # Step 7a: rules from docs/coding-rules.md that no tool checks.
 check_code_rules() {
   local -a code
@@ -291,6 +307,7 @@ main() {
   check_clang_tidy
   check_analyzer
   check_shell
+  check_workflows
   step '7. Project rules'
   check_code_rules
   check_text_rules
