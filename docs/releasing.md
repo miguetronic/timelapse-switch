@@ -83,15 +83,15 @@ The release notes start with the support status per system (Linux tested; Window
 
 ## Two ways a release is built
 
-- **The usual way, release-please:** merging the release pull request makes release-please create the tag and a **draft** release. A tag created with GitHub's default token does not start other workflows, so `release-please.yaml` builds the plugin itself (`build-project.yaml`, Release configuration) and attaches the files, the checksums and the SBOM; it refuses to go on if a system's package is missing. The maintainer checks the draft and publishes it, so "latest release" never points at a release without its files.
-- **By hand, a tag pushed by a person** (for example a pre-release `1.1.0-beta1`): `push.yaml` builds it and creates a draft release with the same files.
+- **The usual way, release-please:** merging the release pull request makes release-please create the tag and a **draft** release. A tag created with GitHub's default token does not start other workflows, so `release-please.yaml` builds the plugin itself (`build-project.yaml`, Release configuration), attaches the files, the checksums and the SBOM, and **publishes the release**; it refuses to go on if a system's package is missing. The release is a draft only while its files go up, so "latest release" never points at a release without its files. Merging the pull request is the only decision.
+- **By hand, a tag pushed by a person** (for example a pre-release `1.1.0-beta1`): `push.yaml` builds it, creates the release with the same files as a draft, and publishes it once they are attached.
 
 ## The first release
 
 1. Before the first push, in the repository's settings: **Actions > General**, workflow permissions "Read and write" and "Allow GitHub Actions to create and approve pull requests" (release-please opens its pull request with the default token); **Pages**, source "GitHub Actions". If Pages could not be set before the push, run the "Website" workflow once by hand afterwards.
 2. Push `main` with the release-please files in place.
 3. Push one commit with the footer `Release-As: 1.0.0` (for example `chore: release 1.0.0` with that footer); release-please opens the pull request "release 1.0.0".
-4. Review it and merge it: the tag `1.0.0` and a draft release appear, and the files are attached when the build ends (about half an hour).
-5. Check the draft (three packages, `CHECKSUMS.txt`, the SBOM, the notes) and publish it.
+4. Review it and merge it: the tag `1.0.0` and a draft release appear; when the build ends (about half an hour) the files are attached and the release is published.
+5. Check the published release: three packages, `CHECKSUMS.txt`, the SBOM and the notes.
 
 The SBOM can be generated locally at any time with `tools/make-sbom.sh`; the same commit always gives the same file.

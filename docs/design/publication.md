@@ -59,7 +59,7 @@ In this order, so that every link and workflow works from the first push:
 3. Create the GitHub repository `miguetronic/timelapse-switch`, empty.
 4. In its settings, before the first push: Actions may read and write and may create pull requests (release-please needs both); Discussions on; Pages from GitHub Actions; private vulnerability reporting on.
 5. Review the local commits, then push `main` (or authorize the push). Only `main`: never local backup branches.
-6. Push the commit with the footer `Release-As: 1.0.0`, merge the release pull request, check the draft release and its files, and publish it.
+6. Push the commit with the footer `Release-As: 1.0.0` and merge the release pull request; the release is published by itself once its files are attached (since 18-oct-2026; before, the maintainer published the draft by hand).
 
 ## 7. Kept outside the repository
 

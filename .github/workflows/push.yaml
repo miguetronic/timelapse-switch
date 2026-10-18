@@ -133,3 +133,13 @@ jobs:
             ${{ github.workspace }}/*.ddeb
             ${{ github.workspace }}/*.tar.xz
             ${{ github.workspace }}/*.cdx.json
+
+      - name: Publish Release 📣
+        if: fromJSON(steps.check.outputs.validTag)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.check.outputs.version }}
+        run: |
+          : Publish Release 📣
+          # Created as a draft so it is never public without its files; publish it now.
+          gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false

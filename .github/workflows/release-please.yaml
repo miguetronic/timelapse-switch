@@ -2,8 +2,8 @@ name: Release Please
 run-name: Release check after ${{ github.ref_name }} push
 # Keeps one release pull request open (docs/releasing.md). When it is merged, release-please creates
 # the tag and a DRAFT release; this workflow then builds the plugin itself (a tag created with the
-# default token does not start push.yaml) and attaches every file. The maintainer checks the draft and
-# publishes it, so "latest release" never shows a release without its files.
+# default token does not start push.yaml), attaches every file and publishes the release. It stays a
+# draft only while the files go up, so "latest release" never shows a release without its files.
 on:
   push:
     branches:
@@ -110,3 +110,9 @@ jobs:
           } > notes.md
           gh release upload "${TAG}" release/* --clobber
           gh release edit "${TAG}" --notes-file notes.md
+
+      - name: Publish Release 📣
+        run: |
+          : Publish Release 📣
+          # Only now, with every file attached: the release becomes public and the latest one.
+          gh release edit "${TAG}" --draft=false --latest
