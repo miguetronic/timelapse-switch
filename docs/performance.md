@@ -144,28 +144,34 @@ The scene in this measurement is light (a small video scaled to 4K). That is on 
 
 ## 9. The preview while the plugin records
 
-**What you may notice.** On a busy computer, OBS's preview can look less smooth while the plugin records, even though the recording itself is as smooth as OBS's own.
+**What you may notice.** While the plugin records, OBS's preview can look less smooth than while OBS's own Record button records: small jumps, as if pictures were missing. The recording itself is as smooth as OBS's own, and the rest of the desktop is not affected.
 
-**Why.** OBS draws the preview on its graphics thread, the same thread that, on road B, waits for the frame to come down from the card (step 1) and copies it into OBS's memory feed (step 2), once per frame, before it draws the preview:
+**Why: two causes, one of them solved.**
 
 ```
-  every frame, OBS's graphics thread:
-     draw the scene  ->  (1) wait for the frame in RAM  ->  (2) copy 12.4 MB  ->  draw the preview
-                         \______________ only on road B, 3 to 8 ms in 4K _____________/
+  every frame, on the card and in OBS:
+
+  OBS's Record button    scene -> encoder (on the card)                       -> preview
+  the plugin, road B     scene -> (1) OBS waits and copies 12.4 MB            -> preview
+                                  (2) frame down to RAM, encoder takes it back up
+  the plugin, road C     scene -> (2) frame down to RAM, encoder takes it back up -> preview
 ```
 
-When the computer is busy, steps (1) and (2) take a different time on every frame, so the preview is presented at an uneven pace. The recording is not affected: its frames carry their own times.
+1. **OBS's graphics thread waited (road B), solved by road C.** On road B, OBS waits for each frame to come down from the card and copies it into its memory feed on the thread that then draws the preview: 3 to 8 ms per 4K frame, a different time on every frame. Road C (ADR-012), used by default on Linux, takes the frame from the card itself, off that thread: in a real 4K session with a phone camera, none of its steps took over 2 ms (the longest, 0.94 ms), and the camera's pictures were repeated no more often than with OBS's own Record button (1 in 943).
+2. **The card has more to do (both roads), not solved.** To choose which frames go into the file, the plugin needs each frame in memory, so each frame comes down from the card and the encoder then takes it back up. OBS's own Record button never takes the frame out of the card. On the reference card, recording in 4K30 keeps its 3D engine 18 % busy with the plugin against 4 % with OBS's Record button. When that extra work falls at the moment the preview is shown, the preview arrives late on screen.
 
-Think of a waiter who, on every round, first has to pass 12 MB of dishes through a hatch before serving the table: when the kitchen is crowded, some rounds take longer than others, and the table sees the dishes arrive unevenly. What goes into the fridge, the file, is complete and in order.
+Think of the card as a kitchen and the preview as the dish served to your table. With OBS's Record button every dish is packed without leaving the kitchen. With the plugin every dish also goes out to the plugin's table and the packing station brings it back in: the kitchen is busier, and now and then the dish for your table waits its turn. What goes into the fridge, the file, is complete and in order.
 
-**Measured on the reference PC**, 4K30 with a phone camera source and a virtual machine working at the same time (2026-10-17):
+**Why the plugin cannot avoid it today.** To keep frames on the card, the plugin would have to choose which frames the encoder gets while they are still there. OBS offers plugins no way to do that: for encoders working on the card it only knows a fixed rate divider, set before the recording starts, and its pause (checked in OBS 32.2.2; ADR-003, ADR-012). Section 10 lists the ways it could change.
 
-| Step on OBS's graphics thread, per frame | Median | 99 % below | Worst |
+**Measured on the reference PC** (2026-10-17, 4K30, a phone camera, a virtual machine working at the same time), per frame on OBS's graphics thread:
+
+| | OBS's Record button | road B | road C |
 |---|---|---|---|
-| (1) wait for the frame in RAM (`download_frame`) | 0.12 ms | 0.75 ms | 4.9 ms |
-| (2) copy into OBS's memory feed (`output_video_data`) | 2.7 ms | 5.2 ms | 8.4 ms |
+| median | 0.66 ms | 3.31 ms | 0.80 ms |
+| worst 1 % above | 1.15 ms | 5.29 ms | 1.57 ms |
 
-In the same session, rendering the scene itself took up to 15 ms 1 % of the time. Comparing recordings made one after the other in the same conditions, the plugin's file had 1 repeated picture in 975 moving frames and OBS's own 1 in 700: the same smoothness. The plugin's summary line confirmed that its one repeat already came from OBS.
+(The table comes from the test scene; the real session's numbers are in `docs/test-reports/2026-10-17-road-c.md`.)
 
 **What helps.**
 - Lighten the computer's load (other programs, a virtual machine).
@@ -186,6 +192,8 @@ Perhaps, and only with measurements to show it is worth it:
   | worst 1 % above | 1.15 ms | 5.29 ms | 1.57 ms |
 
   It also used 0.37 CPU cores instead of 0.46, and 71 MB less RAM, all of it given back when the file is saved; it keeps 47 MB more card memory in RAM (GTT), the four slots. Every frame was identical, byte for byte, to road B's, and every integration scenario passes on it. There is nothing to choose: the plugin takes road C wherever it is supported (today Linux, with unscaled NV12, I420 or I444 SDR output) and road B everywhere else, and the log says which road each recording takes.
+- **Road D: frames chosen on the card (not built).** The plugin could hand the kept frames to the card's encoder itself, without taking them out of the card, as OBS's Record button does: no frame down, no frame back up, and the preview as smooth as with OBS's Record button. It means driving each hardware encoder directly (VAAPI on Linux, and one per kind of card on Windows and macOS), a large project; road C stays as the fallback.
+- **A way in OBS for plugins to choose frames on the card (not proposed yet).** If OBS let a plugin skip frames for an encoder that works on the card, road D would not need its own encoders.
 - **A smaller plugin feed.** The plugin's feed is a waiting room with 16 seats between the valve and the encoder. If the encoder stalls for a moment, frames wait there; if all 16 seats are taken, the next frame is lost (nothing crashes, but that picture is missing, and the log says so). 16 is the most OBS allows: about half a second at 30 fps, a quarter of a second at 60 fps. OBS's own memory feed has 6.
 
   Fewer seats would save RAM (12.4 MB per seat in 4K) but leave less room for stalls. So the feed stays at 16, and it is **not a setting**: stability comes first, and the right number depends on encoder stalls that a user cannot see, so a wrong choice would show up later as lost frames, far from its cause. Instead, the plugin writes in its log how many frames, at most, waited:

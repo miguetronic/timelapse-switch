@@ -59,6 +59,8 @@ Measured on the reference PC (2012 Xeon, Radeon RX 580, Linux), recording 4K at 
 | Graphics card power | 16 W | 21 W |
 | Lost frames | 0 | 0 |
 
+- **On Linux the plugin takes each frame from the card itself** (road C, `docs/decisions.md`, ADR-012), off the thread that draws OBS's preview, and skips OBS's memory feed: in the same 4K test, 0.37 cores and about 200 MB of RAM.
+- **The preview.** While the plugin records, the card has more to do (each frame comes down and the encoder takes it back up), so OBS's preview can look less smooth on some computers. The recording and the rest of the desktop are not affected (`docs/performance.md`, section 9).
 - **The cost depends on resolution and frame rate, not on your scene.** OBS draws the scene before the frame reaches either road.
 - **Most of that RAM is given back when the recording stops.** The plugin returns its part (211 MB in 4K). OBS keeps its own 75 MB ready until you close it, as it does after any recording with x264.
 - **With x264** (or another CPU encoder), OBS itself already takes frames out of the card, so the plugin adds less.

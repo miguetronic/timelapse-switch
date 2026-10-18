@@ -34,7 +34,7 @@ Within one frame. If you edit them together, slide one of them by one frame (the
 
 ### Why does OBS's preview look less smooth while Timelapse Switch records?
 
-To choose which frames go into the file, the plugin needs each frame in the computer's memory, and OBS copies it there on the same thread that draws the preview (3 to 8 ms per 4K frame). On a busy computer that copy takes a different time on every frame, so the preview can look uneven. **The recording is not affected**: it is as smooth as OBS's own. If the preview bothers you, lighten the computer's load, or turn the preview off during long recordings (right click on it, untick **Enable Preview**). The details and the measurements are in `docs/performance.md`, section 9.
+To choose which frames go into the file, the plugin needs each frame in the computer's memory: each frame comes down from the graphics card and the encoder takes it back up. OBS's own Record button never takes the frame out of the card. That extra work for the card can make the preview arrive late on screen now and then, so it may look less smooth while the plugin records. **The recording is not affected**: it is as smooth as OBS's own, and so is the rest of your desktop. On Linux the plugin already takes the frames in the lightest way OBS allows (road C); OBS offers no way for a plugin to choose frames without taking them out of the card. If the preview bothers you, lighten the computer's load, or turn the preview off during long recordings (right click on it, untick **Enable Preview**). The details and the measurements are in `docs/performance.md`, section 9.
 
 ### Can I record with OBS's Record button and with Timelapse Switch at the same time?
 

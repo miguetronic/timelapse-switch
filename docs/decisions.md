@@ -62,7 +62,7 @@ Format of each record: **Context** (the problem), **Decision**, **Alternatives**
 - In 4K30, 373 MB/s go from the card to memory and 373 MB/s back, and each kept frame is copied three times in memory. The download is the same OBS already does for every x264 recording.
 - Measured on the reference PC on 2026-10-16, 4K30 for 5 minutes, against OBS's own recording with a GPU encoder: 0.42 CPU cores more; 286 MB more RAM while recording, of which OBS keeps 75 MB (its own memory feed) until it closes; about 130 MB less memory on the card; 5 W more on the card; no lost frames (`docs/performance.md`, `docs/test-reports/2026-10-16-recording-cost.md`).
 - The cost is stated plainly to users, in the README and in `docs/performance.md` (REQ-018).
-- On OBS's graphics thread, steps (1) and (2) take 3 to 8 ms per 4K frame, which on a busy computer makes the preview less smooth while the plugin records (the recording is not affected; measured on 2026-10-17, `docs/performance.md`, section 9). A road that copies the frame off that thread (road C, section 10) is studied as an experiment.
+- On OBS's graphics thread, steps (1) and (2) take 3 to 8 ms per 4K frame, which on a busy computer makes the preview less smooth while the plugin records (the recording is not affected; measured on 2026-10-17, `docs/performance.md`, section 9). Road C (ADR-012) takes the frame off that thread; the card's extra work of the round trip remains.
 - REQ-014 holds with the test scene. If a real scene shows lost frames because of this road, plan B is implemented behind the same dock.
 - On this path each frame keeps its own time, as in OBS's own x264 recordings. OBS's GPU path labels each frame with the time of the one before, so the plugin's picture sits about one frame later than in OBS's own GPU-encoder recordings (measured 2026-10-16; `docs/architecture.md`, "Timing").
 
@@ -210,7 +210,7 @@ Details that keep it robust:
 
 ## ADR-012. Road C: the plugin copies the frame itself, off OBS's graphics thread
 
-*Date: 2026-10-17. Status: experimental, built and measured; on by default on Linux while it is tried in real sessions, with road B (ADR-003) wherever road C is not supported.*
+*Date: 2026-10-17. Status: accepted, on Linux; road B (ADR-003) wherever road C is not supported (other systems until tested there, scaled output, HDR).*
 
 **Context.** On road B (ADR-003), OBS waits for each frame to come down from the card and copies it into its memory feed on its graphics thread, the thread that then draws the preview: 2.8 ms per 4K frame as a median, 5.9 ms for the worst 1 %, up to 13 ms, measured on 2026-10-17 with a phone camera and a busy computer. On a busy computer the preview then looks less smooth while the plugin records (`docs/performance.md`, section 9). The frame is then copied a second time, into the plugin's feed, and in timelapse OBS copies every frame even though most are not kept.
 
@@ -244,3 +244,5 @@ Details that keep it robust:
 - Frames reach the plugin about two frames later than on road B; the file is not affected, because every frame and audio block carries its own time.
 - More card memory: four staging slots and two sets of conversion planes (about 75 MB in 4K NV12; measured with one set: 47 MB more in RAM (GTT) and 13 MB more video memory than road B).
 - The checks before adoption: the unit tests of the slot ring, the verification mode (every frame identical), and every integration scenario (sync, rhythm, pauses, totals, lost frames, leaks) on road C, then the cost measured in 4K like ADR-003.
+- In three real 4K sessions with a phone camera (2026-10-17), the final order left no step of road C over 2 ms (longest 0.94 ms) and the camera's pictures repeated no more than with OBS's own Record button (1 in 943), yet the maintainer still saw OBS's preview less smooth while the plugin recorded, and only then; the rest of the desktop stayed smooth. What remains is the card's extra work of the round trip, common to roads B and C (3D engine 18 % busy against 4 % with OBS's Record button): accepted and documented (`docs/performance.md`, section 9). Removing it needs frames chosen on the card (road D in `docs/performance.md`, section 10), which OBS does not offer plugins today.
+
