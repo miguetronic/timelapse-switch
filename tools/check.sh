@@ -124,8 +124,11 @@ check_format() {
   PATH="${PWD}/${VENV_BIN}:${PATH}" ./build-aux/run-clang-format \
     --fail-error --check "${c_files[@]}"
   record 'format: C and C++ (clang-format)' "$?"
+  # Same files as the CI (check-format.yaml): every CMake file, tests/ too.
+  local -a cmake_files
+  mapfile -t cmake_files < <(project_files '*.cmake' '*CMakeLists.txt')
   PATH="${PWD}/${VENV_BIN}:${PATH}" ./build-aux/run-gersemi \
-    --fail-error --check
+    --fail-error --check "${cmake_files[@]}"
   record 'format: CMake (gersemi)' "$?"
 }
 
