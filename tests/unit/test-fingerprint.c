@@ -57,11 +57,52 @@ static void missing_plane_gives_zero(void)
 	TSW_EXPECT_EQ(tsw_fingerprint(plane, LINESIZE, 0, HEIGHT), 0);
 }
 
+enum { ODD_ROW = 61 }; /* bytes per row that are not a multiple of 8: the hash's last, shorter step */
+
+/* Break caught: road C's verification (ADR-012) reporting two identical frames as different because
+ * their lines are laid out with different padding. */
+static void whole_hash_ignores_padding(void)
+{
+	static uint8_t narrow[ODD_ROW * HEIGHT];
+	fill(5);
+	for (size_t y = 0; y < HEIGHT; y++)
+		for (size_t x = 0; x < ODD_ROW; x++)
+			narrow[y * ODD_ROW + x] = plane[y * LINESIZE + x];
+	const uint64_t padded = tsw_plane_hash(TSW_HASH_START, plane, LINESIZE, ODD_ROW, HEIGHT);
+	TSW_EXPECT_EQ(tsw_plane_hash(TSW_HASH_START, narrow, ODD_ROW, ODD_ROW, HEIGHT), padded);
+}
+
+/* Break caught: road C's verification missing a difference in a single byte, wherever it is: the first,
+ * the last one of a row (in the shorter step), or the very last of the plane. */
+static void whole_hash_sees_one_byte(void)
+{
+	const size_t places[3] = {0, 2 * LINESIZE + ODD_ROW - 1, (HEIGHT - 1) * LINESIZE + ODD_ROW - 1};
+	fill(5);
+	const uint64_t first = tsw_plane_hash(TSW_HASH_START, plane, LINESIZE, ODD_ROW, HEIGHT);
+	for (size_t i = 0; i < 3; i++) {
+		plane[places[i]] ^= 1;
+		TSW_EXPECT_TRUE(tsw_plane_hash(TSW_HASH_START, plane, LINESIZE, ODD_ROW, HEIGHT) != first);
+		plane[places[i]] ^= 1;
+	}
+	TSW_EXPECT_EQ(tsw_plane_hash(TSW_HASH_START, plane, LINESIZE, ODD_ROW, HEIGHT), first);
+}
+
+/* Break caught: the same bytes in another plane giving the same hash (planes swapped unnoticed). */
+static void whole_hash_depends_on_what_came_before(void)
+{
+	fill(5);
+	const uint64_t once = tsw_plane_hash(TSW_HASH_START, plane, LINESIZE, WIDTH, HEIGHT);
+	TSW_EXPECT_TRUE(tsw_plane_hash(once, plane, LINESIZE, WIDTH, HEIGHT) != once);
+}
+
 int main(void)
 {
 	same_picture_same_fingerprint();
 	a_small_change_changes_the_fingerprint();
 	padding_is_never_read();
 	missing_plane_gives_zero();
+	whole_hash_ignores_padding();
+	whole_hash_sees_one_byte();
+	whole_hash_depends_on_what_came_before();
 	return tsw_test_failures;
 }

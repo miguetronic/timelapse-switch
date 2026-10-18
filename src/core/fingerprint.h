@@ -28,6 +28,18 @@ extern "C" {
  */
 uint64_t tsw_fingerprint(const uint8_t *plane, size_t linesize, size_t width, size_t height);
 
+/* Where a chain of tsw_plane_hash calls starts. */
+#define TSW_HASH_START 14695981039346656037ULL
+
+/*
+ * tsw_plane_hash: a hash of every byte of a plane, for road C's verification (ADR-012): two frames are
+ * identical only if their hashes are. Reads 8 bytes per step, so a 4K frame takes about 1 ms.
+ *   hash       TSW_HASH_START, or the hash of the planes before, to chain the planes of one frame.
+ *   linesize   bytes from one row to the next.  row_bytes  bytes of picture in each row (no padding).
+ * Returns the new hash; hash unchanged if plane is NULL. Thread: any.
+ */
+uint64_t tsw_plane_hash(uint64_t hash, const uint8_t *plane, size_t linesize, size_t row_bytes, size_t rows);
+
 #ifdef __cplusplus
 }
 #endif

@@ -46,3 +46,13 @@ add_executable(test-fingerprint test-fingerprint.c test-main.c)
 target_link_libraries(test-fingerprint PRIVATE tsw-core)
 tsw_strict_warnings(test-fingerprint)
 add_test(NAME fingerprint COMMAND test-fingerprint)
+
+add_executable(test-stage-ring test-stage-ring.c test-main.c)
+target_link_libraries(test-stage-ring PRIVATE tsw-core)
+tsw_strict_warnings(test-stage-ring)
+add_test(NAME stage-ring COMMAND test-stage-ring)
+
+add_executable(test-road-compare test-road-compare.c test-main.c)
+target_link_libraries(test-road-compare PRIVATE tsw-core)
+tsw_strict_warnings(test-road-compare)
+add_test(NAME road-compare COMMAND test-road-compare)

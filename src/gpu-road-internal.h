@@ -1,0 +1,84 @@
+/*
+ * Timelapse Switch
+ * SPDX-FileCopyrightText: 2026 Miguel Parra (Miguetronic)
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
+/*
+ * gpu-road-internal.h: what gpu-road.c and gpu-road-rt.c share. No other module includes it.
+ */
+
+#pragma once
+
+#include <graphics/graphics.h>
+#include <graphics/vec4.h>
+#include <util/threading.h>
+
+#include "core/stage-ring.h"
+#include "gpu-road.h"
+
+enum {
+	TSW_GPU_PLANES = 3,     /* at most: Y, U and V */
+	TSW_GPU_PLANE_SETS = 2, /* the frame being copied down and the next one, converted meanwhile */
+};
+
+/* A step of ours on the graphics thread longer than this is counted (diagnostics): 2 ms. */
+#define TSW_GPU_SLOW_STEP_NS 2000000ULL
+
+/* One plane of the output format, as OBS's own conversion writes it (libobs/obs.c). */
+struct tsw_gpu_plane {
+	const char *technique; /* in OBS's format_conversion.effect */
+	uint32_t width;
+	uint32_t height;
+	enum gs_color_format format;
+};
+
+struct tsw_gpu_road {
+	/* Fixed from create to destroy. */
+	size_t planes;
+	struct tsw_gpu_plane plane[TSW_GPU_PLANES];
+	uint32_t width; /* of the main texture, which is also the output */
+	uint32_t height;
+	uint64_t interval_ns;
+	struct vec4 color_vec[3]; /* OBS's color matrix rows, in the order OBS hands them to the shader */
+	float width_i;            /* parameters of OBS's conversion for this format */
+	float height_i;
+	tsw_gpu_road_receive receive;
+	void *param;
+
+	/* Graphics thread only (UI thread while not registered). */
+	gs_effect_t *effect; /* OBS's own, cached by OBS: never destroyed here */
+	gs_eparam_t *image, *color_vec0, *color_vec1, *color_vec2, *width_i_param, *height_i_param;
+	gs_eparam_t *sdr_white_nits_over_maximum, *hdr_lw;
+	/* The converted frame, one texture per plane, in two sets used in turn: the card may still be copying
+	 * one frame down when the next is converted, and must never find it half overwritten. */
+	gs_texture_t *texture[TSW_GPU_PLANE_SETS][TSW_GPU_PLANES];
+	gs_stagesurf_t *surface[TSW_STAGE_SLOTS][TSW_GPU_PLANES]; /* staging slots, one per plane */
+	volatile long staged;                                     /* frames staged so far */
+	size_t next_set;               /* the set of planes the next frame is converted into */
+	size_t waiting;                /* slot of the frame staged one frame ago, handed over at the next frame */
+	volatile long slow_steps;      /* steps of ours longer than TSW_GPU_SLOW_STEP_NS */
+	volatile long longest_step_us; /* the longest step of ours, in microseconds */
+
+	/* Written by the graphics thread before a slot is published, read by the copier after. */
+	uint8_t *data[TSW_STAGE_SLOTS][TSW_GPU_PLANES];
+	uint32_t linesize[TSW_STAGE_SLOTS][TSW_GPU_PLANES];
+
+	struct tsw_stage_ring ring; /* graphics thread to copier thread */
+
+	/* The copier thread. */
+	pthread_t copier;
+	bool copier_started;
+	os_sem_t *wake;     /* posted when a slot is handed over, and to stop */
+	volatile bool quit; /* the copier ends at its next wake */
+	bool registered;    /* the rendered callback is registered: UI thread only */
+};
+
+/* How many planes to walk: the format's, never more than the arrays hold. */
+static inline size_t tsw_gpu_road_planes(const struct tsw_gpu_road *road)
+{
+	return road->planes < TSW_GPU_PLANES ? road->planes : TSW_GPU_PLANES;
+}
+
+/* The rendered callback (gpu-road-rt.c): OBS calls it on its graphics thread after each canvas is rendered. */
+void tsw_gpu_road_rendered(void *param);

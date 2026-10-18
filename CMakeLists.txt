@@ -38,7 +38,17 @@ endif()
 
 target_sources(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE src/controller.c src/fault.c src/plugin-main.c src/recorder.c src/recorder-rt.c src/ui/dock-obs.cpp
+  PRIVATE
+    src/controller.c
+    src/fault.c
+    src/gpu-road.c
+    src/gpu-road-rt.c
+    src/plugin-main.c
+    src/recorder.c
+    src/recorder-rt.c
+    src/road-check.c
+    src/road-check-rt.c
+    src/ui/dock-obs.cpp
 )
 
 # Power of Ten, rule 10 (docs/coding-rules.md): our own code builds with pedantic warnings and zero tolerance.
@@ -80,7 +90,9 @@ add_library(
   src/core/fingerprint.c
   src/core/gate.c
   src/core/health.c
+  src/core/road-compare.c
   src/core/session.c
+  src/core/stage-ring.c
   src/core/timeline.c
 )
 target_include_directories(tsw-core PUBLIC src)

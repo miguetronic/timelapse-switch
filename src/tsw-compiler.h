@@ -30,3 +30,11 @@
 #define TSW_NODISCARD
 
 #endif
+
+/* Justification: road C (ADR-012) is tested on Linux only so far; on Windows and macOS it stays off
+ * until it is tested there, and road B is used. 1 where it may be used, 0 elsewhere. */
+#if defined(__linux__)
+#define TSW_GPU_ROAD_PLATFORM 1
+#else
+#define TSW_GPU_ROAD_PLATFORM 0
+#endif

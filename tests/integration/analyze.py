@@ -5,6 +5,7 @@
 """analyze.py: check a recording made from the test media (make-test-media.sh).
 
     analyze.py --recording <file> --log <obs log file> [--allow-lost-frames 0.0]
+               [--road auto|B|C|verify]
 
 Every frame of the test media spells its own number in 16 bars, and a beep starts on
 every frame whose number is a multiple of 30. So the recording can be checked against
@@ -27,6 +28,10 @@ probe (sync-probe.c: when OBS delivered each beep and each frame):
     lost frames   frames lost because the computer could not keep up
     feed          the plugin reports how many frames, at most, waited in its feed for the
                   encoder (docs/performance.md, section 10)
+    road          frames reached the plugin by the road expected (ADR-012): with --road
+                  auto the plugin's own choice, road C on Linux; with --road
+                  verify, road C handed over the same frames as road B, at the same times,
+                  byte for byte, and no slot failed to map
 
 Prints one PASS or FAIL line per check; the exit status is the number of failures.
 Needs ffmpeg and ffprobe. Standard library only.
@@ -152,6 +157,47 @@ def feed_waiting(log_path: str) -> tuple[int, int] | None:
             if m := re.search(r"\[timelapse-switch\] recording stopped .*feed: at most (\d+) of (\d+) frames waiting", line):
                 return int(m.group(1)), int(m.group(2))
     return None
+
+
+def plugin_line(log_path: str, pattern: str) -> re.Match | None:
+    """The first line of the plugin's that matches pattern."""
+    with open(log_path, encoding="utf-8", errors="replace") as log:
+        for line in log:
+            if m := re.search(r"\[timelapse-switch\] " + pattern, line):
+                return m
+    return None
+
+
+def check_road(report: Report, road: str, log_path: str) -> None:
+    """The road expected was used; with verify, both roads handed over the same frames (ADR-012). Left to
+    itself (auto) the plugin takes road C: this test runs on Linux, with unscaled NV12 output."""
+    used = plugin_line(log_path, r"frames \| road ([BC])")
+    if used is None or used.group(1) != ("B" if road == "B" else "C"):
+        report.check("road", False, f"expected road {'B' if road == 'B' else 'C'} ({road}), the log says road "
+                                    f"{used.group(1) if used else '?'}")
+        return
+    counts = plugin_line(log_path, r"road C: frames staged (\d+), found every slot busy (\d+), "
+                                   r"could not be mapped (\d+)")
+    detail = f"road {used.group(1)}"
+    if counts:
+        detail += f", {counts.group(1)} frames staged, {counts.group(2)} found every slot busy"
+        if int(counts.group(3)) > 0:
+            report.check("road", False, f"{counts.group(3)} staging slots could not be mapped")
+            return
+    if road != "verify":
+        report.check("road", True, detail)
+        return
+    check = plugin_line(log_path, r"road check: frames compared (\d+), different (\d+) \(.*road C late (\d+), "
+                                  r"road B late (\d+), neither (\d+)\), only on road B (\d+), only on road C (\d+), "
+                                  r"not written down (\d+)")
+    if check is None:
+        report.check("road", False, "no road check line in the log")
+        return
+    compared, different, c_late, b_late, neither, only_b, only_c, unwritten = (int(check.group(i)) for i in range(1, 9))
+    report.check("road", compared > 0 and different == only_b == only_c == unwritten == 0,
+                 f"{detail}; road C against road B: {compared} frames compared, {different} different (road C "
+                 f"late {c_late}, road B late {b_late}, neither {neither}), {only_b} only on road B, {only_c} only "
+                 f"on road C, {unwritten} not written down")
 
 
 def probe_offsets(log_path: str) -> list[tuple[int, float]]:
@@ -317,6 +363,7 @@ def main() -> int:
     parser.add_argument("--recording", required=True)
     parser.add_argument("--log", required=True)
     parser.add_argument("--allow-lost-frames", type=float, default=0.0, help="share, 0.01 = 1%%")
+    parser.add_argument("--road", choices=("auto", "B", "C", "verify"), default="auto")
     args = parser.parse_args()
 
     sections, stop_s, lost = plugin_events(args.log)
@@ -340,6 +387,7 @@ def main() -> int:
     report.check("feed", feed is not None and 1 <= feed[0] <= feed[1],
                  f"at most {feed[0]} of {feed[1]} frames waited for the encoder" if feed
                  else "the plugin's summary line does not say how full its feed got")
+    check_road(report, args.road, args.log)
     return report.failures
 
 

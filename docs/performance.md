@@ -178,7 +178,14 @@ In the same session, rendering the scene itself took up to 15 ms 1 % of the time
 
 Perhaps, and only with measurements to show it is worth it:
 
-- **Road C: our own copy, off the graphics thread.** OBS lets a plugin read the finished picture on the card and copy it down itself. Converted to NV12 on the card with OBS's own conversion shader, and copied into RAM by a thread of the plugin, the 3 to 8 ms of section 9 would leave OBS's graphics thread, one full-frame copy would disappear, and in timelapse only the frames that are kept would come down (1 in 4 at x4). It is a large change on the most delicate path, so it is studied as an experiment, adopted only if the sync, color and stability tests all pass and the measurements show the gain.
+- **Road C: our own copy, off the graphics thread (experimental, ADR-012).** OBS lets a plugin read the finished picture on the card and copy it down itself. The plugin converts it with OBS's own conversion shader, asks the card to copy it into one of four staging slots without waiting, and a thread of its own copies it from there into the plugin's feed: the wait and the copy of section 9 leave OBS's graphics thread, one full-frame copy disappears, and in timelapse only the kept frames are copied in memory. Measured on 2026-10-17 (`docs/test-reports/2026-10-17-road-c.md`), 4K30, per frame on OBS's graphics thread:
+
+  | | OBS alone | road B | road C |
+  |---|---|---|---|
+  | median | 0.66 ms | 3.31 ms | 0.80 ms |
+  | worst 1 % above | 1.15 ms | 5.29 ms | 1.57 ms |
+
+  It also used 0.37 CPU cores instead of 0.46, and 71 MB less RAM, all of it given back when the file is saved; it keeps 47 MB more card memory in RAM (GTT), the four slots. Every frame was identical, byte for byte, to road B's, and every integration scenario passes on it. There is nothing to choose: the plugin takes road C wherever it is supported (today Linux, with unscaled NV12, I420 or I444 SDR output) and road B everywhere else, and the log says which road each recording takes.
 - **A smaller plugin feed.** The plugin's feed is a waiting room with 16 seats between the valve and the encoder. If the encoder stalls for a moment, frames wait there; if all 16 seats are taken, the next frame is lost (nothing crashes, but that picture is missing, and the log says so). 16 is the most OBS allows: about half a second at 30 fps, a quarter of a second at 60 fps. OBS's own memory feed has 6.
 
   Fewer seats would save RAM (12.4 MB per seat in 4K) but leave less room for stalls. So the feed stays at 16, and it is **not a setting**: stability comes first, and the right number depends on encoder stalls that a user cannot see, so a wrong choice would show up later as lost frames, far from its cause. Instead, the plugin writes in its log how many frames, at most, waited:

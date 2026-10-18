@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """measure.py: what a recording costs the computer, measured on a running sandbox OBS.
 
-    measure.py run --port 4466 --pid <obs pid> --log <obs log> --mode obs|plugin
+    measure.py run --port 4466 --pid <obs pid> --log <obs log> --mode obs|plugin|plugin-c
                    --idle 60 --seconds 300 --after 30 --out <folder>
     measure.py report <folder>
 
@@ -210,7 +210,7 @@ def stop_recording(obs: Obs, mode: str, log: str) -> None:
 
 def run(args: argparse.Namespace) -> int:
     obs = connect(args.port, wait_s=60)
-    if args.mode == "plugin":
+    if args.mode.startswith("plugin"):
         names = {hotkey for hotkey in obs.request("GetHotkeyList")["hotkeys"] if hotkey.startswith(HOTKEY)}
         if HOTKEY + "Record" not in names:
             print("FAIL  the plugin's Record hotkey is missing")
@@ -249,12 +249,18 @@ def run(args: argparse.Namespace) -> int:
 # The report.
 
 # OBS writes a no-break space between the number and "ms"; \s matches it.
+# A name starts at its first letter (after the time and the tree drawn in front of it), and may hold
+# spaces, no-break ones too.
 PROFILER_LINE = re.compile(
-    r"([\w()>./-]+): min=([\d.]+)\sms, median=([\d.]+)\sms, max=([\d.]+)\sms, 99th percentile=([\d.]+)\sms"
+    r"([A-Za-z_][\w()>./\s:-]*?): min=([\d.]+)\sms, median=([\d.]+)\sms, max=([\d.]+)\sms, "
+    r"99th percentile=([\d.]+)\sms"
 )
-PROFILER_NAMES = ("output_frame", "render_video", "download_frame", "output_video_data", "output_gpu_encoders")
+# The whole graphics thread per frame, what OBS does before the preview, and road C's own step (ADR-012).
+PROFILER_NAMES = ("obs_graphics_thread", "output_frame", "render_video", "render_main_texture",
+                  "timelapse-switch: road C", "download_frame", "output_video_data", "render_displays")
+MODES = {"obs": "OBS", "plugin": "plugin, road B", "plugin-c": "plugin, road C"}
 LOG_EVIDENCE = re.compile(
-    r"Output '.*': (Total|Number)|skipped frames due to encoding lag|\[timelapse-switch\] (encoders|recording stopped)"
+    r"Output '.*': (Total|Number)|skipped frames due to encoding lag|\[timelapse-switch\] (encoders|recording stopped|frames \||road C:)"
 )
 
 
@@ -287,8 +293,9 @@ def profiler(log_text: str) -> dict:
     found = {}
     for line in block.splitlines():
         match = PROFILER_LINE.search(line)
-        if match and match.group(1).strip() in PROFILER_NAMES and match.group(1).strip() not in found:
-            found[match.group(1).strip()] = [float(match.group(n)) for n in (2, 3, 4, 5)]
+        name = re.sub(r"\(\d[^)]*\)$", "", match.group(1).strip()) if match else ""  # "(33.3333 ms)" goes
+        if name in PROFILER_NAMES and name not in found:
+            found[name] = [float(match.group(n)) for n in (2, 3, 4, 5)]
     return found
 
 
@@ -339,32 +346,40 @@ def number(value) -> str:
 
 def report(args: argparse.Namespace) -> int:
     runs = {}
-    for mode in ("obs", "plugin"):
+    for mode in MODES:  # the modes measured in this folder; OBS's own is the reference
+        if not os.path.exists(os.path.join(args.folder, f"{mode}.json")):
+            continue
         with open(os.path.join(args.folder, f"{mode}.json"), encoding="utf-8") as file:
             data = json.load(file)
         with open(os.path.join(args.folder, f"{mode}.log"), encoding="utf-8", errors="replace") as file:
             runs[mode] = summary(data, file.read())
+    if "obs" not in runs:
+        print("FAIL  OBS's own run is missing: it is the reference")
+        return 1
+    plugins = [mode for mode in runs if mode != "obs"]
 
     out = ["# Recording cost: OBS's own recording against the plugin in real time", ""]
     out += ["Each run: a fresh sandbox OBS, the same scene, " f"{SETTLE_S} s of warm-up left out of each phase.", ""]
-    out += ["| Measure | OBS idle | OBS recording | plugin idle | plugin recording | difference (plugin minus OBS) |"]
-    out += ["|---|---|---|---|---|---|"]
-    names = list(runs["obs"]["rows"]) + [n for n in runs["plugin"]["rows"] if n not in runs["obs"]["rows"]]
+    header = ["Measure"] + [f"{MODES[mode]} {phase}" for mode in runs for phase in ("idle", "recording")]
+    header += [f"difference ({MODES[mode]} minus OBS)" for mode in plugins]
+    out += ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    names = list(dict.fromkeys(name for mode in runs for name in runs[mode]["rows"]))
     for name in names:
-        obs_idle, obs_rec = runs["obs"]["rows"].get(name, (0.0, 0.0))  # an engine never used: 0
-        plugin_idle, plugin_rec = runs["plugin"]["rows"].get(name, (0.0, 0.0))
-        extra = (plugin_rec - plugin_idle) - (obs_rec - obs_idle)
-        cells = [number(v) for v in (obs_idle, obs_rec, plugin_idle, plugin_rec, extra)]
+        values = {mode: runs[mode]["rows"].get(name, (0.0, 0.0)) for mode in runs}  # an engine never used: 0
+        added = {mode: values[mode][1] - values[mode][0] for mode in runs}
+        cells = [number(v) for mode in runs for v in values[mode]]
+        cells += [number(added[mode] - added["obs"]) for mode in plugins]
         out.append(f"| {name} | " + " | ".join(cells) + " |")
     out += ["", "The difference compares what each recording added to its own idle minute.", ""]
-    out += ["| Counter | OBS | plugin |", "|---|---|---|"]
+    out += ["| Counter | " + " | ".join(MODES[mode] for mode in runs) + " |", "|---|" + "---|" * len(runs)]
     for name in runs["obs"]["counters"]:
-        out.append(f"| {name} | {number(runs['obs']['counters'][name])} | {number(runs['plugin']['counters'][name])} |")
+        out.append(f"| {name} | " + " | ".join(number(runs[mode]["counters"][name]) for mode in runs) + " |")
     out += ["", "## OBS's own timings, per frame (from its log when it closes)", ""]
-    out += ["| Step | OBS: min / median / max / 99th, ms | plugin: min / median / max / 99th, ms |", "|---|---|---|"]
+    out += ["| Step | " + " | ".join(f"{MODES[mode]}: min / median / max / 99th, ms" for mode in runs) + " |",
+            "|---|" + "---|" * len(runs)]
     for name in PROFILER_NAMES:
         cells = [" / ".join(number(v) for v in runs[mode]["profiler"].get(name, [])) or "not run" for mode in runs]
-        out.append(f"| {name} | {cells[0]} | {cells[1]} |")
+        out.append(f"| {name} | " + " | ".join(cells) + " |")
     for mode in runs:
         out += ["", f"## Log lines, {mode} run", "", "```", *runs[mode]["evidence"], "```"]
     with open(os.path.join(args.folder, "report.md"), "w", encoding="utf-8") as file:
@@ -380,7 +395,7 @@ def main() -> int:
     one.add_argument("--port", type=int, required=True)
     one.add_argument("--pid", type=int, required=True, help="process id of the sandbox OBS")
     one.add_argument("--log", required=True, help="OBS log file of this run")
-    one.add_argument("--mode", choices=("obs", "plugin"), required=True)
+    one.add_argument("--mode", choices=tuple(MODES), required=True)
     one.add_argument("--idle", type=int, default=60, help="seconds idle before recording")
     one.add_argument("--seconds", type=int, default=300, help="seconds of recording")
     one.add_argument("--after", type=int, default=30, help="seconds measured once the file is saved")

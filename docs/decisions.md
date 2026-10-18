@@ -205,3 +205,42 @@ Details that keep it robust:
 **Consequences.**
 - Verified by unit tests (timeline, session, a 10-minute simulation with 410 pauses), and in a real OBS by the integration scenarios `pause` and `pauses` (40 quick pauses, each choosing how to resume, ending with Stop while paused): every pause is left out of the file exactly, sync holds, nothing is lost.
 
+
+---
+
+## ADR-012. Road C: the plugin copies the frame itself, off OBS's graphics thread
+
+*Date: 2026-10-17. Status: experimental, built and measured; on by default on Linux while it is tried in real sessions, with road B (ADR-003) wherever road C is not supported.*
+
+**Context.** On road B (ADR-003), OBS waits for each frame to come down from the card and copies it into its memory feed on its graphics thread, the thread that then draws the preview: 2.8 ms per 4K frame as a median, 5.9 ms for the worst 1 %, up to 13 ms, measured on 2026-10-17 with a phone camera and a busy computer. On a busy computer the preview then looks less smooth while the plugin records (`docs/performance.md`, section 9). The frame is then copied a second time, into the plugin's feed, and in timelapse OBS copies every frame even though most are not kept.
+
+**Decision.** Where it is supported, the plugin takes the frame from the card itself:
+
+```
+  graphics thread, frame k (OBS's "rendered" callback, right after the scene):
+     convert frame k with OBS's own shader  ->  ask the card to copy it into a staging slot (it does
+     not wait)  ->  hand frame k-2, whose copy has had two frames to finish, to our copier thread
+     ->  OBS renders the preview
+
+  our copier thread:
+     the frame, straight from the slot into the plugin's feed (one copy, only the kept frames)
+```
+
+- **Same picture.** The conversion uses OBS's own `format_conversion.effect`, with the same technique, color matrix and parameters OBS uses for its memory feed; the input is OBS's main texture, as it is for OBS. A verification mode records through both roads at once and compares a hash of every whole frame: road C is adopted only if every frame is identical.
+- **Same timing.** Each frame keeps the time OBS drew it at, and covers as many intervals as OBS's own feed would give it (a late draw covers more); repeats are handed to the recorder exactly as OBS's feed hands them (`src/core/stage-ring.h`).
+- **The copy is asked for where OBS asks for its own,** right after the scene and before the preview, and the slot is mapped two frames later, when the card is surely done, so the graphics thread never waits. Two orders were tried in a real 4K session with a phone camera, and are recorded so they are not tried again: mapping one frame later let the graphics thread wait up to 8.9 ms now and then; asking for the copy after the preview (at the start of the next frame) put it behind the preview's own wait for the desktop, and made it worse: 20 % of the plugin's steps over 2 ms, up to 12.8 ms, and 6 % of the camera's pictures repeated instead of about 1 %. The test scene showed neither, because a sandbox OBS does not show its preview.
+- **The card never reads a frame while the next one is written.** The conversion writes into two sets of planes in turn, so the frame being copied down is a whole frame away from the next conversion (with one set, the verification mode once found one frame in about 27,000 that differed; the cause could not be reproduced, so the hazard was removed rather than left to chance).
+- **Never a wait on the graphics thread.** Four staging slots, used in turn. If every slot is busy because the copier is behind, the frame is not staged, it is counted, and the frame before it covers its interval: a repeated picture, as when OBS's own feed is full.
+- **OBS's rendering state is left as it was:** render target, viewport, projection and blending are saved and restored around the plugin's work.
+- **When.** Only for the main canvas, unscaled output (base resolution equal to output resolution) and the SDR formats NV12, I420 and I444, and at first only on Linux, where it is tested. Anywhere else, road B, and the log says which road is used and why.
+
+**Alternatives.**
+- *Road B as it is* (ADR-003). It stays, as the fallback.
+- *Plan B of ADR-003, GPU only with two encoders.* Its costs are unchanged (fixed speed per recording, waits for keyframes, no Hybrid MP4).
+- *Mapping on the graphics thread and copying there.* No gain: the copy is the cost.
+
+**Consequences.**
+- Measured on 2026-10-17, 4K30 (`docs/test-reports/2026-10-17-road-c.md`): OBS's graphics thread took 0.80 ms per frame as a median on road C, against 3.31 ms on road B and 0.66 ms for OBS's own recording (worst 1 %: 1.57, 5.29 and 1.15 ms); road C's own step, 0.22 ms. Against road B, 0.37 CPU cores instead of 0.46 and 71 MB less RAM, all given back when the file is saved. In the verification mode every frame was identical to road B's, and every integration scenario passes on road C.
+- Frames reach the plugin about two frames later than on road B; the file is not affected, because every frame and audio block carries its own time.
+- More card memory: four staging slots and two sets of conversion planes (about 75 MB in 4K NV12; measured with one set: 47 MB more in RAM (GTT) and 13 MB more video memory than road B).
+- The checks before adoption: the unit tests of the slot ring, the verification mode (every frame identical), and every integration scenario (sync, rhythm, pauses, totals, lost frames, leaks) on road C, then the cost measured in 4K like ADR-003.
