@@ -1,0 +1,21 @@
+---
+title: Messages
+description: Every message Timelapse Switch can show, by code.
+---
+
+import errors from '../../../data/errors.json';
+
+Every message in the dock has a code such as **TSW-E103**, and its "Learn more" link opens the page below. Errors stop a recording or keep it from starting; warnings let it continue; info explains something worth knowing.
+
+<table>
+  <thead><tr><th>Code</th><th>Level</th><th>Message</th></tr></thead>
+  <tbody>
+    {errors.map((entry) => (
+      <tr>
+        <td><a href={`${import.meta.env.BASE_URL.replace(/\/?$/, '/')}errors/${entry.code.toLowerCase()}/`}>{entry.code}</a></td>
+        <td>{entry.level}</td>
+        <td>{entry.title}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>

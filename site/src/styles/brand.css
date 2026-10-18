@@ -1,0 +1,52 @@
+/* Brand colors (Terracotta Studio) and type (Instrument Sans) on Starlight's theme. */
+:root {
+  --sl-font: 'Instrument Sans Variable', system-ui, sans-serif;
+  /* Warm grays from Umber Ink and Raw Canvas, instead of Starlight's cool ones. */
+  --sl-color-gray-1: #eee8e0;
+  --sl-color-gray-2: #cbc1b7;
+  --sl-color-gray-3: #9c8f84;
+  --sl-color-gray-4: #6d6158;
+  --sl-color-gray-5: #4b423c;
+  --sl-color-gray-6: #2e2824;
+  --sl-color-gray-7: #262120;
+  --sl-color-accent-low: #3a2219;
+  --sl-color-accent: #d2603a;
+  --sl-color-accent-high: #f3c9b8;
+  --sl-color-white: #f5efe6;
+  --sl-color-black: #1f1a17;
+}
+:root[data-theme='light'] {
+  --sl-color-gray-1: #2e2824;
+  --sl-color-gray-2: #4b423c;
+  --sl-color-gray-3: #6d6158;
+  --sl-color-gray-4: #9c8f84;
+  --sl-color-gray-5: #cbc1b7;
+  --sl-color-gray-6: #eee8e0;
+  --sl-color-gray-7: #f6f1ea;
+  --sl-color-accent-low: #f6dccf;
+  --sl-color-accent: #a54e31;
+  --sl-color-accent-high: #5e2c1b;
+  --sl-color-white: #1f1a17;
+  --sl-color-black: #fbf8f3;
+}
+.tsw-demo {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--sl-color-gray-5);
+}
+.tsw-beta {
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-2);
+}
+.site-title img {
+  height: 2rem;
+}
+.hero img {
+  filter: drop-shadow(0 1rem 2rem rgb(0 0 0 / 0.35));
+}
+/* On a phone, the symbol alone: the name does not fit next to the search and menu buttons. */
+@media (max-width: 50rem) {
+  .site-title span {
+    display: none;
+  }
+}

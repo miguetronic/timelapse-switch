@@ -1,0 +1,29 @@
+---
+// One page per message code, at the address the dock's "Learn more" opens: /errors/tsw-exxx/
+// (src/ui/dock.cpp, ERROR_PAGE). The texts live in src/data/errors.json; tools/check-site.sh checks
+// that every code the plugin uses has one.
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import errors from '../../data/errors.json';
+
+export function getStaticPaths() {
+  return errors.map((entry) => ({ params: { code: entry.code.toLowerCase() }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+---
+
+<StarlightPage frontmatter={{ title: `${entry.code}: ${entry.title}`, description: entry.means }}>
+  <p><strong>{entry.level}</strong></p>
+  <h2>What it means</h2>
+  <p>{entry.means}</p>
+  <h2>What to do</h2>
+  <ul>{entry.todo.map((step) => <li>{step}</li>)}</ul>
+  <h2>Still stuck?</h2>
+  <p>
+    <a href="https://github.com/miguetronic/timelapse-switch/issues/new?template=bug.yml">Report it</a> with{' '}
+    your OBS log (Help &gt; Log Files &gt; Upload Current Log File), or ask in{' '}
+    <a href="https://github.com/miguetronic/timelapse-switch/discussions">Discussions</a>. See also{' '}
+    <a href={`${base}errors/`}>all messages</a>.
+  </p>
+</StarlightPage>

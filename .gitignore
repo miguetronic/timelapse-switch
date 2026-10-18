@@ -40,3 +40,8 @@
 
 # Exclude Python caches
 __pycache__/
+
+# The website: packages and build output (tools/check-site.sh makes them)
+/site/node_modules
+/site/dist
+/site/.astro

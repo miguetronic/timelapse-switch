@@ -697,6 +697,8 @@ Codes share one namespace, `TSW-Exxx`, for every condition users might search fo
 | TSW-E102 | Warning | Storage: about N minutes of space left at the current speed. |
 | TSW-E103 | Error | Encoder failed during the recording; stopped and saved. |
 | TSW-E104 | Info | OBS closed during a TS recording; the file was saved (shown at next start). |
+| TSW-E105 | Warning | Too many speed changes and pauses in one recording; further changes are ignored. |
+| TSW-E106 | Warning | Settings were not saved when OBS closed. |
 | TSW-E201 | Warning | Performance: frames lost because the computer could not keep up. |
 | TSW-E202 | Warning | Sync: audio and video drifted apart (corrected, or not correctable). |
 | TSW-E203 | Warning | Performance: the encoder is falling behind (half its waiting room is full); frames may soon be lost. |
@@ -792,7 +794,7 @@ OBS users share logs through Help > Log Files > Upload Current Log File [S7], an
 | UX-082 | Every message MUST follow the template in 4.2: a plain headline, then reassurance first, why, what to do, one main fix, Copy details and Learn more as links, and the code, small, at the end. Messages MUST NOT name internal components. | [SELF] [LEARN] |
 | UX-083 | On any failure during a recording, the plugin MUST finalize and keep the file and MUST state up to which recorded and final time it is saved. | [ROBUST] |
 | UX-084 | The dock MUST keep a history of the last 20 messages of the session, reachable from `[?]`. | [CONTROL] |
-| UX-085 | Each code MUST have a docs page in English and Spanish (`docs/errors/TSW-Exxx.md`), opened by "Learn more". | [LEARN] |
+| UX-085 | Each code MUST have a page on the website, in English (`/errors/tsw-exxx/`, texts in `site/src/data/errors.json`), opened by "Learn more". | [LEARN] |
 | UX-086 | Every message MUST be logged in English in the format of 4.5, with the code. | [ROBUST] |
 | UX-087 | Performance messages MUST say "lost frames", never "dropped" or "skipped". | [SELF] |
 | UX-088 | The preflight MUST estimate minutes of free space at the current settings and refuse to start below about 5 minutes (TSW-E004), warning below 15 minutes during recording (TSW-E102). | [ROBUST] |

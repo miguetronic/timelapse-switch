@@ -7,7 +7,7 @@
     images.py --screenshots build_x86_64/ui-screenshots --logo <logo-dark PNG> --font <ttf>
               --out site/src/assets/dock --social docs/images/social-preview.png
 
-The dock pictures come from tests/ui/obs-themes.sh (the dock as OBS draws it, in OBS's own themes),
+The dock pictures come from tests/ui/obs-themes.sh (plus a square version for the website's hero) (the dock as OBS draws it, in OBS's own themes),
 cropped to the dock's height. The social preview (1280 x 640, the size GitHub asks for) puts the
 logo, the value line and the dock in timelapse side by side. Needs Pillow.
 """
@@ -46,9 +46,19 @@ def dock_pictures(screenshots: str, out: str) -> Image.Image:
             source = os.path.join(screenshots, theme, f"en-US-300-{state}.png")
             picture = crop_to_content(Image.open(source))
             picture.save(os.path.join(out, f"dock-{state}-{tone}.png"), optimize=True)
+            if state == "timelapse":
+                hero_picture(picture).save(os.path.join(out, f"hero-dock-{tone}.png"), optimize=True)
             if theme == "Yami.Original" and state == "timelapse":
                 chosen = picture
     return chosen
+
+
+def hero_picture(picture: Image.Image) -> Image.Image:
+    """The dock centered on a square, transparent canvas: the website's hero image is always square."""
+    side = max(picture.size)
+    square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    square.paste(picture.convert("RGBA"), ((side - picture.width) // 2, (side - picture.height) // 2))
+    return square
 
 
 def social_preview(logo_path: str, font_path: str, dock: Image.Image, out: str) -> None:

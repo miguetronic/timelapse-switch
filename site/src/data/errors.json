@@ -1,0 +1,102 @@
+[
+  {
+    "code": "TSW-E001", "level": "Error", "title": "Recording could not start",
+    "means": "OBS could not start the plugin's recording, usually while opening the file. Nothing was recorded, and your scenes are fine.",
+    "todo": ["Try again.", "If it happens again, check the recording format and encoder in Settings > Output.", "Still failing? Report it with your OBS log (Help > Log Files > Upload Current Log File)."]
+  },
+  {
+    "code": "TSW-E002", "level": "Error", "title": "The video encoder isn't available",
+    "means": "The plugin records with the encoder of your OBS profile, and OBS could not open it. Another program may be using it, or the graphics driver changed. Nothing was recorded yet.",
+    "todo": ["Choose another encoder in Settings > Output > Recording, then try again.", "x264, the software encoder, always works, at the cost of more CPU."]
+  },
+  {
+    "code": "TSW-E003", "level": "Error", "title": "The recording folder is missing or read-only",
+    "means": "The folder set in your OBS profile for recordings does not exist, or the plugin cannot write there.",
+    "todo": ["Check Settings > Output > Recording path, or choose another folder.", "On an external drive, check that it is connected."]
+  },
+  {
+    "code": "TSW-E004", "level": "Error", "title": "Not enough free space to start",
+    "means": "The disk of the recording folder does not have room for even a few minutes of video.",
+    "todo": ["Free some space, or choose another folder in Settings > Output > Recording path."]
+  },
+  {
+    "code": "TSW-E005", "level": "Info", "title": "A setting of OBS was replaced for this recording",
+    "means": "A setting of your OBS profile cannot be used as is by the plugin's recording (for example a GPU encoder variant), so the plugin uses the closest one and names it in the log. Quality settings are kept.",
+    "todo": ["Nothing to do. The OBS log says which setting was used instead."]
+  },
+  {
+    "code": "TSW-E006", "level": "Info", "title": "No chapters in this format",
+    "means": "Chapters at each change of speed need Hybrid MP4. Your recording format has no chapters, so the recording continues without them.",
+    "todo": ["To get chapters, choose Hybrid MP4 in Settings > Output > Recording Format."]
+  },
+  {
+    "code": "TSW-E101", "level": "Error", "title": "The disk filled up",
+    "means": "The disk of the recording folder became full. The recording was stopped, and everything recorded until then is saved.",
+    "todo": ["Free some space or choose another folder, then press Record to continue in a new file."]
+  },
+  {
+    "code": "TSW-E102", "level": "Warning", "title": "Disk almost full",
+    "means": "At the current speed, the disk has room for only a few more minutes. Timelapse uses less space per minute than real time. The recording continues.",
+    "todo": ["Free some space now, or plan to stop soon."]
+  },
+  {
+    "code": "TSW-E103", "level": "Error", "title": "The file could not be written",
+    "means": "The encoder or the file writer failed during the recording. The recording was stopped, and everything up to that moment is saved.",
+    "todo": ["Check the file and the free space on its disk.", "If it happens again, report it with your OBS log."]
+  },
+  {
+    "code": "TSW-E104", "level": "Info", "title": "OBS closed during a recording",
+    "means": "OBS was closed while the plugin was recording. The plugin finished the file before OBS closed, so it is saved and playable.",
+    "todo": ["Nothing to do. The OBS log names the file."]
+  },
+  {
+    "code": "TSW-E105", "level": "Warning", "title": "Too many speed changes in one recording",
+    "means": "One recording can hold about 4,000 changes of speed and pauses. This one reached the limit, so further changes are ignored; the recording continues at the current speed.",
+    "todo": ["Stop and start a new recording to switch freely again."]
+  },
+  {
+    "code": "TSW-E106", "level": "Warning", "title": "Settings were not saved",
+    "means": "The plugin could not write its settings file when OBS closed, so the dock's last choices (for example the timelapse speed) may not be remembered.",
+    "todo": ["Check that your user can write to OBS's plugin_config folder. The OBS log names the file."]
+  },
+  {
+    "code": "TSW-E201", "level": "Warning", "title": "Frames lost",
+    "means": "The computer could not keep up: the encoder or the graphics card fell behind, and some frames were lost. The recording continues; the video may stutter in places.",
+    "todo": ["Close heavy programs.", "Stop OBS's own recording if you do not need it.", "Pick a faster encoder preset in Settings > Output."]
+  },
+  {
+    "code": "TSW-E202", "level": "Warning", "title": "Audio and video drifted apart",
+    "means": "The microphone and the video run on slightly different clocks, which is common with USB microphones and phone cameras.",
+    "todo": ["Check that moment when you review the video.", "If it keeps happening, make a 5-minute test recording and report it with your OBS log."]
+  },
+  {
+    "code": "TSW-E203", "level": "Warning", "title": "The encoder is falling behind",
+    "means": "Half of the frames waiting for the encoder are already queued, so frames may soon be lost. The recording continues.",
+    "todo": ["Close heavy programs.", "Do not record with OBS's own Record button at the same time."]
+  },
+  {
+    "code": "TSW-E301", "level": "Info", "title": "OBS is recording at normal speed",
+    "means": "That is OBS's own recording, started with its Start Recording button. It records at normal speed and knows nothing about timelapse.",
+    "todo": ["To switch to timelapse, record with the Timelapse Switch dock instead."]
+  },
+  {
+    "code": "TSW-E302", "level": "Warning", "title": "Two recordings are running",
+    "means": "OBS's own recording and Timelapse Switch are recording at the same time. That means two files, and twice the work for the graphics card's video encoder: in 4K, a modest card can lose frames in both.",
+    "todo": ["Stop one of them if you only need one."]
+  },
+  {
+    "code": "TSW-E303", "level": "Info", "title": "Hotkeys work only while OBS has the focus",
+    "means": "On Linux with Wayland, applications cannot listen to keys pressed in other windows. This is a limit of Wayland, not of the plugin.",
+    "todo": ["Click OBS before pressing a hotkey, or use the dock.", "On an X11 session, hotkeys work from any window."]
+  },
+  {
+    "code": "TSW-E304", "level": "Info", "title": "Hotkeys from other apps need Input Monitoring",
+    "means": "On macOS, OBS needs Input Monitoring permission to see keys pressed while another app is in front.",
+    "todo": ["Allow OBS in System Settings > Privacy & Security > Input Monitoring, then restart OBS."]
+  },
+  {
+    "code": "TSW-E901", "level": "Error", "title": "Something went wrong",
+    "means": "Something unexpected happened inside the plugin. Your scenes are fine.",
+    "todo": ["Please report it with your OBS log (Help > Log Files > Upload Current Log File)."]
+  }
+]
