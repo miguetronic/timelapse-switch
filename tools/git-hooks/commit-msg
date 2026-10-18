@@ -5,7 +5,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # Git commit-msg hook: rejects a commit whose first line does not follow
-# Conventional Commits. Enable it once per clone:
+# Conventional Commits, or whose message holds a word of the maintainer's
+# private list (tools/check-private-words.sh). Enable it once per clone:
 #
 #   git config core.hooksPath tools/git-hooks
 #
@@ -53,6 +54,9 @@ main() {
     err "  ${subject}"
     return 1
   fi
+  # No word of the maintainer's private list, in the whole message.
+  "$(git rev-parse --show-toplevel)/tools/check-private-words.sh" \
+    --message "$1" >/dev/null || return 1
 }
 
 main "$@"

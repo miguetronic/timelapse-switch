@@ -242,33 +242,13 @@ check_site() {
 }
 
 #######################################
-# Step 9: words that must never be published, in the repository or in the
-# built website. The list is private, so it lives outside the repository,
-# in the maintainer's own file (one extended regular expression per line);
-# where it does not exist, the step says so and passes.
+# Step 9: words that must never be published, in the repository's files,
+# its commit messages and the built website (tools/check-private-words.sh).
 #######################################
 check_private_words() {
   step '9. Private words'
-  local list="${HOME}/.config/timelapse-switch/private-words"
-  list="${TSW_PRIVATE_WORDS:-${list}}"
-  if [[ ! -f "${list}" ]]; then
-    echo "no private word list at ${list}: skipped"
-    record 'private words (no list on this computer: skipped)' 0
-    return
-  fi
-  local -a files
-  mapfile -t files < <(project_files)
-  local found
-  found="$(grep -n -i -E -f "${list}" -- "${files[@]}" 2>/dev/null)"
-  if [[ -d site/dist ]]; then
-    found+="$(grep -r -l -i -E -f "${list}" site/dist 2>/dev/null)"
-  fi
-  if [[ -n "${found}" ]]; then
-    echo "${found}"
-    record 'private words: none in the repository or the website' 1
-  else
-    record 'private words: none in the repository or the website' 0
-  fi
+  tools/check-private-words.sh
+  record 'private words: none in files, commit messages or the website' "$?"
 }
 
 # Step 7a: rules from docs/coding-rules.md that no tool checks.

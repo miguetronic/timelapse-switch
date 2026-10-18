@@ -71,7 +71,14 @@ search_all() {
     ((code == 2)) && return 2
     ((code == 0)) && status=0
   fi
-  if git log --format='%H %B' | search "${list}" | sed 's/^/commit message: /'; then
+  local messages line
+  messages="$(git log --format='%H %B' | search "${list}")"
+  code=$?
+  ((code == 2)) && return 2
+  if ((code == 0)); then
+    while IFS= read -r line; do
+      echo "commit message: ${line}"
+    done <<<"${messages}"
     status=0
   fi
   if [[ -d site/dist ]]; then
@@ -106,8 +113,8 @@ main() {
   esac
   status=$?
   case "${status}" in
-    0) err 'private words found (above): remove them before publishing' &&
-      return 1 ;;
+    0) err 'private words found (above): remove them before publishing' \
+      && return 1 ;;
     1) return 0 ;;
     *) err 'the search failed' && return 2 ;;
   esac
