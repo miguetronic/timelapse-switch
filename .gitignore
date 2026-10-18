@@ -27,6 +27,7 @@
 !/docs
 !/tests
 !/tools
+!/site
 
 # Exclude lock files
 *.lock.json

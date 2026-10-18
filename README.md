@@ -19,6 +19,10 @@
   <a href="#support-the-project">Support the project</a>
 </p>
 
+<p align="center">
+  <img src="docs/images/demo.gif" alt="A clock recorded with Timelapse Switch: real time, then timelapse x8, then real time again" width="720">
+</p>
+
 Timelapse Switch is a plugin for OBS Studio that lets you switch between real time and timelapse **during** a recording, without pausing. When you press Stop, the file is already finished: the parts you sped up play at x2, x4, x8 or x16, the rest plays at normal speed, and there is nothing left to edit.
 
 ## Download
