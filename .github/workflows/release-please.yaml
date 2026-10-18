@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Release Please 📝
         id: release
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
@@ -47,7 +47,7 @@ jobs:
       TAG: ${{ needs.release-please.outputs.tag }}
     steps:
       - name: Check Out 🛒
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.release-please.outputs.tag }}
 

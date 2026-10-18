@@ -18,8 +18,12 @@
 #   4. clang-tidy      static analyzer #1                           (P10-10)
 #   5. GCC analyzer    static analyzer #2, gcc -fanalyzer           (P10-10)
 #   6. Shell scripts   ShellCheck, shfmt and line length (Google style)
+#   6b. Workflows      actionlint on .github/workflows
 #   7. Project rules   checks no tool covers: P10-1, P10-8, B1, no dashes,
 #                      commit messages, version format
+#   8. Website         tools/check-site.sh, where npm is installed
+#   9. Private words   the maintainer's private list, over the repository
+#                      and the built website (skipped where there is none)
 
 set -u
 
@@ -223,6 +227,50 @@ check_workflows() {
   record 'workflows: actionlint (zero findings)' "$?"
 }
 
+#######################################
+# Step 8: the website (tools/check-site.sh), where Node.js is installed.
+#######################################
+check_site() {
+  step '8. Website (Astro + Starlight)'
+  if ! command -v npm >/dev/null; then
+    echo 'npm not installed: website not checked'
+    record 'website (npm not installed: skipped)' 0
+    return
+  fi
+  tools/check-site.sh
+  record 'website: builds, links work, a page per message' "$?"
+}
+
+#######################################
+# Step 9: words that must never be published, in the repository or in the
+# built website. The list is private, so it lives outside the repository,
+# in the maintainer's own file (one extended regular expression per line);
+# where it does not exist, the step says so and passes.
+#######################################
+check_private_words() {
+  step '9. Private words'
+  local list="${HOME}/.config/timelapse-switch/private-words"
+  list="${TSW_PRIVATE_WORDS:-${list}}"
+  if [[ ! -f "${list}" ]]; then
+    echo "no private word list at ${list}: skipped"
+    record 'private words (no list on this computer: skipped)' 0
+    return
+  fi
+  local -a files
+  mapfile -t files < <(project_files)
+  local found
+  found="$(grep -n -i -E -f "${list}" -- "${files[@]}" 2>/dev/null)"
+  if [[ -d site/dist ]]; then
+    found+="$(grep -r -l -i -E -f "${list}" site/dist 2>/dev/null)"
+  fi
+  if [[ -n "${found}" ]]; then
+    echo "${found}"
+    record 'private words: none in the repository or the website' 1
+  else
+    record 'private words: none in the repository or the website' 0
+  fi
+}
+
 # Step 7a: rules from docs/coding-rules.md that no tool checks.
 check_code_rules() {
   local -a code
@@ -313,6 +361,8 @@ main() {
   check_text_rules
   check_commits
   check_version
+  check_site
+  check_private_words
   printf '\n%sSummary%s\n' "${BOLD}" "${RESET}"
   printf '  %s\n' "${summary[@]}"
   exit "${failed}"
