@@ -507,8 +507,11 @@ static void log_road(const struct tsw_recorder *recorder)
 		return;
 	struct tsw_gpu_road_counts counts;
 	tsw_gpu_road_get_counts(recorder->gpu_road, &counts);
-	tsw_log(LOG_INFO, "road C: frames staged %ld, found every slot busy %ld, could not be mapped %ld",
-		counts.staged, counts.unstaged, counts.unmapped);
+	tsw_log(LOG_INFO,
+		"road C: frames staged %ld, found every slot busy %ld, could not be mapped %ld | steps on OBS's graphics "
+		"thread over 2 ms %ld, longest %.2f ms",
+		counts.staged, counts.unstaged, counts.unmapped, counts.slow_steps,
+		(double)counts.longest_step_us / 1000.0);
 }
 
 /* The most frames that waited in the feed, at most its size: while frames are being lost the raw count also

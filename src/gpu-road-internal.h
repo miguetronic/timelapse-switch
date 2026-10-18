@@ -18,8 +18,12 @@
 #include "gpu-road.h"
 
 enum {
-	TSW_GPU_PLANES = 3, /* at most: Y, U and V */
+	TSW_GPU_PLANES = 3,     /* at most: Y, U and V */
+	TSW_GPU_PLANE_SETS = 2, /* the frame being copied down and the next one, converted meanwhile */
 };
+
+/* A step of ours on the graphics thread longer than this is counted (diagnostics): 2 ms. */
+#define TSW_GPU_SLOW_STEP_NS 2000000ULL
 
 /* One plane of the output format, as OBS's own conversion writes it (libobs/obs.c). */
 struct tsw_gpu_plane {
@@ -46,9 +50,17 @@ struct tsw_gpu_road {
 	gs_effect_t *effect; /* OBS's own, cached by OBS: never destroyed here */
 	gs_eparam_t *image, *color_vec0, *color_vec1, *color_vec2, *width_i_param, *height_i_param;
 	gs_eparam_t *sdr_white_nits_over_maximum, *hdr_lw;
-	gs_texture_t *texture[TSW_GPU_PLANES];                    /* the converted frame, one per plane */
+	/* The converted frame, one texture per plane, in two sets used in turn: the card may still be copying
+	 * one frame down when the next is converted, and must never find it half overwritten. */
+	gs_texture_t *texture[TSW_GPU_PLANE_SETS][TSW_GPU_PLANES];
 	gs_stagesurf_t *surface[TSW_STAGE_SLOTS][TSW_GPU_PLANES]; /* staging slots, one per plane */
 	volatile long staged;                                     /* frames staged so far */
+	size_t to_stage;               /* slot of the frame converted, whose copy is asked for at the next start */
+	size_t to_stage_set;           /* the set of planes that frame was converted into */
+	size_t next_set;               /* the set of planes the next frame is converted into */
+	size_t to_hand_over;           /* slot whose copy was asked for, to hand over at the next start */
+	volatile long slow_steps;      /* steps of ours longer than TSW_GPU_SLOW_STEP_NS */
+	volatile long longest_step_us; /* the longest step of ours, in microseconds */
 
 	/* Written by the graphics thread before a slot is published, read by the copier after. */
 	uint8_t *data[TSW_STAGE_SLOTS][TSW_GPU_PLANES];
@@ -70,5 +82,7 @@ static inline size_t tsw_gpu_road_planes(const struct tsw_gpu_road *road)
 	return road->planes < TSW_GPU_PLANES ? road->planes : TSW_GPU_PLANES;
 }
 
-/* The rendered callback (gpu-road-rt.c): OBS calls it on its graphics thread after each canvas is rendered. */
+/* The callbacks (gpu-road-rt.c): OBS calls them on its graphics thread for each canvas, the draw callback
+ * when it starts rendering a frame, the rendered callback when the frame is rendered. */
+void tsw_gpu_road_draw(void *param, uint32_t width, uint32_t height);
 void tsw_gpu_road_rendered(void *param);

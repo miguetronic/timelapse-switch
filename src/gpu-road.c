@@ -120,8 +120,11 @@ static bool create_surfaces(struct tsw_gpu_road *road)
 	bool created = true;
 	for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++) {
 		const struct tsw_gpu_plane *p = &road->plane[plane];
-		road->texture[plane] = gs_texture_create(p->width, p->height, p->format, 1, NULL, GS_RENDER_TARGET);
-		created = created && road->texture[plane] != NULL;
+		for (size_t set = 0; set < TSW_GPU_PLANE_SETS; set++) {
+			road->texture[set][plane] =
+				gs_texture_create(p->width, p->height, p->format, 1, NULL, GS_RENDER_TARGET);
+			created = created && road->texture[set][plane] != NULL;
+		}
 		for (size_t slot = 0; slot < TSW_STAGE_SLOTS; slot++) {
 			road->surface[slot][plane] = gs_stagesurface_create(p->width, p->height, p->format);
 			created = created && road->surface[slot][plane] != NULL;
@@ -174,6 +177,8 @@ struct tsw_gpu_road *tsw_gpu_road_create(const struct obs_video_info *ovi, tsw_g
 	road->interval_ns = obs_get_frame_interval_ns();
 	road->receive = receive;
 	road->param = param;
+	road->to_stage = SIZE_MAX;
+	road->to_hand_over = SIZE_MAX;
 	const char *failed = NULL;
 	if (!describe_planes(road, ovi->output_format) || tsw_stage_ring_init(&road->ring, road->interval_ns) != TSW_OK)
 		failed = "unsupported format";
@@ -204,6 +209,7 @@ void tsw_gpu_road_begin(struct tsw_gpu_road *road)
 {
 	if (road == NULL || road->registered)
 		return;
+	obs_add_main_render_callback(tsw_gpu_road_draw, road);
 	obs_add_main_rendered_callback(tsw_gpu_road_rendered, road);
 	road->registered = true;
 }
@@ -218,15 +224,19 @@ void tsw_gpu_road_get_counts(const struct tsw_gpu_road *road, struct tsw_gpu_roa
 	counts->unstaged = os_atomic_load_long(&road->ring.unstaged);
 	counts->unmapped = os_atomic_load_long(&road->ring.unmapped);
 	counts->staged = os_atomic_load_long(&road->staged);
+	counts->slow_steps = os_atomic_load_long(&road->slow_steps);
+	counts->longest_step_us = os_atomic_load_long(&road->longest_step_us);
 }
 
 void tsw_gpu_road_destroy(struct tsw_gpu_road *road)
 {
 	if (road == NULL)
 		return;
-	/* 1. No more frames: the removal waits for a rendered callback in progress (OBS holds a mutex). */
-	if (road->registered)
+	/* 1. No more frames: each removal waits for a callback in progress (OBS holds a mutex). */
+	if (road->registered) {
 		obs_remove_main_rendered_callback(tsw_gpu_road_rendered, road);
+		obs_remove_main_render_callback(tsw_gpu_road_draw, road);
+	}
 	road->registered = false;
 
 	/* 2. The copier ends after the slot it is copying. */
@@ -247,8 +257,9 @@ void tsw_gpu_road_destroy(struct tsw_gpu_road *road)
 			gs_stagesurface_destroy(road->surface[slot][plane]);
 		}
 	}
-	for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++)
-		gs_texture_destroy(road->texture[plane]);
+	for (size_t set = 0; set < TSW_GPU_PLANE_SETS; set++)
+		for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++)
+			gs_texture_destroy(road->texture[set][plane]);
 	obs_leave_graphics(); /* the effect is OBS's own (cached by OBS): not destroyed here */
 	bfree(road);
 }

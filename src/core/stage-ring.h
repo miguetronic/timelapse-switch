@@ -9,7 +9,7 @@
  * (road C, ADR-012).
  *
  * On road C the graphics thread only asks the card to copy each frame into a staging slot, and goes
- * on rendering the preview. One frame later, when the card is done, it maps the slot and hands it to
+ * on rendering the preview. A frame later, when the card is done, it maps the slot and hands it to
  * our copier thread, which copies the frame into our video feed. Then the slot comes back.
  *
  *   graphics thread:  claim -> (card copies) -> publish ............................ reclaim

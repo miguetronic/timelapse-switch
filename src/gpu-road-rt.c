@@ -5,10 +5,16 @@
  */
 
 /*
- * gpu-road-rt.c: road C on OBS's graphics thread (ADR-012), after each canvas is rendered. It runs on
- * every frame OBS renders, before the preview, so the whole file follows docs/coding-rules.md, B1,
- * checked by tools/check.sh: no allocation, no logging, no locks of our own, no waits. It never waits
- * for the copier: a frame that finds every slot busy is covered by the frame before (stage-ring.h).
+ * gpu-road-rt.c: road C on OBS's graphics thread (ADR-012). It runs on every frame OBS renders, so the
+ * whole file follows docs/coding-rules.md, B1, checked by tools/check.sh: no allocation, no logging, no
+ * locks of our own, no waits. It never waits for the copier: a frame that finds every slot busy is
+ * covered by the frame before (stage-ring.h). Nor does it wait for the card, nor put work in front of
+ * the preview:
+ *
+ *   frame k, after the scene (rendered callback):    convert frame k into our planes (short)
+ *   OBS renders the preview of frame k
+ *   frame k+1, at its start (draw callback):          hand over frame k-1, whose copy was asked for a
+ *                                                     whole frame ago; ask the card to copy frame k
  *
  * The conversion is OBS's own, step by step (render_convert_texture and render_convert_plane in
  * libobs/obs-video.c, OBS 32.2.2): same effect, techniques, parameters and order, so the picture is
@@ -16,11 +22,13 @@
  */
 
 #include <graphics/graphics.h>
+#include <util/platform.h>
 #include <util/profiler.h>
 
 #include "gpu-road-internal.h"
 
 static const char *const PROFILE_NAME = "timelapse-switch: road C";
+static const char *const DRAW_PROFILE_NAME = "timelapse-switch: road C, start of frame";
 
 /* 1. The slots the copier finished come back: unmap them. */
 static void reclaim_slots(struct tsw_gpu_road *road)
@@ -36,12 +44,12 @@ static void reclaim_slots(struct tsw_gpu_road *road)
 }
 
 /* One plane of the conversion: a triangle that covers the plane, through the plane's technique. */
-static void convert_plane(const struct tsw_gpu_road *road, size_t plane)
+static void convert_plane(const struct tsw_gpu_road *road, size_t set, size_t plane)
 {
 	const uint32_t width = road->plane[plane].width;
 	const uint32_t height = road->plane[plane].height;
 	gs_technique_t *technique = gs_effect_get_technique(road->effect, road->plane[plane].technique);
-	gs_set_render_target(road->texture[plane], NULL);
+	gs_set_render_target(road->texture[set][plane], NULL);
 	gs_ortho(0.0f, (float)width, 0.0f, (float)height, -100.0f, 100.0f);
 	gs_set_viewport(0, 0, (int)width, (int)height);
 	const size_t passes = gs_technique_begin(technique);
@@ -63,8 +71,8 @@ static void set_plane_parameters(const struct tsw_gpu_road *road, gs_texture_t *
 	gs_effect_set_float(road->hdr_lw, hdr_lw);
 }
 
-/* 2a. The rendered frame in the output format, into our planes, as OBS converts it. */
-static void convert(const struct tsw_gpu_road *road, gs_texture_t *frame)
+/* 2a. The rendered frame in the output format, into one set of our planes, as OBS converts it. */
+static void convert(const struct tsw_gpu_road *road, gs_texture_t *frame, size_t set)
 {
 	const float sdr_white = obs_get_video_sdr_white_level() / 10000.f;
 	const float hdr_lw = obs_get_video_hdr_nominal_peak_level();
@@ -72,23 +80,23 @@ static void convert(const struct tsw_gpu_road *road, gs_texture_t *frame)
 	gs_effect_set_vec4(road->color_vec0, &road->color_vec[0]);
 	gs_effect_set_float(road->sdr_white_nits_over_maximum, sdr_white);
 	gs_effect_set_float(road->hdr_lw, hdr_lw);
-	convert_plane(road, 0);
+	convert_plane(road, set, 0);
 	if (road->planes >= 2) {
 		gs_effect_set_vec4(road->color_vec1, &road->color_vec[1]);
 		if (road->planes == 2)
 			gs_effect_set_vec4(road->color_vec2, &road->color_vec[2]);
 		set_plane_parameters(road, frame, sdr_white, hdr_lw);
-		convert_plane(road, 1);
+		convert_plane(road, set, 1);
 	}
 	if (road->planes == 3) {
 		gs_effect_set_vec4(road->color_vec2, &road->color_vec[2]);
 		set_plane_parameters(road, frame, sdr_white, hdr_lw);
-		convert_plane(road, 2);
+		convert_plane(road, set, 2);
 	}
 }
 
-/* 2b. Convert the frame and ask the card to copy it into the slot, leaving OBS's state as it was. */
-static void stage(const struct tsw_gpu_road *road, gs_texture_t *frame, size_t slot)
+/* 2b. Convert the frame into one set of our planes, leaving OBS's state as it was. */
+static void convert_frame(const struct tsw_gpu_road *road, gs_texture_t *frame, size_t set)
 {
 	gs_texture_t *target = gs_get_render_target();
 	gs_zstencil_t *zstencil = gs_get_zstencil_target();
@@ -101,9 +109,7 @@ static void stage(const struct tsw_gpu_road *road, gs_texture_t *frame, size_t s
 	gs_load_vertexbuffer(NULL);
 	gs_load_indexbuffer(NULL);
 
-	convert(road, frame);
-	for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++)
-		gs_stage_texture(road->surface[slot][plane], road->texture[plane]);
+	convert(road, frame, set);
 
 	gs_blend_state_pop();
 	gs_projection_pop();
@@ -111,7 +117,15 @@ static void stage(const struct tsw_gpu_road *road, gs_texture_t *frame, size_t s
 	gs_set_render_target_with_color_space(target, zstencil, space);
 }
 
-/* 3. The frame before, copied by the card since the last frame: map it and hand it to the copier. */
+/* 4. Ask the card to copy our planes into the slot. It is asked at the start of the next frame, once the
+ *    preview of this one is on its way: the card works in order, so the preview never waits for the copy. */
+static void stage_planes(const struct tsw_gpu_road *road, size_t slot, size_t set)
+{
+	for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++)
+		gs_stage_texture(road->surface[slot][plane], road->texture[set][plane]);
+}
+
+/* 3. A frame whose copy was asked for a whole frame ago, so the card is done: map it, hand it to the copier. */
 static void hand_over(struct tsw_gpu_road *road, size_t slot)
 {
 	size_t mapped = 0;
@@ -128,25 +142,74 @@ static void hand_over(struct tsw_gpu_road *road, size_t slot)
 	os_sem_post(road->wake);
 }
 
+/* Diagnostics for the summary line: how often our work on the graphics thread took long, and the longest. */
+static void note_step(struct tsw_gpu_road *road, uint64_t started_ns)
+{
+	const uint64_t took_ns = os_gettime_ns() - started_ns;
+	if (took_ns > TSW_GPU_SLOW_STEP_NS)
+		os_atomic_set_long(&road->slow_steps, road->slow_steps + 1);
+	if ((long)(took_ns / 1000) > road->longest_step_us)
+		os_atomic_set_long(&road->longest_step_us, (long)(took_ns / 1000));
+}
+
+/* Whether OBS is rendering the main canvas now: its texture is the render target (OBS calls our callbacks
+ * once per canvas). */
+static gs_texture_t *main_canvas_frame(const struct tsw_gpu_road *road)
+{
+	gs_texture_t *frame = obs_get_main_texture();
+	if (frame == NULL || gs_get_render_target() != frame)
+		return NULL;
+	if (gs_texture_get_width(frame) != road->width || gs_texture_get_height(frame) != road->height)
+		return NULL; /* never expected: OBS refuses new video settings while an output records */
+	return frame;
+}
+
+void tsw_gpu_road_draw(void *param, uint32_t width, uint32_t height)
+{
+	struct tsw_gpu_road *road = param;
+	(void)width;
+	(void)height;
+	if (main_canvas_frame(road) == NULL)
+		return;
+	const uint64_t started_ns = os_gettime_ns();
+	profile_start(DRAW_PROFILE_NAME);
+	reclaim_slots(road);
+	if (road->to_hand_over != SIZE_MAX)
+		hand_over(road, road->to_hand_over);
+	road->to_hand_over = SIZE_MAX;
+	if (road->to_stage != SIZE_MAX)
+		stage_planes(road, road->to_stage, road->to_stage_set);
+	road->to_stage = SIZE_MAX;
+	profile_end(DRAW_PROFILE_NAME);
+	note_step(road, started_ns);
+}
+
 void tsw_gpu_road_rendered(void *param)
 {
 	struct tsw_gpu_road *road = param;
-	gs_texture_t *frame = obs_get_main_texture();
-	/* OBS calls this after rendering each canvas: ours is the main one, rendered into its own texture. */
-	if (frame == NULL || gs_get_render_target() != frame)
+	gs_texture_t *frame = main_canvas_frame(road);
+	if (frame == NULL)
 		return;
-	if (gs_texture_get_width(frame) != road->width || gs_texture_get_height(frame) != road->height)
-		return; /* never expected: OBS refuses new video settings while an output records */
-
+	const uint64_t started_ns = os_gettime_ns();
 	profile_start(PROFILE_NAME);
-	reclaim_slots(road);
+	/* Never expected after the first frame: the start of this frame did not pass, so finish its work now. */
+	if (road->to_hand_over != SIZE_MAX)
+		hand_over(road, road->to_hand_over);
+	road->to_hand_over = SIZE_MAX;
+	if (road->to_stage != SIZE_MAX)
+		stage_planes(road, road->to_stage, road->to_stage_set);
+	road->to_stage = SIZE_MAX;
+
 	size_t slot;
 	size_t previous;
 	if (tsw_stage_ring_claim(&road->ring, obs_get_video_frame_time(), &slot, &previous)) {
-		stage(road, frame, slot);
+		convert_frame(road, frame, road->next_set);
+		road->to_stage = slot;
+		road->to_stage_set = road->next_set;
+		road->next_set = (road->next_set + 1) % TSW_GPU_PLANE_SETS;
 		os_atomic_set_long(&road->staged, road->staged + 1);
 	}
-	if (previous != SIZE_MAX)
-		hand_over(road, previous);
+	road->to_hand_over = previous; /* SIZE_MAX when there is none */
 	profile_end(PROFILE_NAME);
+	note_step(road, started_ns);
 }

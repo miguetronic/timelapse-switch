@@ -13,7 +13,9 @@
  * staging slot; our copier thread copies it from there into the recorder, through the same callback
  * road B uses (tsw_recorder_receive_frame), with the same times and repeats OBS's feed would give.
  *
- *   OBS graphics thread  --rendered callback-->  convert, stage, hand the previous slot over
+ *   OBS graphics thread  --rendered callback-->  convert the frame (after the scene)
+ *                        --draw callback------>  at the next frame's start, after the preview: ask for
+ *                                                the copy, hand over the frame copied a frame ago
  *   our copier thread    --------------------->  receive(param, frame), count times per frame
  *
  * Life of a road: create (before the recording starts: card memory and the copier thread), begin (the
@@ -59,8 +61,10 @@ void tsw_gpu_road_destroy(struct tsw_gpu_road *road);
 
 /* What road C counted so far, for the summary line. Thread: UI, before tsw_gpu_road_destroy. */
 struct tsw_gpu_road_counts {
-	long unstaged; /* frames rendered while every slot was busy: the frame before covered them */
-	long unmapped; /* frames whose slot could not be mapped: not copied */
-	long staged;   /* frames staged */
+	long unstaged;        /* frames rendered while every slot was busy: the frame before covered them */
+	long unmapped;        /* frames whose slot could not be mapped: not copied */
+	long staged;          /* frames staged */
+	long slow_steps;      /* steps of ours on OBS's graphics thread longer than 2 ms */
+	long longest_step_us; /* the longest of them, in microseconds */
 };
 void tsw_gpu_road_get_counts(const struct tsw_gpu_road *road, struct tsw_gpu_road_counts *counts);
