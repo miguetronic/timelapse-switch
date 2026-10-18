@@ -46,7 +46,7 @@ measure_mode() {
   if [[ "${mode}" == 'plugin-c' ]]; then
     export TIMELAPSE_SWITCH_ROAD='C'
   else
-    unset TIMELAPSE_SWITCH_ROAD
+    export TIMELAPSE_SWITCH_ROAD='B'
   fi
   start_obs "${sandbox}" || return 1
   local pid="${OBS_PID}" log="${OBS_LOG}"

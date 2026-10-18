@@ -31,11 +31,11 @@ tests/integration/run.sh --scenario real                     25 s in real time, 
 tests/integration/run.sh --scenario pause                    pauses in real time and in timelapse
 tests/integration/run.sh --scenario pauses                   40 quick pauses, ends with Stop while paused
 tests/integration/run.sh --resolution 2160 --scenario long   4K, about 300 s: a load test
-tests/integration/run.sh --road C                            frames by road C (ADR-012)
+tests/integration/run.sh --road B                            frames by road B, OBS's copy (ADR-012)
 tests/integration/run.sh --road verify                       road C checked against road B, frame by frame
 ```
 
-`--road` chooses how frames reach the plugin (ADR-012): `B`, OBS copies them (the default); `C`, the plugin copies them itself, off OBS's graphics thread; `verify`, the recording runs on road C while road B runs only to be compared, and every frame of both is hashed whole.
+`--road` sets how frames reach the plugin (ADR-012). Users never choose it: the plugin takes road C wherever it is supported and road B elsewhere. `auto`, the default, leaves that choice to the plugin (road C here, on Linux); `B` forces road B, OBS's copy; `C` forces road C; `verify` records on road C while road B runs only to be compared, and every frame of both is hashed whole.
 
 `--keep` keeps the sandbox folder (it is always kept when a check fails). It holds the OBS log (`config/obs-studio/logs/`) and the recording (`recordings/`).
 

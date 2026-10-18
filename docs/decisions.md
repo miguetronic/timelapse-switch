@@ -210,7 +210,7 @@ Details that keep it robust:
 
 ## ADR-012. Road C: the plugin copies the frame itself, off OBS's graphics thread
 
-*Date: 2026-10-17. Status: experimental, built and measured; road B (ADR-003) stays the default until road C is tried in a real session.*
+*Date: 2026-10-17. Status: experimental, built and measured; on by default on Linux while it is tried in real sessions, with road B (ADR-003) wherever road C is not supported.*
 
 **Context.** On road B (ADR-003), OBS waits for each frame to come down from the card and copies it into its memory feed on its graphics thread, the thread that then draws the preview: 2.8 ms per 4K frame as a median, 5.9 ms for the worst 1 %, up to 13 ms, measured on 2026-10-17 with a phone camera and a busy computer. On a busy computer the preview then looks less smooth while the plugin records (`docs/performance.md`, section 9). The frame is then copied a second time, into the plugin's feed, and in timelapse OBS copies every frame even though most are not kept.
 

@@ -5,7 +5,7 @@
 """analyze.py: check a recording made from the test media (make-test-media.sh).
 
     analyze.py --recording <file> --log <obs log file> [--allow-lost-frames 0.0]
-               [--road B|C|verify]
+               [--road auto|B|C|verify]
 
 Every frame of the test media spells its own number in 16 bars, and a beep starts on
 every frame whose number is a multiple of 30. So the recording can be checked against
@@ -28,7 +28,8 @@ probe (sync-probe.c: when OBS delivered each beep and each frame):
     lost frames   frames lost because the computer could not keep up
     feed          the plugin reports how many frames, at most, waited in its feed for the
                   encoder (docs/performance.md, section 10)
-    road          frames reached the plugin by the road asked for (ADR-012); with --road
+    road          frames reached the plugin by the road expected (ADR-012): with --road
+                  auto the plugin's own choice, road C on Linux; with --road
                   verify, road C handed over the same frames as road B, at the same times,
                   byte for byte, and no slot failed to map
 
@@ -168,10 +169,12 @@ def plugin_line(log_path: str, pattern: str) -> re.Match | None:
 
 
 def check_road(report: Report, road: str, log_path: str) -> None:
-    """The road asked for was used; with verify, both roads handed over the same frames (ADR-012)."""
+    """The road expected was used; with verify, both roads handed over the same frames (ADR-012). Left to
+    itself (auto) the plugin takes road C: this test runs on Linux, with unscaled NV12 output."""
     used = plugin_line(log_path, r"frames \| road ([BC])")
     if used is None or used.group(1) != ("B" if road == "B" else "C"):
-        report.check("road", False, f"asked for road {road}, the log says road {used.group(1) if used else '?'}")
+        report.check("road", False, f"expected road {'B' if road == 'B' else 'C'} ({road}), the log says road "
+                                    f"{used.group(1) if used else '?'}")
         return
     counts = plugin_line(log_path, r"road C: frames staged (\d+), found every slot busy (\d+), "
                                    r"could not be mapped (\d+)")
@@ -358,7 +361,7 @@ def main() -> int:
     parser.add_argument("--recording", required=True)
     parser.add_argument("--log", required=True)
     parser.add_argument("--allow-lost-frames", type=float, default=0.0, help="share, 0.01 = 1%%")
-    parser.add_argument("--road", choices=("B", "C", "verify"), default="B")
+    parser.add_argument("--road", choices=("auto", "B", "C", "verify"), default="auto")
     args = parser.parse_args()
 
     sections, stop_s, lost = plugin_events(args.log)

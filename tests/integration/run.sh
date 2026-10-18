@@ -10,11 +10,12 @@
 #   tests/integration/run.sh [--resolution 1080|2160]
 #                            [--scenario standard|long|real|pause|pauses]
 #                            [--encoder <OBS encoder id>] [--keep]
-#                            [--road B|C|verify]
+#                            [--road auto|B|C|verify]
 #
-# --road chooses how frames reach the plugin (ADR-012): B, OBS copies them
-# (the default); C, the plugin copies them; verify, road C checked against
-# road B frame by frame.
+# --road: how frames reach the plugin (ADR-012). auto (the default) lets the
+# plugin choose, as it does for users: road C on Linux. B forces road B (OBS
+# copies them), C forces road C, verify records on road C and checks it
+# against road B frame by frame.
 # Linux only. It starts a separate OBS with its own temporary configuration
 # (sandbox.sh), so the user's OBS settings, scenes and plugins are never
 # touched.
@@ -27,7 +28,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/sandbox.sh"
 
 main() {
   local height=1080 scenario='standard' encoder='hevc_ffmpeg_vaapi_tex'
-  local keep=0 road='B'
+  local keep=0 road='auto'
   while (($# > 0)); do
     case "$1" in
       --road) road="$2" && shift ;;
@@ -49,8 +50,11 @@ main() {
   local sandbox
   sandbox="$(mktemp -d "${TMPDIR:-/tmp}/timelapse-switch-it.XXXXXX")"
   make_sandbox "${sandbox}" "${media}" "${height}" "${encoder}" 1
-  # OBS passes its environment on to the plugin, which reads the road there.
-  if [[ "${road}" != 'B' ]]; then
+  # OBS passes its environment on to the plugin, which reads a forced road
+  # there.
+  if [[ "${road}" == 'auto' ]]; then
+    unset TIMELAPSE_SWITCH_ROAD
+  else
     export TIMELAPSE_SWITCH_ROAD="${road}"
   fi
   start_obs "${sandbox}" || return 1

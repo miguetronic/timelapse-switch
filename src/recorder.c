@@ -412,9 +412,10 @@ static enum tsw_result reset_timeline(struct tsw_recorder *recorder, const struc
 	return TSW_OK;
 }
 
-/* Road C (ADR-012) is experimental: used only when TIMELAPSE_SWITCH_ROAD=C, until its checks pass;
- * TIMELAPSE_SWITCH_ROAD=verify records on road C and checks it against road B frame by frame. */
-static const bool ROAD_C_BY_DEFAULT = false;
+/* Road C (ADR-012) is used where it is supported (tsw_gpu_road_unsupported), road B elsewhere. For tests,
+ * TIMELAPSE_SWITCH_ROAD=B or C forces a road, and verify records on road C and checks it against road B
+ * frame by frame. */
+static const bool ROAD_C_BY_DEFAULT = true;
 
 /* How frames will reach us: road C when it is wanted and supported, road B otherwise. Prepared before the
  * recording starts (card memory, a thread), so the timeline does not start late. Logged either way. */
@@ -423,7 +424,7 @@ static void choose_road(struct tsw_recorder *recorder, const struct obs_video_in
 	const char *asked = getenv("TIMELAPSE_SWITCH_ROAD");
 	const bool verify = asked != NULL && strcmp(asked, "verify") == 0;
 	const bool wanted = asked != NULL ? (strcmp(asked, "C") == 0 || verify) : ROAD_C_BY_DEFAULT;
-	const char *reason = wanted ? tsw_gpu_road_unsupported(ovi) : "road C not enabled (experimental, ADR-012)";
+	const char *reason = wanted ? tsw_gpu_road_unsupported(ovi) : "road B asked for (TIMELAPSE_SWITCH_ROAD)";
 	if (reason == NULL && verify)
 		recorder->road_check = tsw_road_check_create(ovi, tsw_recorder_receive_frame, recorder);
 	if (reason == NULL) {
