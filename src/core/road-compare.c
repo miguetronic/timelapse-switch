@@ -40,6 +40,18 @@ bool tsw_road_list_add(struct tsw_road_list *list, uint64_t timestamp, uint64_t 
 	return true;
 }
 
+/* Which road a different frame shows is late: the one holding the other road's picture of the frame before. */
+static void classify_difference(const struct tsw_road_list *b, const struct tsw_road_list *c, size_t i, size_t j,
+				struct tsw_road_comparison *comparison)
+{
+	if (i > 0 && b->records[i - 1].hash == c->records[j].hash)
+		comparison->c_late++;
+	else if (j > 0 && c->records[j - 1].hash == b->records[i].hash)
+		comparison->b_late++;
+	else
+		comparison->unmatched++;
+}
+
 void tsw_road_compare(const struct tsw_road_list *b, const struct tsw_road_list *c,
 		      struct tsw_road_comparison *comparison)
 {
@@ -67,6 +79,7 @@ void tsw_road_compare(const struct tsw_road_list *b, const struct tsw_road_list 
 			comparison->compared += inside_b;
 			if (inside_b && rb->hash != rc->hash) {
 				comparison->different++;
+				classify_difference(b, c, i, j, comparison);
 				if (comparison->first_different_ns == 0)
 					comparison->first_different_ns = rb->timestamp;
 			}

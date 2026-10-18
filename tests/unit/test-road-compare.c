@@ -54,6 +54,22 @@ static void a_different_frame_is_found(void)
 	TSW_EXPECT_EQ(comparison.first_different_ns, 50);
 }
 
+/* Break caught: a difference reported without saying which road is wrong: road C handing over the picture
+ * road B had one frame before (road C late), the reverse (road B late), or a picture road B never had. */
+static void a_difference_says_which_road_is_late(void)
+{
+	struct tsw_road_comparison comparison;
+	fill(1, 8, 1, 8);                      /* hash = timestamp */
+	storage_c[3].hash = storage_b[2].hash; /* frame 4 on road C: road B's frame 3 picture */
+	storage_b[5].hash = storage_c[4].hash; /* frame 6 on road B: road C's frame 5 picture */
+	storage_c[6].hash = 999;               /* frame 7 on road C: a picture no road had */
+	tsw_road_compare(&b, &c, &comparison);
+	TSW_EXPECT_EQ(comparison.different, 3);
+	TSW_EXPECT_EQ(comparison.c_late, 1);
+	TSW_EXPECT_EQ(comparison.b_late, 1);
+	TSW_EXPECT_EQ(comparison.unmatched, 1);
+}
+
 /* Break caught: road C missing a frame, or handing one over at a time road B never had (wrong repeats). */
 static void frames_on_one_road_only_are_counted(void)
 {
@@ -107,6 +123,7 @@ int main(void)
 	only_the_time_both_ran_is_compared();
 	a_different_frame_is_found();
 	frames_on_one_road_only_are_counted();
+	a_difference_says_which_road_is_late();
 	a_full_list_writes_nothing_more();
 	an_empty_road_compares_nothing();
 	misuse_is_refused();

@@ -75,10 +75,11 @@ void tsw_road_check_finish(struct tsw_road_check *check, bool report)
 							 ? (double)(comparison.first_different_ns - first_ns) / 1e9
 							 : 0.0;
 		tsw_log(LOG_INFO,
-			"road check: frames compared %ld, different %ld (first %.3f s after road B's first), only on "
-			"road B %ld, only on road C %ld, not written down %ld",
-			comparison.compared, comparison.different, first_different_s, comparison.only_b,
-			comparison.only_c, os_atomic_load_long(&check->b.full) + os_atomic_load_long(&check->c.full));
+			"road check: frames compared %ld, different %ld (first %.3f s after road B's first; road C late "
+			"%ld, road B late %ld, neither %ld), only on road B %ld, only on road C %ld, not written down %ld",
+			comparison.compared, comparison.different, first_different_s, comparison.c_late,
+			comparison.b_late, comparison.unmatched, comparison.only_b, comparison.only_c,
+			os_atomic_load_long(&check->b.full) + os_atomic_load_long(&check->c.full));
 	}
 	bfree(check->storage);
 	bfree(check);

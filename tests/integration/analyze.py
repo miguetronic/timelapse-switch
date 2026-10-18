@@ -187,15 +187,17 @@ def check_road(report: Report, road: str, log_path: str) -> None:
     if road != "verify":
         report.check("road", True, detail)
         return
-    check = plugin_line(log_path, r"road check: frames compared (\d+), different (\d+) .*only on road B "
-                                  r"(\d+), only on road C (\d+), not written down (\d+)")
+    check = plugin_line(log_path, r"road check: frames compared (\d+), different (\d+) \(.*road C late (\d+), "
+                                  r"road B late (\d+), neither (\d+)\), only on road B (\d+), only on road C (\d+), "
+                                  r"not written down (\d+)")
     if check is None:
         report.check("road", False, "no road check line in the log")
         return
-    compared, different, only_b, only_c, unwritten = (int(check.group(i)) for i in range(1, 6))
+    compared, different, c_late, b_late, neither, only_b, only_c, unwritten = (int(check.group(i)) for i in range(1, 9))
     report.check("road", compared > 0 and different == only_b == only_c == unwritten == 0,
-                 f"{detail}; road C against road B: {compared} frames compared, {different} different, "
-                 f"{only_b} only on road B, {only_c} only on road C, {unwritten} not written down")
+                 f"{detail}; road C against road B: {compared} frames compared, {different} different (road C "
+                 f"late {c_late}, road B late {b_late}, neither {neither}), {only_b} only on road B, {only_c} only "
+                 f"on road C, {unwritten} not written down")
 
 
 def probe_offsets(log_path: str) -> list[tuple[int, float]]:

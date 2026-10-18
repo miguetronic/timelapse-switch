@@ -44,6 +44,9 @@ struct tsw_road_comparison {
 	long different;              /* of those, frames whose bytes differ */
 	long only_b;                 /* frames only road B handed over */
 	long only_c;                 /* frames only road C handed over */
+	long c_late;                 /* different frames where road C had road B's picture of the frame before */
+	long b_late;                 /* different frames where road B had road C's picture of the frame before */
+	long unmatched;              /* different frames that are neither: a picture the other road never had */
 	uint64_t first_different_ns; /* when the first different frame was rendered; 0 if none */
 };
 
