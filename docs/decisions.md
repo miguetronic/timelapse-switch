@@ -217,11 +217,10 @@ Details that keep it robust:
 **Decision.** Where it is supported, the plugin takes the frame from the card itself:
 
 ```
-  graphics thread, frame k (OBS's "rendered" callback, after the scene):
-     convert frame k to the output format, with OBS's own shader (short)  ->  OBS renders the preview
-  graphics thread, start of frame k+1 (OBS's "draw" callback, the preview of k already on its way):
-     ask the card to copy frame k into a staging slot (it does not wait)  ->  hand frame k-1, whose
-     copy was asked for a whole frame ago, to our copier thread
+  graphics thread, frame k (OBS's "rendered" callback, right after the scene):
+     convert frame k with OBS's own shader  ->  ask the card to copy it into a staging slot (it does
+     not wait)  ->  hand frame k-2, whose copy has had two frames to finish, to our copier thread
+     ->  OBS renders the preview
 
   our copier thread:
      the frame, straight from the slot into the plugin's feed (one copy, only the kept frames)
@@ -229,7 +228,7 @@ Details that keep it robust:
 
 - **Same picture.** The conversion uses OBS's own `format_conversion.effect`, with the same technique, color matrix and parameters OBS uses for its memory feed; the input is OBS's main texture, as it is for OBS. A verification mode records through both roads at once and compares a hash of every whole frame: road C is adopted only if every frame is identical.
 - **Same timing.** Each frame keeps the time OBS drew it at, and covers as many intervals as OBS's own feed would give it (a late draw covers more); repeats are handed to the recorder exactly as OBS's feed hands them (`src/core/stage-ring.h`).
-- **Nothing in front of the preview.** The card works in order, so the copy is asked for only once the preview of the frame is on its way, and the slot is mapped a whole frame after the copy was asked for, when the card is done (in a first version, mapping one step earlier, the graphics thread waited up to 8.9 ms in a real 4K session).
+- **The copy is asked for where OBS asks for its own,** right after the scene and before the preview, and the slot is mapped two frames later, when the card is surely done, so the graphics thread never waits. Two orders were tried in a real 4K session with a phone camera, and are recorded so they are not tried again: mapping one frame later let the graphics thread wait up to 8.9 ms now and then; asking for the copy after the preview (at the start of the next frame) put it behind the preview's own wait for the desktop, and made it worse: 20 % of the plugin's steps over 2 ms, up to 12.8 ms, and 6 % of the camera's pictures repeated instead of about 1 %. The test scene showed neither, because a sandbox OBS does not show its preview.
 - **The card never reads a frame while the next one is written.** The conversion writes into two sets of planes in turn, so the frame being copied down is a whole frame away from the next conversion (with one set, the verification mode once found one frame in about 27,000 that differed; the cause could not be reproduced, so the hazard was removed rather than left to chance).
 - **Never a wait on the graphics thread.** Four staging slots, used in turn. If every slot is busy because the copier is behind, the frame is not staged, it is counted, and the frame before it covers its interval: a repeated picture, as when OBS's own feed is full.
 - **OBS's rendering state is left as it was:** render target, viewport, projection and blending are saved and restored around the plugin's work.

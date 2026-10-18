@@ -5,16 +5,14 @@
  */
 
 /*
- * gpu-road-rt.c: road C on OBS's graphics thread (ADR-012). It runs on every frame OBS renders, so the
- * whole file follows docs/coding-rules.md, B1, checked by tools/check.sh: no allocation, no logging, no
- * locks of our own, no waits. It never waits for the copier: a frame that finds every slot busy is
- * covered by the frame before (stage-ring.h). Nor does it wait for the card, nor put work in front of
- * the preview:
+ * gpu-road-rt.c: road C on OBS's graphics thread (ADR-012), after each canvas is rendered. It runs on
+ * every frame OBS renders, before the preview, so the whole file follows docs/coding-rules.md, B1,
+ * checked by tools/check.sh: no allocation, no logging, no locks of our own, no waits. It never waits
+ * for the copier (a frame that finds every slot busy is covered by the frame before, stage-ring.h),
+ * nor for the card:
  *
- *   frame k, after the scene (rendered callback):    convert frame k into our planes (short)
- *   OBS renders the preview of frame k
- *   frame k+1, at its start (draw callback):          hand over frame k-1, whose copy was asked for a
- *                                                     whole frame ago; ask the card to copy frame k
+ *   frame k:    convert it, ask for its copy (same place as OBS's own copy: before the preview)
+ *               hand over frame k-2, whose copy has had two frames to finish
  *
  * The conversion is OBS's own, step by step (render_convert_texture and render_convert_plane in
  * libobs/obs-video.c, OBS 32.2.2): same effect, techniques, parameters and order, so the picture is
@@ -28,7 +26,6 @@
 #include "gpu-road-internal.h"
 
 static const char *const PROFILE_NAME = "timelapse-switch: road C";
-static const char *const DRAW_PROFILE_NAME = "timelapse-switch: road C, start of frame";
 
 /* 1. The slots the copier finished come back: unmap them. */
 static void reclaim_slots(struct tsw_gpu_road *road)
@@ -117,15 +114,14 @@ static void convert_frame(const struct tsw_gpu_road *road, gs_texture_t *frame, 
 	gs_set_render_target_with_color_space(target, zstencil, space);
 }
 
-/* 4. Ask the card to copy our planes into the slot. It is asked at the start of the next frame, once the
- *    preview of this one is on its way: the card works in order, so the preview never waits for the copy. */
+/* 2c. Ask the card to copy one set of our planes into the slot (it does not wait). */
 static void stage_planes(const struct tsw_gpu_road *road, size_t slot, size_t set)
 {
 	for (size_t plane = 0; plane < tsw_gpu_road_planes(road); plane++)
 		gs_stage_texture(road->surface[slot][plane], road->texture[set][plane]);
 }
 
-/* 3. A frame whose copy was asked for a whole frame ago, so the card is done: map it, hand it to the copier. */
+/* 3. A frame whose copy was asked for two frames ago, so the card is done: map it, hand it to the copier. */
 static void hand_over(struct tsw_gpu_road *road, size_t slot)
 {
 	size_t mapped = 0;
@@ -164,26 +160,6 @@ static gs_texture_t *main_canvas_frame(const struct tsw_gpu_road *road)
 	return frame;
 }
 
-void tsw_gpu_road_draw(void *param, uint32_t width, uint32_t height)
-{
-	struct tsw_gpu_road *road = param;
-	(void)width;
-	(void)height;
-	if (main_canvas_frame(road) == NULL)
-		return;
-	const uint64_t started_ns = os_gettime_ns();
-	profile_start(DRAW_PROFILE_NAME);
-	reclaim_slots(road);
-	if (road->to_hand_over != SIZE_MAX)
-		hand_over(road, road->to_hand_over);
-	road->to_hand_over = SIZE_MAX;
-	if (road->to_stage != SIZE_MAX)
-		stage_planes(road, road->to_stage, road->to_stage_set);
-	road->to_stage = SIZE_MAX;
-	profile_end(DRAW_PROFILE_NAME);
-	note_step(road, started_ns);
-}
-
 void tsw_gpu_road_rendered(void *param)
 {
 	struct tsw_gpu_road *road = param;
@@ -192,24 +168,27 @@ void tsw_gpu_road_rendered(void *param)
 		return;
 	const uint64_t started_ns = os_gettime_ns();
 	profile_start(PROFILE_NAME);
-	/* Never expected after the first frame: the start of this frame did not pass, so finish its work now. */
-	if (road->to_hand_over != SIZE_MAX)
-		hand_over(road, road->to_hand_over);
-	road->to_hand_over = SIZE_MAX;
-	if (road->to_stage != SIZE_MAX)
-		stage_planes(road, road->to_stage, road->to_stage_set);
-	road->to_stage = SIZE_MAX;
+	reclaim_slots(road);
 
+	/* This frame: convert it and ask for its copy right after the scene, where OBS asks for the copy of its
+	 * own memory feed, so the card does it before the preview. */
 	size_t slot;
 	size_t previous;
 	if (tsw_stage_ring_claim(&road->ring, obs_get_video_frame_time(), &slot, &previous)) {
-		convert_frame(road, frame, road->next_set);
-		road->to_stage = slot;
-		road->to_stage_set = road->next_set;
-		road->next_set = (road->next_set + 1) % TSW_GPU_PLANE_SETS;
+		const size_t set = road->next_set;
+		convert_frame(road, frame, set);
+		stage_planes(road, slot, set);
+		road->next_set = (set + 1) % TSW_GPU_PLANE_SETS;
 		os_atomic_set_long(&road->staged, road->staged + 1);
 	}
-	road->to_hand_over = previous; /* SIZE_MAX when there is none */
+
+	/* The frame before now knows how many intervals it covers; it waits one more frame, so the one handed
+	 * over is always two frames old and its copy done: mapping it never waits for the card. */
+	if (previous != SIZE_MAX) {
+		if (road->waiting != SIZE_MAX)
+			hand_over(road, road->waiting);
+		road->waiting = previous;
+	}
 	profile_end(PROFILE_NAME);
 	note_step(road, started_ns);
 }

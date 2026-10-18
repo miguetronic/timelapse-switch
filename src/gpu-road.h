@@ -13,9 +13,8 @@
  * staging slot; our copier thread copies it from there into the recorder, through the same callback
  * road B uses (tsw_recorder_receive_frame), with the same times and repeats OBS's feed would give.
  *
- *   OBS graphics thread  --rendered callback-->  convert the frame (after the scene)
- *                        --draw callback------>  at the next frame's start, after the preview: ask for
- *                                                the copy, hand over the frame copied a frame ago
+ *   OBS graphics thread  --rendered callback-->  convert and stage the frame, hand over the one staged
+ *                                                two frames ago
  *   our copier thread    --------------------->  receive(param, frame), count times per frame
  *
  * Life of a road: create (before the recording starts: card memory and the copier thread), begin (the

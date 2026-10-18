@@ -177,8 +177,7 @@ struct tsw_gpu_road *tsw_gpu_road_create(const struct obs_video_info *ovi, tsw_g
 	road->interval_ns = obs_get_frame_interval_ns();
 	road->receive = receive;
 	road->param = param;
-	road->to_stage = SIZE_MAX;
-	road->to_hand_over = SIZE_MAX;
+	road->waiting = SIZE_MAX;
 	const char *failed = NULL;
 	if (!describe_planes(road, ovi->output_format) || tsw_stage_ring_init(&road->ring, road->interval_ns) != TSW_OK)
 		failed = "unsupported format";
@@ -209,7 +208,6 @@ void tsw_gpu_road_begin(struct tsw_gpu_road *road)
 {
 	if (road == NULL || road->registered)
 		return;
-	obs_add_main_render_callback(tsw_gpu_road_draw, road);
 	obs_add_main_rendered_callback(tsw_gpu_road_rendered, road);
 	road->registered = true;
 }
@@ -232,11 +230,9 @@ void tsw_gpu_road_destroy(struct tsw_gpu_road *road)
 {
 	if (road == NULL)
 		return;
-	/* 1. No more frames: each removal waits for a callback in progress (OBS holds a mutex). */
-	if (road->registered) {
+	/* 1. No more frames: the removal waits for a rendered callback in progress (OBS holds a mutex). */
+	if (road->registered)
 		obs_remove_main_rendered_callback(tsw_gpu_road_rendered, road);
-		obs_remove_main_render_callback(tsw_gpu_road_draw, road);
-	}
 	road->registered = false;
 
 	/* 2. The copier ends after the slot it is copying. */
