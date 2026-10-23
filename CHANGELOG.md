@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/miguetronic/timelapse-switch/compare/1.0.0...1.1.0) (2026-10-23)
+
+
+### Features
+
+* a Windows installer, and one Linux download for every system ([80baf19](https://github.com/miguetronic/timelapse-switch/commit/80baf1909a14ae10b4d426d424ddb19e4ab5994c))
+
+
+### Bug Fixes
+
+* keep the plugin's name out of the file, plain x in chapters ([0626007](https://github.com/miguetronic/timelapse-switch/commit/06260070b593f6e8956ffd794f6d17d8afb38680))
+
 ## [1.0.0](https://github.com/miguetronic/timelapse-switch/compare/0.1.0...1.0.0) (2026-10-18)
 
 
