@@ -55,9 +55,22 @@ main() {
   local here
   here="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
   mkdir -p "${release}"
-  find "${artifacts}" -mindepth 2 -maxdepth 2 -type f \
+  # One by one: the same file can come in two artifacts (the Linux debug
+  # symbols travel with the .deb and on their own). A second copy must be
+  # identical to the first.
+  local file
+  while IFS= read -r -d '' file; do
+    if [[ -e "${release}/${file##*/}" ]]; then
+      if ! cmp -s "${file}" "${release}/${file##*/}"; then
+        echo "release-files.sh: two different ${file##*/}" >&2
+        return 1
+      fi
+      continue
+    fi
+    mv "${file}" "${release}/"
+  done < <(find "${artifacts}" -mindepth 2 -maxdepth 2 -type f \
     \( -name '*.zip' -o -name '*.pkg' -o -name '*.deb' -o -name '*.ddeb' \
-    -o -name '*.tar.xz' \) -exec mv -t "${release}" {} +
+    -o -name '*.tar.xz' \) -print0 | sort -z)
 
   # Every system must be there: a release without one of them is not made.
   rename_one "${release}" "${NAME}-*-windows-x64.zip" \
