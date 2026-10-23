@@ -1,0 +1,39 @@
+Timelapse Switch, a plugin for OBS Studio
+=========================================
+
+This zip has one folder, "timelapse-switch". Installing the plugin means
+copying that folder into OBS's "plugins" folder. No terminal needed.
+
+Illustrated guide: https://miguetronic.github.io/timelapse-switch/guide/install/
+
+
+1. Close OBS Studio.
+
+2. Find OBS's folder. Open your file manager (Files, Dolphin, Nemo...),
+   press Ctrl+L and type the address that matches your OBS, then Enter:
+
+     OBS from your distribution (most):  ~/.config/obs-studio
+     OBS from Flathub (Flatpak):         ~/.var/app/com.obsproject.Studio/config/obs-studio
+
+   Not sure? Try the Flatpak address first: if it opens, that is yours.
+   If you installed OBS from an app store (Software, Discover, Software
+   Manager), it is usually the Flatpak one.
+   Neither opens? Start OBS once, close it, and try again: OBS creates
+   its folder the first time it runs.
+
+3. Inside it, open the folder "plugins". If there is none, create it:
+   right click, New Folder, name it plugins (all small letters).
+
+4. Copy the folder "timelapse-switch" from this zip into "plugins".
+   You should end up with:
+
+     .../obs-studio/plugins/timelapse-switch/bin/64bit/timelapse-switch.so
+     .../obs-studio/plugins/timelapse-switch/data
+
+5. Start OBS Studio and open Docks > Timelapse Switch.
+
+
+Needs OBS Studio 31.1 or later.
+
+To uninstall: close OBS and delete that "timelapse-switch" folder.
+Your recordings are never touched.

@@ -59,25 +59,13 @@ jobs:
         with:
           path: artifacts
 
-      - name: Collect, Checksums and SBOM 🪪
+      - name: Collect, Installers, Checksums and SBOM 🪪
         run: |
-          : Collect, Checksums and SBOM 🪪
-          shopt -s extglob nullglob
-          mkdir release
-          for file in artifacts/*/@(*.zip|*.pkg|*.deb|*.ddeb|*.tar.xz); do
-            mv "${file}" release/
-          done
-          # Every system must be there: a release without one of them is not published.
-          for kind in zip pkg deb; do
-            files=(release/*."${kind}")
-            if ((${#files[@]} == 0)); then
-              echo "::error::no .${kind} package was built"
-              exit 1
-            fi
-          done
-          tools/make-sbom.sh "release/timelapse-switch-${TAG}.cdx.json"
-          (cd release && sha256sum -- * > CHECKSUMS.txt)
-          cat release/CHECKSUMS.txt
+          : Collect, Installers, Checksums and SBOM 🪪
+          # wixl builds the Windows installer (.msi) here, on Linux.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wixl
+          tools/release-files.sh artifacts release "${TAG}"
 
       - name: Attach Files and Notes 🛫
         run: |
@@ -91,12 +79,20 @@ jobs:
           {
             echo '## Downloads'
             echo
-            echo '- **Linux (x86_64):** tested.'
-            echo '- **Windows and macOS:** beta, built but not tested yet.' \
-              'Please tell us how it works:' \
-              'https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml'
+            echo 'Step by step, with pictures:' \
+              'https://miguetronic.github.io/timelapse-switch/guide/install/'
             echo
-            echo 'Install guide: https://miguetronic.github.io/timelapse-switch/guide/install/'
+            echo '- **Windows** (beta): **timelapse-switch-windows-x64.msi**,' \
+              'double-click it.'
+            echo '- **macOS** (beta): **timelapse-switch-macos.pkg**,' \
+              'double-click it.'
+            echo '- **Linux** (tested), any distribution and Flatpak OBS:' \
+              '**timelapse-switch-linux-x86_64.zip**, copy one folder.' \
+              'Ubuntu and Debian can also use the .deb file.'
+            echo
+            echo 'Windows and macOS are built on every release but not' \
+              'tested yet. Please tell us how it works:' \
+              'https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml'
             echo
             echo '## Changes'
             echo

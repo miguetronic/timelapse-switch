@@ -2,7 +2,7 @@
 
 How to put Timelapse Switch into OBS Studio from a build, and how to take it out again, cleanly.
 
-> **Installing a release?** The packages of each release (Windows `.zip`, macOS `.pkg`, Ubuntu `.deb`) are explained, system by system, in the website's guide: https://miguetronic.github.io/timelapse-switch/guide/install/. This page is about the install tool for builds (`tools/dev-install.sh`), which puts the plugin in **one folder of its own** in your user account: installing adds that folder, uninstalling removes it, and nothing of OBS itself, of other plugins or of your system is changed.
+> **Installing a release?** The packages of each release (Windows `.msi`, macOS `.pkg`, Linux `.zip` and `.deb`) are explained, system by system, in the website's guide: https://miguetronic.github.io/timelapse-switch/guide/install/. This page is about the install tool for builds (`tools/dev-install.sh`), which puts the plugin in **one folder of its own** in your user account: installing adds that folder, uninstalling removes it, and nothing of OBS itself, of other plugins or of your system is changed.
 
 ## 1. Where it lives
 

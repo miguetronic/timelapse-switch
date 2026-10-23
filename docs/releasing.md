@@ -75,11 +75,24 @@ In one place only: the `version` field of `buildspec.json`, written by release-p
 
 | File | What it is | How it is made |
 |---|---|---|
-| Packages (Windows `.zip`, macOS `.pkg`, Ubuntu `.deb`) | The plugin for each operating system | CI, from the release tag |
+| `timelapse-switch-windows-x64.msi` | Windows installer: double-click, "Installed apps" lists it | `tools/package/make-msi.sh`, from the Windows `.zip` |
+| `timelapse-switch-windows-x64.zip` | Windows, to copy by hand | CI, from the release tag |
+| `timelapse-switch-macos.pkg` | macOS installer | CI, from the release tag |
+| `timelapse-switch-linux-x86_64.zip` | Any Linux distribution, and the Flatpak OBS: one folder to copy | `tools/package/make-linux-zip.sh`, from the `.deb` |
+| `timelapse-switch-linux-x86_64.deb` | Ubuntu and Debian with OBS from the OBS PPA | CI, from the release tag |
+| Source, debug symbols (`...-X.Y.Z-...`) | For developers and crash reports | CI |
 | `CHECKSUMS.txt` | SHA-256 of every file, also in the release notes | CI |
 | `timelapse-switch-X.Y.Z.cdx.json` | SBOM, CycloneDX 1.6 | `tools/make-sbom.sh`, run by CI |
 
-The release notes start with the support status per system (Linux tested; Windows and macOS beta until they are tested), then the changes, then the checksums.
+`tools/release-files.sh` puts these together from the build artifacts; both ways of releasing (below) use it, so they give the same files. It runs on Linux: the `.msi` is built with wixl (msitools). It can be tried on a computer with the packages of an earlier release: put them in folders under `artifacts/` and run `tools/release-files.sh artifacts release X.Y.Z`.
+
+**The packages people download have no version in their name**, so the install guide links straight to the newest one (`https://github.com/miguetronic/timelapse-switch/releases/latest/download/timelapse-switch-windows-x64.msi`). Renaming one breaks those links: change the guide in the same commit.
+
+**One Linux package for every distribution.** The plugin needs only OBS, Qt 6.4 or later and glibc 2.34 or later, which every OBS 31.1 brings, so the files the CI builds on Ubuntu 24.04 also work elsewhere. Checked on 23-oct-2026 with the 1.0.0 files: CachyOS (Arch) with its own OBS 32.2.2, and the Flatpak OBS 32.2.2 (runtime 25.08, Qt 6.11), from its user plugins folder `~/.var/app/com.obsproject.Studio/config/obs-studio/plugins`.
+
+**The `.msi`** installs into `C:\ProgramData\obs-studio\plugins\timelapse-switch`, the same folder as the `.zip`. A newer version replaces an older one, an older one refuses to install over a newer one, and uninstalling removes the plugin's folder. Its `UpgradeCode` (`tools/package/timelapse-switch.wxs`) must never change. Its windows are wixl's WixUI_Minimal, with `license.rtf` and the pictures of `make-installer-art.py`. Checked with Wine (install, upgrade, refused downgrade, uninstall); not yet on a real Windows.
+
+The release notes start with the downloads and the support status per system (Linux tested; Windows and macOS beta until they are tested), then the changes, then the checksums.
 
 ## Two ways a release is built
 
@@ -92,6 +105,6 @@ The release notes start with the support status per system (Linux tested; Window
 2. Push `main` with the release-please files in place.
 3. Push one commit with the footer `Release-As: 1.0.0` (for example `chore: release 1.0.0` with that footer); release-please opens the pull request "release 1.0.0".
 4. Review it and merge it: the tag `1.0.0` and a draft release appear; when the build ends (about half an hour) the files are attached and the release is published.
-5. Check the published release: three packages, `CHECKSUMS.txt`, the SBOM and the notes.
+5. Check the published release: the five packages, `CHECKSUMS.txt`, the SBOM and the notes.
 
 The SBOM can be generated locally at any time with `tools/make-sbom.sh`; the same commit always gives the same file.

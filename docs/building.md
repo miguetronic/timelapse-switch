@@ -34,6 +34,7 @@ Building a plugin is like baking from a recipe card:
 | clang-tidy | Static analyzer #1 | `clang` |
 | Python 3 | Runs the pinned formatting tools | `python` |
 | jq, uuidgen | Generate the SBOM (`tools/make-sbom.sh`) | `jq`, `util-linux` |
+| wixl, zip (optional) | Only to try the release files locally (`tools/release-files.sh`): the Windows `.msi` and the Linux `.zip` | `msitools`, `zip` |
 
 On Ubuntu, the names differ; the CI script `.github/scripts/utils.zsh/setup_ubuntu` lists them.
 

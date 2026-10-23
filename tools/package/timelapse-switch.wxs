@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Timelapse Switch
+  SPDX-FileCopyrightText: 2026 Miguel Parra (Miguetronic)
+  SPDX-License-Identifier: GPL-2.0-or-later
+
+  The Windows installer (.msi), built by tools/package/make-msi.sh with wixl.
+
+  It puts the plugin where OBS looks for plugins on Windows:
+  C:\ProgramData\obs-studio\plugins\timelapse-switch\bin\64bit and ...\data.
+  "Installed apps" in Windows Settings lists it, with Uninstall. A newer
+  version replaces an older one (same UpgradeCode, never change it).
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="Timelapse Switch for OBS Studio"
+           Language="1033"
+           Version="$(var.Version)"
+           Manufacturer="Miguetronic"
+           UpgradeCode="ab4db2d4-9675-4abc-8fb2-c4b4b3cb4f6f">
+    <Package InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Description="Timelapse Switch, a plugin for OBS Studio"
+             Comments="Switch between real time and timelapse while you record."
+             Manufacturer="Miguetronic"/>
+    <Media Id="1" Cabinet="plugin.cab" EmbedCab="yes"/>
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Timelapse Switch is already installed."/>
+
+    <Icon Id="timelapse_switch.ico" SourceFile="$(var.Icon)"/>
+    <Property Id="ARPPRODUCTICON" Value="timelapse_switch.ico"/>
+    <Property Id="ARPURLINFOABOUT" Value="https://miguetronic.github.io/timelapse-switch/"/>
+    <Property Id="ARPHELPLINK" Value="https://miguetronic.github.io/timelapse-switch/guide/install/"/>
+    <!-- The last window says what to do next. -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT"
+              Value="Now start OBS Studio and open Docks &gt; Timelapse Switch. The guide: miguetronic.github.io/timelapse-switch"/>
+    <UIRef Id="WixUI_Minimal"/>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="CommonAppDataFolder">
+        <Directory Id="OBSSTUDIO" Name="obs-studio">
+          <Directory Id="PLUGINS" Name="plugins">
+            <Directory Id="PLUGINDIR" Name="timelapse-switch"/>
+          </Directory>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="Plugin" Title="Timelapse Switch" Level="1">
+      <ComponentGroupRef Id="PluginFiles"/>
+      <ComponentGroupRef Id="PluginFolders"/>
+    </Feature>
+  </Product>
+</Wix>
