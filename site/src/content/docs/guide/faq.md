@@ -27,6 +27,19 @@ The graphics card has more to do: see [Performance](/timelapse-switch/guide/perf
 
 Hybrid MP4 (in OBS: **Settings > Output > Recording Format**). Other formats record normally, without chapters.
 
+## Why does the timelapse part look blurrier than the rest?
+
+In timelapse each picture differs much more from the one before it, so the encoder needs more data to describe it: about three times as much at ×4. How your OBS profile sets the encoder decides what happens then:
+
+- **Quality-based** (CQP, CRF or ICQ, and OBS's simple output mode with a quality preset): the encoder spends what it needs. The timelapse looks as sharp as the rest; the file just grows faster in that part.
+- **Fixed bitrate** (CBR, or VBR with a low limit): the encoder cannot spend more, so the timelapse loses detail, right where things move most.
+
+If the timelapse looks soft, open **Settings > Output > Recording** (Output Mode **Advanced**) and set **Rate Control** to CQP or CRF, or raise the bitrate. The plugin uses the same settings as OBS's own recording.
+
+## Does the file say it was made with Timelapse Switch?
+
+No. Inside the file the tracks are called "Video" and "Audio", and the chapters "Real time" and "Timelapse x4", in the language of your OBS. Only the file name ends in "tswitch", so you can tell it apart from OBS's own recordings; rename it as you like.
+
 ## Does it send anything over the internet?
 
 No. No analytics, no update checks; it only opens a web page when you click a link in the dock.
