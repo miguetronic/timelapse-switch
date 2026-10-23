@@ -20,7 +20,10 @@ probe (sync-probe.c: when OBS delivered each beep and each frame):
                   test media or OBS bring
     silence       timelapse sections are silent (REQ-006)
     chapters      one chapter per section, where the section starts, named after its speed
-                  (REQ-007; Hybrid MP4 only)
+                  in plain ASCII, "Timelapse x4" (REQ-007; Hybrid MP4 only)
+    no name       the plugin's name is nowhere inside the file, not even in the
+                  header Hybrid MP4 leaves behind: the file says nothing about how
+                  it was made
     pause         across each pause the picture jumps by exactly the paused time: nothing
                   recorded while paused is in the file, nothing around it is lost (REQ-019)
     totals        the plugin's own account of the session (time in real time, in timelapse
@@ -305,11 +308,25 @@ def check_chapters(report: Report, sections: list[dict], path: str) -> None:
     if len(chapters) != len(sections):
         problems.append(f"{len(chapters)} chapters for {len(sections)} changes of speed")
     for s, (start, title) in zip(sections, chapters):
-        name = "Real time" if s["speed"] == 1 else f"Timelapse \u00d7{s['speed']}"
+        name = "Real time" if s["speed"] == 1 else f"Timelapse x{s['speed']}"
         if abs(start - s["out_start"]) > 0.1 or title != name:
             problems.append(f"\"{title}\" at {start:.3f} s, expected \"{name}\" at {s['out_start']:.3f} s")
     report.check("chapters", not problems,
                  "; ".join(problems[:3]) or f"{len(chapters)} chapters, one per change of speed")
+
+
+def check_no_name(report: Report, path: str) -> None:
+    """No trace of the plugin's name in any byte of the file. OBS writes the encoders' names into it as track
+    names, and Hybrid MP4 keeps its first header, unused, inside the file."""
+    names = (b"timelapse-switch", b"Timelapse Switch", b"tswitch")
+    found, tail, offset = [], b"", 0
+    with open(path, "rb") as media:
+        while chunk := media.read(1 << 24):
+            window = tail + chunk
+            found += [(offset - len(tail) + window.find(n), n.decode()) for n in names if n in window]
+            tail, offset = window[-32:], offset + len(chunk)
+    report.check("no name", not found,
+                 "; ".join(f"\"{n}\" at byte {at}" for at, n in sorted(set(found))[:3]) or "the file names no plugin")
 
 
 def check_pauses(report: Report, sections: list[dict], numbers: list[int]) -> None:
@@ -380,6 +397,7 @@ def main() -> int:
     check_sync(report, sections, numbers, beep_onsets(samples), probe_offsets(args.log))
     check_silence(report, sections, samples)
     check_chapters(report, sections, args.recording)
+    check_no_name(report, args.recording)
     check_pauses(report, sections, numbers)
     check_totals(report, sections, args.log)
     report.check("lost frames", lost <= args.allow_lost_frames, f"{lost * 100:.2f}% lost")

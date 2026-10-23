@@ -194,17 +194,17 @@ static struct encoder_choice choose_encoders(void)
 	return choice;
 }
 
-/* Our encoders: the types and settings of OBS's recording, fed by our feeds. */
+/* Our encoders: the types and settings of OBS's recording, fed by our feeds. OBS writes an encoder's name into
+ * the file, as the track's name, so the names are plain words that say nothing about the plugin. */
 static enum tsw_result create_encoders(struct tsw_recorder *recorder)
 {
 	struct encoder_choice choice = choose_encoders();
 	const char *video_id = choice.video_id != NULL ? cpu_frame_encoder(choice.video_id) : "";
 	recorder->mix = choice.mix;
 	if (obs_encoder_get_display_name(video_id) != NULL && obs_encoder_get_display_name(choice.audio_id) != NULL) {
-		recorder->video_encoder =
-			obs_video_encoder_create(video_id, "timelapse-switch video", choice.video_settings, NULL);
-		recorder->audio_encoder = obs_audio_encoder_create(choice.audio_id, "timelapse-switch audio",
-								   choice.audio_settings, 0, NULL);
+		recorder->video_encoder = obs_video_encoder_create(video_id, "Video", choice.video_settings, NULL);
+		recorder->audio_encoder =
+			obs_audio_encoder_create(choice.audio_id, "Audio", choice.audio_settings, 0, NULL);
 	}
 	obs_data_release(choice.video_settings);
 	obs_data_release(choice.audio_settings);
