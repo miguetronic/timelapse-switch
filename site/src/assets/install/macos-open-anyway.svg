@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 330" width="640" height="330" font-family="Segoe UI, system-ui, -apple-system, Ubuntu, Cantarell, sans-serif" role="img">
+<title>macOS System Settings, Privacy &amp; Security: click Open Anyway</title>
+<rect x="0" y="0" width="640" height="330" rx="10" fill="#ffffff" stroke="#c4c4c4" stroke-width="1"/>
+<path d="M10 0 H190 V330 H10 a10 10 0 0 1 -10 -10 V10 a10 10 0 0 1 10 -10 Z" fill="#f0f0f0"/>
+<circle cx="20" cy="20" r="6" fill="#ff5f57"/>
+<circle cx="40" cy="20" r="6" fill="#febc2e"/>
+<circle cx="60" cy="20" r="6" fill="#28c840"/>
+<text x="22" y="64" font-size="14" fill="#1f1f1f" font-weight="400" text-anchor="start">Wi-Fi</text>
+<text x="22" y="96" font-size="14" fill="#1f1f1f" font-weight="400" text-anchor="start">Bluetooth</text>
+<text x="22" y="128" font-size="14" fill="#1f1f1f" font-weight="400" text-anchor="start">Network</text>
+<text x="22" y="160" font-size="14" fill="#1f1f1f" font-weight="400" text-anchor="start">General</text>
+<text x="22" y="192" font-size="14" fill="#1f1f1f" font-weight="400" text-anchor="start">Appearance</text>
+<rect x="10" y="203" width="170" height="30" rx="6" fill="#2f7cf6" stroke="none" stroke-width="1"/>
+<text x="22" y="224" font-size="14" fill="#ffffff" font-weight="400" text-anchor="start">Privacy &amp; Security</text>
+<text x="22" y="256" font-size="14" fill="#1f1f1f" font-weight="400" text-anchor="start">Desktop &amp; Dock</text>
+<text x="22" y="288" font-size="14" fill="#1f1f1f" font-weight="400" text-anchor="start">Displays</text>
+<text x="214" y="44" font-size="19" fill="#1f1f1f" font-weight="700" text-anchor="start">Privacy &amp; Security</text>
+<text x="214" y="100" font-size="15" fill="#1f1f1f" font-weight="700" text-anchor="start">Security</text>
+<rect x="214" y="114" width="400" height="120" rx="8" fill="#f6f6f6" stroke="#e2e2e2" stroke-width="1"/>
+<text x="232" y="146.0" font-size="14" fill="#1f1f1f" font-weight="400" text-anchor="start">“timelapse-switch-macos.pkg” was blocked to</text>
+<text x="232" y="165.6" font-size="14" fill="#1f1f1f" font-weight="400" text-anchor="start">protect your Mac.</text>
+<rect x="474" y="190" width="122" height="28" rx="6" fill="#ffffff" stroke="#bdbdbd" stroke-width="1"/>
+<text x="535.0" y="208.9" font-size="14" fill="#1f1f1f" font-weight="500" text-anchor="middle">Open Anyway</text>
+<rect x="469" y="185" width="132" height="38" rx="8" fill="none" stroke="#d2603a" stroke-width="3"/>
+<circle cx="535.0" cy="168" r="14" fill="#d2603a"/>
+<text x="535.0" y="173.5" font-size="16" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+<text x="214" y="276.0" font-size="13" fill="#5f5f5f" font-weight="400" text-anchor="start">Scroll down to Security. The message stays for about an hour</text>
+<text x="214" y="294.2" font-size="13" fill="#5f5f5f" font-weight="400" text-anchor="start">after you tried to open the file.</text>
+</svg>

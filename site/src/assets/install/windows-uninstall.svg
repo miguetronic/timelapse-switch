@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 300" width="620" height="300" font-family="Segoe UI, system-ui, -apple-system, Ubuntu, Cantarell, sans-serif" role="img">
+<title>Windows Settings, Apps, Installed apps: Timelapse Switch, the three dots, Uninstall</title>
+<rect x="0" y="0" width="620" height="300" rx="10" fill="#ffffff" stroke="#c4c4c4" stroke-width="1"/>
+<path d="M0 34 V10 a10 10 0 0 1 10 -10 H610 a10 10 0 0 1 10 10 V34 Z" fill="#f3f3f3"/>
+<line x1="0" y1="34" x2="620" y2="34" stroke="#d6d6d6"/>
+<text x="14" y="22.0" font-size="14" fill="#5f5f5f" font-weight="400" text-anchor="start">Settings</text>
+<text x="28" y="76" font-size="22" fill="#1f1f1f" font-weight="600" text-anchor="start">Apps  ›  Installed apps</text>
+<rect x="28" y="98" width="564" height="64" rx="6" fill="#f7f7f7" stroke="#e2e2e2" stroke-width="1"/>
+<rect x="44" y="114" width="32" height="32" rx="6" fill="#1f1a17" stroke="none" stroke-width="1"/>
+<path d="M50 125 h7 v6 l4 -6 l4 6 v-6 h5 v10 h-5 l-4 -6 l-4 6 v-4 h-7 Z" fill="#d2603a"/>
+<text x="90" y="126" font-size="15" fill="#1f1f1f" font-weight="600" text-anchor="start">Timelapse Switch for OBS Studio</text>
+<text x="90" y="146" font-size="13" fill="#5f5f5f" font-weight="400" text-anchor="start">Miguetronic</text>
+<text x="530" y="136" font-size="16" fill="#1f1f1f" font-weight="700" text-anchor="middle">•••</text>
+<rect x="507" y="115" width="46" height="32" rx="8" fill="none" stroke="#d2603a" stroke-width="3"/>
+<circle cx="570" cy="131.0" r="14" fill="#d2603a"/>
+<text x="570" y="136.5" font-size="16" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+<rect x="400" y="176" width="180" height="44" rx="6" fill="#ffffff" stroke="#d0d0d0" stroke-width="1"/>
+<text x="420" y="204" font-size="15" fill="#1f1f1f" font-weight="400" text-anchor="start">Uninstall</text>
+<rect x="403" y="177" width="174" height="42" rx="8" fill="none" stroke="#d2603a" stroke-width="3"/>
+<circle cx="594" cy="198.0" r="14" fill="#d2603a"/>
+<text x="594" y="203.5" font-size="16" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+<text x="28" y="258.0" font-size="13" fill="#5f5f5f" font-weight="400" text-anchor="start">Windows Settings  ›  Apps  ›  Installed apps</text>
+</svg>

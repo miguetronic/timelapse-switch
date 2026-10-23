@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 330" width="620" height="330" font-family="Segoe UI, system-ui, -apple-system, Ubuntu, Cantarell, sans-serif" role="img">
+<title>A file manager: press Ctrl+L, type ~/.config/obs-studio, then open plugins</title>
+<rect x="0" y="0" width="620" height="330" rx="10" fill="#ffffff" stroke="#c4c4c4" stroke-width="1"/>
+<path d="M0 52 V10 a10 10 0 0 1 10 -10 H610 a10 10 0 0 1 10 10 V52 Z" fill="#f3f3f3"/>
+<line x1="0" y1="52" x2="620" y2="52" stroke="#d6d6d6"/>
+<rect x="120" y="11" width="380" height="30" rx="6" fill="#ffffff" stroke="#9a9a9a" stroke-width="1"/>
+<text x="132" y="31" font-size="15" fill="#1f1f1f" font-weight="400" text-anchor="start">~/.config/obs-studio</text>
+<line x1="279" y1="17" x2="279" y2="36" stroke="#1f1f1f" stroke-width="1.5"/>
+<rect x="115" y="6" width="390" height="40" rx="8" fill="none" stroke="#d2603a" stroke-width="3"/>
+<circle cx="522" cy="26.0" r="14" fill="#d2603a"/>
+<text x="522" y="31.5" font-size="16" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+<text x="26" y="31" font-size="13" fill="#5f5f5f" font-weight="600" text-anchor="start">Ctrl + L</text>
+<path transform="translate(40 104) scale(1.2727272727272727)" d="M0 6 a4 4 0 0 1 4 -4 h12 l5 5 h19 a4 4 0 0 1 4 4 v25 a4 4 0 0 1 -4 4 h-36 a4 4 0 0 1 -4 -4 Z" fill="#e8b04b"/>
+<text x="68.0" y="174" font-size="13" fill="#1f1f1f" font-weight="400" text-anchor="middle">basic</text>
+<path transform="translate(180 104) scale(1.2727272727272727)" d="M0 6 a4 4 0 0 1 4 -4 h12 l5 5 h19 a4 4 0 0 1 4 4 v25 a4 4 0 0 1 -4 4 h-36 a4 4 0 0 1 -4 -4 Z" fill="#e8b04b"/>
+<text x="208.0" y="174" font-size="13" fill="#1f1f1f" font-weight="400" text-anchor="middle">logs</text>
+<path transform="translate(320 104) scale(1.2727272727272727)" d="M0 6 a4 4 0 0 1 4 -4 h12 l5 5 h19 a4 4 0 0 1 4 4 v25 a4 4 0 0 1 -4 4 h-36 a4 4 0 0 1 -4 -4 Z" fill="#e8b04b"/>
+<text x="348.0" y="174" font-size="13" fill="#1f1f1f" font-weight="400" text-anchor="middle">plugin_config</text>
+<path transform="translate(460 104) scale(1.2727272727272727)" d="M0 6 a4 4 0 0 1 4 -4 h12 l5 5 h19 a4 4 0 0 1 4 4 v25 a4 4 0 0 1 -4 4 h-36 a4 4 0 0 1 -4 -4 Z" fill="#e8b04b"/>
+<text x="488.0" y="174" font-size="13" fill="#1f1f1f" font-weight="400" text-anchor="middle">plugins</text>
+<rect x="437" y="91" width="102" height="102" rx="8" fill="none" stroke="#d2603a" stroke-width="3"/>
+<circle cx="488.0" cy="74" r="14" fill="#d2603a"/>
+<text x="488.0" y="79.5" font-size="16" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+<text x="26" y="262.0" font-size="14" fill="#5f5f5f" font-weight="400" text-anchor="start">Your OBS settings live here. If there is no “plugins” folder,</text>
+<text x="26" y="281.6" font-size="14" fill="#5f5f5f" font-weight="400" text-anchor="start">create it: right click, New Folder, plugins.</text>
+</svg>

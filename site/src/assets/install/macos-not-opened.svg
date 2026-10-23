@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 360" width="420" height="360" font-family="Segoe UI, system-ui, -apple-system, Ubuntu, Cantarell, sans-serif" role="img">
+<title>macOS: timelapse-switch-macos.pkg Not Opened, click Done</title>
+<rect x="0" y="0" width="420" height="360" rx="14" fill="#ececec" stroke="#c4c4c4" stroke-width="1"/>
+<rect x="178" y="26" width="64" height="64" rx="12" fill="#ffffff" stroke="#cfcfcf" stroke-width="1"/>
+<path d="M196 50 h12 v8 l7 -8 l7 8 v-8 h10 v18 h-10 l-7 -8 l-7 8 v-6 h-12 Z" fill="#d2603a"/>
+<text x="210" y="122" font-size="16" fill="#1f1f1f" font-weight="700" text-anchor="middle">“timelapse-switch-macos.pkg”</text>
+<text x="210" y="144" font-size="16" fill="#1f1f1f" font-weight="700" text-anchor="middle">Not Opened</text>
+<text x="210" y="176" font-size="13" fill="#1f1f1f" font-weight="400" text-anchor="middle">Apple could not verify “timelapse-switch-</text>
+<text x="210" y="195" font-size="13" fill="#1f1f1f" font-weight="400" text-anchor="middle">macos.pkg” is free of malware that may harm</text>
+<text x="210" y="214" font-size="13" fill="#1f1f1f" font-weight="400" text-anchor="middle">your Mac or compromise your privacy.</text>
+<rect x="28" y="276" width="364" height="30" rx="7" fill="#2f7cf6" stroke="#2f7cf6" stroke-width="1"/>
+<text x="210.0" y="295.9" font-size="14" fill="#ffffff" font-weight="500" text-anchor="middle">Done</text>
+<rect x="28" y="314" width="364" height="30" rx="7" fill="#ffffff" stroke="#cfcfcf" stroke-width="1"/>
+<text x="210.0" y="333.9" font-size="14" fill="#1f1f1f" font-weight="500" text-anchor="middle">Move to Trash</text>
+<rect x="23" y="271" width="374" height="40" rx="8" fill="none" stroke="#d2603a" stroke-width="3"/>
+<circle cx="210.0" cy="254" r="14" fill="#d2603a"/>
+<text x="210.0" y="259.5" font-size="16" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+</svg>

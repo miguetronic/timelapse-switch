@@ -55,15 +55,19 @@ Everything happens in one dock inside OBS, in the light and dark themes.
   </tr>
 </table>
 
-## Download
+## Download and install
 
-| System | Status | |
+Pick your system, download one file, and follow the steps. No terminal, about two minutes. The [install guide](https://miguetronic.github.io/timelapse-switch/guide/install/) shows every step with pictures.
+
+| System | Download | How |
 |---|---|---|
-| Linux (x86_64) | **Tested** on the maintainer's computer. The `.deb` package (Ubuntu 24.04 or later, with OBS from the OBS PPA) is new in 1.0.0 | [Latest release](https://github.com/miguetronic/timelapse-switch/releases/latest) |
-| Windows 10 and 11 (x64) | **Beta**: built on every release, not tested yet. Please [report how it works](https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml) | [Latest release](https://github.com/miguetronic/timelapse-switch/releases/latest) |
-| macOS 12 or later | **Beta**: built on every release, not tested yet. Please [report how it works](https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml) | [Latest release](https://github.com/miguetronic/timelapse-switch/releases/latest) |
+| **Windows** 10 and 11 (x64), beta | [**Installer (.msi)**](https://github.com/miguetronic/timelapse-switch/releases/latest/download/timelapse-switch-windows-x64.msi) | Double-click it. If Windows says "Windows protected your PC", click **More info** and **Run anyway**. Then **I accept**, **Install**, **Finish**. |
+| **macOS** 12 or later, beta | [**Installer (.pkg)**](https://github.com/miguetronic/timelapse-switch/releases/latest/download/timelapse-switch-macos.pkg) | Double-click it. The first time, macOS blocks it: **System Settings > Privacy & Security > Open Anyway**. Then **Continue**, **Install**. |
+| **Linux** (x86_64), any distribution, Flatpak OBS too, tested | [**Plugin (.zip)**](https://github.com/miguetronic/timelapse-switch/releases/latest/download/timelapse-switch-linux-x86_64.zip) | Copy the folder `timelapse-switch` from the zip into `~/.config/obs-studio/plugins` (Flatpak OBS: `~/.var/app/com.obsproject.Studio/config/obs-studio/plugins`). |
 
-Needs OBS Studio 31.1 or later. How to install and uninstall each package: the [install guide](https://miguetronic.github.io/timelapse-switch/guide/install/). From a build: `docs/install.md`.
+Then start OBS and open **Docks > Timelapse Switch**. Needs OBS Studio 31.1 or later.
+
+Windows and macOS are built on every release but not tested yet: please [tell us how it works](https://github.com/miguetronic/timelapse-switch/issues/new?template=beta-platform.yml). Other files (a `.deb` for Ubuntu, the Windows `.zip`, checksums, source) are on the [latest release](https://github.com/miguetronic/timelapse-switch/releases/latest). From a build: `docs/install.md`.
 
 ## Who it is for
 
