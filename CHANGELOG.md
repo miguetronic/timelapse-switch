@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/miguetronic/timelapse-switch/compare/1.1.0...1.1.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* put the release files together when one comes twice ([16b4d06](https://github.com/miguetronic/timelapse-switch/commit/16b4d0645abfdd7ff6240be6b4a945f847e046b4))
+
 ## [1.1.0](https://github.com/miguetronic/timelapse-switch/compare/1.0.0...1.1.0) (2026-10-23)
 
 
